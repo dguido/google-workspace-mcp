@@ -746,6 +746,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["query"],
         },
+        outputSchema: {
+          type: "object",
+          properties: {
+            files: {
+              type: "array",
+              description: "List of matching files",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string", description: "File ID" },
+                  name: { type: "string", description: "File name" },
+                  mimeType: { type: "string", description: "MIME type" },
+                  modifiedTime: { type: "string", description: "Last modified timestamp" },
+                  size: { type: "string", description: "File size in bytes" }
+                }
+              }
+            },
+            nextPageToken: { type: "string", description: "Token for fetching next page, if more results exist" }
+          }
+        }
       },
       {
         name: "createTextFile",
@@ -794,6 +814,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             folderId: { type: "string", description: "Folder ID" },
             pageSize: { type: "number", description: "Items to return (default 50, max 100)" },
             pageToken: { type: "string", description: "Token for next page" }
+          }
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+              description: "List of files and folders",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string", description: "Item ID" },
+                  name: { type: "string", description: "Item name" },
+                  mimeType: { type: "string", description: "MIME type" },
+                  modifiedTime: { type: "string", description: "Last modified timestamp" },
+                  size: { type: "string", description: "File size in bytes (folders have no size)" }
+                }
+              }
+            },
+            nextPageToken: { type: "string", description: "Token for fetching next page, if more items exist" }
           }
         }
       },
@@ -1533,7 +1573,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const currentMimeType = existingFile.data.mimeType || 'text/plain';
         if (!Object.values(TEXT_MIME_TYPES).includes(currentMimeType)) {
-          return errorResponse("File is not a text or markdown file.");
+          return errorResponse(`File "${existingFile.data.name}" (${args.fileId}) is not a text or markdown file. Current type: ${currentMimeType}. Supported types: text/plain, text/markdown.`);
         }
 
         const updateMetadata: { name?: string; mimeType?: string } = {};
@@ -2494,7 +2534,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         
         if (!currentPresentation.data.slides) {
-          return errorResponse("No slides found in presentation");
+          return errorResponse(`No slides found in presentation ${args.presentationId}. The presentation may be empty or inaccessible.`);
         }
 
         // Collect all slide IDs except the first one (we'll keep it for now)
@@ -2705,11 +2745,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
           fields.push('foregroundColor');
         }
-        
+
         if (fields.length === 0) {
-          return errorResponse("No formatting options specified");
+          return errorResponse("No formatting options specified. Provide at least one of: bold, italic, underline, strikethrough, fontSize, foregroundColor.");
         }
-        
+
         await docs.documents.batchUpdate({
           documentId: args.documentId,
           requestBody: {
@@ -2775,11 +2815,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
           fields.push('spaceBelow');
         }
-        
+
         if (fields.length === 0) {
-          return errorResponse("No formatting options specified");
+          return errorResponse("No paragraph formatting options specified. Provide at least one of: namedStyleType, alignment, lineSpacing, spaceAbove, spaceBelow.");
         }
-        
+
         await docs.documents.batchUpdate({
           documentId: args.documentId,
           requestBody: {
@@ -2872,7 +2912,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
 
         if (!presentation.data.slides) {
-          return errorResponse("No slides found in presentation");
+          return errorResponse(`No slides found in presentation ${args.presentationId}. The presentation may be empty or inaccessible.`);
         }
 
         let content = 'Presentation content with element IDs:\n\n';
@@ -2977,7 +3017,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (fields.length === 0) {
-          return errorResponse("No formatting options specified");
+          return errorResponse("No text formatting options specified. Provide at least one of: bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor.");
         }
 
         const updateRequest: any = {
@@ -3065,7 +3105,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (requests.length === 0) {
-          return errorResponse("No formatting options specified");
+          return errorResponse("No paragraph formatting options specified. Provide at least one of: alignment, lineSpacing, bulletStyle.");
         }
 
         await slidesService.presentations.batchUpdate({
@@ -3143,7 +3183,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (fields.length === 0) {
-          return errorResponse("No styling options specified");
+          return errorResponse("No shape styling options specified. Provide at least one of: backgroundColor, outlineColor, outlineWeight, outlineDashStyle.");
         }
 
         await slidesService.presentations.batchUpdate({
@@ -3486,11 +3526,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       default:
-        return errorResponse("Tool not found");
+        return errorResponse(`Unknown tool: "${request.params.name}". Use the listTools endpoint to see available tools.`);
     }
   } catch (error) {
-    log('Error in tool request handler', { error: (error as Error).message });
-    return errorResponse((error as Error).message);
+    log('Error in tool request handler', { error: (error as Error).message, tool: request.params.name });
+    return errorResponse(`${request.params.name} failed: ${(error as Error).message}`);
   }
 });
 
