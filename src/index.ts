@@ -3344,8 +3344,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           presentationId: args.presentationId
         });
 
-        if (!presentation.data.slides || args.slideIndex >= presentation.data.slides.length) {
-          return errorResponse(`Slide index ${args.slideIndex} not found in presentation`);
+        const slideCount = presentation.data.slides?.length || 0;
+        if (!presentation.data.slides || args.slideIndex >= slideCount) {
+          return errorResponse(`Slide index ${args.slideIndex} not found in presentation (has ${slideCount} slides)`);
         }
 
         const slide = presentation.data.slides[args.slideIndex];
@@ -3360,22 +3361,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Get the notes page to read the speaker notes text
-        const notesPageObjectId = slide.slideProperties?.notesPage?.objectId;
-        if (!notesPageObjectId) {
-          return {
-            content: [{ type: "text", text: "No speaker notes found for this slide" }],
-            isError: false
-          };
-        }
-
-        // Get the presentation again with the notes page included
-        const fullPresentation = await slidesService.presentations.get({
-          presentationId: args.presentationId
-        });
-
-        // Find the notes page for this slide
-        const notesPage = fullPresentation.data.slides?.[args.slideIndex]?.slideProperties?.notesPage;
+        // Find the notes page for this slide (already fetched in presentation)
+        const notesPage = slide.slideProperties?.notesPage;
 
         if (!notesPage || !notesPage.pageElements) {
           return {
@@ -3425,8 +3412,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           presentationId: args.presentationId
         });
 
-        if (!presentation.data.slides || args.slideIndex >= presentation.data.slides.length) {
-          return errorResponse(`Slide index ${args.slideIndex} not found in presentation`);
+        const slideCount = presentation.data.slides?.length || 0;
+        if (!presentation.data.slides || args.slideIndex >= slideCount) {
+          return errorResponse(`Slide index ${args.slideIndex} not found in presentation (has ${slideCount} slides)`);
         }
 
         const slide = presentation.data.slides[args.slideIndex];
