@@ -1,6 +1,6 @@
 {
     "name": "@dguido/google-drive-mcp",
-    "version": "1.2.0",
+    "version": "1.6.0",
     "description": "Google Drive MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, and Slides through MCP clients e.g. Claude Desktop",
     "license": "MIT",
     "author": "Piotr Agier <piotr.agier@gmail.com>",
@@ -45,7 +45,9 @@
         "auth": "node dist/index.js auth",
         "watch": "node scripts/build.js --watch",
         "prepare": "npm run build",
-        "test": "echo \"No tests yet\" && exit 0",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
         "lint": "tsc --noEmit"
     },
     "dependencies": {
@@ -63,8 +65,10 @@
     "devDependencies": {
         "@types/node": "22.19.7",
         "@types/uuid": "10.0.0",
+        "@vitest/coverage-v8": "^4.0.17",
         "esbuild": "0.25.12",
         "shx": "0.4.0",
-        "typescript": "5.9.3"
+        "typescript": "5.9.3",
+        "vitest": "^4.0.17"
     }
 }

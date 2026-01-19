@@ -1,0 +1,870 @@
+import type { drive_v3, slides_v1 } from 'googleapis';
+import { v4 as uuidv4 } from 'uuid';
+import { successResponse, errorResponse } from '../utils/index.js';
+import type { ToolResponse } from '../utils/index.js';
+import {
+  CreateGoogleSlidesSchema,
+  UpdateGoogleSlidesSchema,
+  GetGoogleSlidesContentSchema,
+  FormatGoogleSlidesTextSchema,
+  FormatGoogleSlidesParagraphSchema,
+  StyleGoogleSlidesShapeSchema,
+  SetGoogleSlidesBackgroundSchema,
+  CreateGoogleSlidesTextBoxSchema,
+  CreateGoogleSlidesShapeSchema,
+  GetGoogleSlidesSpeakerNotesSchema,
+  UpdateGoogleSlidesSpeakerNotesSchema
+} from '../schemas/index.js';
+import { resolveFolderId, checkFileExists } from './helpers.js';
+
+export async function handleCreateGoogleSlides(
+  drive: drive_v3.Drive,
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = CreateGoogleSlidesSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const parentFolderId = await resolveFolderId(drive, data.parentFolderId);
+
+  // Check if presentation already exists
+  const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
+  if (existingFileId) {
+    return errorResponse(
+      `A presentation named "${data.name}" already exists in this location. ` +
+      `File ID: ${existingFileId}. To modify it, you can use Google Slides directly.`
+    );
+  }
+
+  // API call 1: Create presentation
+  const presentation = await slides.presentations.create({
+    requestBody: { title: data.name },
+  });
+
+  // API call 2: Move to folder
+  await drive.files.update({
+    fileId: presentation.data.presentationId!,
+    addParents: parentFolderId,
+    removeParents: 'root',
+    supportsAllDrives: true
+  });
+
+  // Generate all slide IDs upfront
+  const slideIds = data.slides.map(() => `slide_${uuidv4().substring(0, 8)}`);
+
+  // API call 3: Batch create all slides at once
+  const createSlideRequests: slides_v1.Schema$Request[] = slideIds.map(slideObjectId => ({
+    createSlide: {
+      objectId: slideObjectId,
+      slideLayoutReference: { predefinedLayout: 'TITLE_AND_BODY' },
+    }
+  }));
+
+  await slides.presentations.batchUpdate({
+    presentationId: presentation.data.presentationId!,
+    requestBody: { requests: createSlideRequests }
+  });
+
+  // API call 4: Fetch all slides to get placeholder IDs
+  const updatedPresentation = await slides.presentations.get({
+    presentationId: presentation.data.presentationId!
+  });
+
+  // Build insert text requests for all slides
+  const insertTextRequests: slides_v1.Schema$Request[] = [];
+
+  // Note: The first slide in the response is the default blank slide created with the presentation
+  // Our custom slides start at index 1
+  for (let i = 0; i < data.slides.length; i++) {
+    const slide = data.slides[i];
+    // Our slides start at index 1 (after the default blank slide)
+    const presentationSlide = updatedPresentation.data.slides?.[i + 1];
+
+    if (presentationSlide?.pageElements) {
+      for (const el of presentationSlide.pageElements) {
+        if (el.shape?.placeholder?.type === 'TITLE' && el.objectId) {
+          insertTextRequests.push({
+            insertText: { objectId: el.objectId, text: slide.title, insertionIndex: 0 }
+          });
+        } else if (el.shape?.placeholder?.type === 'BODY' && el.objectId) {
+          insertTextRequests.push({
+            insertText: { objectId: el.objectId, text: slide.content, insertionIndex: 0 }
+          });
+        }
+      }
+    }
+  }
+
+  // API call 5: Batch insert all text at once
+  if (insertTextRequests.length > 0) {
+    await slides.presentations.batchUpdate({
+      presentationId: presentation.data.presentationId!,
+      requestBody: { requests: insertTextRequests }
+    });
+  }
+
+  return successResponse(
+    `Created Google Slides presentation: ${data.name}\n` +
+    `ID: ${presentation.data.presentationId}\n` +
+    `Link: https://docs.google.com/presentation/d/${presentation.data.presentationId}`
+  );
+}
+
+export async function handleUpdateGoogleSlides(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = UpdateGoogleSlidesSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // API call 1: Get current presentation details
+  const currentPresentation = await slides.presentations.get({
+    presentationId: data.presentationId
+  });
+
+  if (!currentPresentation.data.slides) {
+    return errorResponse(
+      `No slides found in presentation ${data.presentationId}. ` +
+      `The presentation may be empty or inaccessible.`
+    );
+  }
+
+  if (data.slides.length === 0) {
+    return errorResponse("At least one slide must be provided");
+  }
+
+  // Collect all slide IDs except the first one (we'll keep it for now)
+  const slideIdsToDelete = currentPresentation.data.slides
+    .slice(1)
+    .map(slide => slide.objectId)
+    .filter((id): id is string => id !== undefined);
+
+  // Prepare all requests for a single batch update
+  const requests: slides_v1.Schema$Request[] = [];
+
+  // Delete all slides except the first one
+  for (const slideId of slideIdsToDelete) {
+    requests.push({ deleteObject: { objectId: slideId } });
+  }
+
+  // Clear content of the first slide
+  const firstSlide = currentPresentation.data.slides[0];
+  if (firstSlide?.pageElements) {
+    for (const element of firstSlide.pageElements) {
+      if (element.objectId && element.shape?.text) {
+        requests.push({
+          deleteText: {
+            objectId: element.objectId,
+            textRange: { type: 'ALL' }
+          }
+        });
+      }
+    }
+  }
+
+  // Update the first slide with new content
+  const firstSlideContent = data.slides[0];
+  if (firstSlide?.pageElements) {
+    let titlePlaceholderId: string | undefined;
+    let bodyPlaceholderId: string | undefined;
+
+    for (const element of firstSlide.pageElements) {
+      if (element.shape?.placeholder?.type === 'TITLE' ||
+          element.shape?.placeholder?.type === 'CENTERED_TITLE') {
+        titlePlaceholderId = element.objectId || undefined;
+      } else if (element.shape?.placeholder?.type === 'BODY' ||
+                 element.shape?.placeholder?.type === 'SUBTITLE') {
+        bodyPlaceholderId = element.objectId || undefined;
+      }
+    }
+
+    if (titlePlaceholderId) {
+      requests.push({
+        insertText: {
+          objectId: titlePlaceholderId,
+          text: firstSlideContent.title,
+          insertionIndex: 0
+        }
+      });
+    }
+
+    if (bodyPlaceholderId) {
+      requests.push({
+        insertText: {
+          objectId: bodyPlaceholderId,
+          text: firstSlideContent.content,
+          insertionIndex: 0
+        }
+      });
+    }
+  }
+
+  // For additional slides, use placeholderIdMappings to set known IDs upfront
+  // This avoids needing a second API call to fetch placeholder IDs
+  const newSlideData: Array<{ slideId: string; titleId: string; bodyId: string }> = [];
+
+  for (let i = 1; i < data.slides.length; i++) {
+    const slideId = `slide_${Date.now()}_${i}`;
+    const titleId = `title_${Date.now()}_${i}`;
+    const bodyId = `body_${Date.now()}_${i}`;
+
+    newSlideData.push({ slideId, titleId, bodyId });
+
+    requests.push({
+      createSlide: {
+        objectId: slideId,
+        slideLayoutReference: { predefinedLayout: 'TITLE_AND_BODY' },
+        placeholderIdMappings: [
+          {
+            layoutPlaceholder: { type: 'TITLE' },
+            objectId: titleId
+          },
+          {
+            layoutPlaceholder: { type: 'BODY' },
+            objectId: bodyId
+          }
+        ]
+      }
+    });
+  }
+
+  // Add insertText requests for all additional slides using our pre-assigned IDs
+  for (let i = 0; i < newSlideData.length; i++) {
+    const slideContent = data.slides[i + 1];
+    const { titleId, bodyId } = newSlideData[i];
+
+    requests.push({
+      insertText: {
+        objectId: titleId,
+        text: slideContent.title,
+        insertionIndex: 0
+      }
+    });
+    requests.push({
+      insertText: {
+        objectId: bodyId,
+        text: slideContent.content,
+        insertionIndex: 0
+      }
+    });
+  }
+
+  // API call 2: Execute single batch update with all operations
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  return successResponse(
+    `Updated Google Slides presentation with ${data.slides.length} slide(s)\n` +
+    `Link: https://docs.google.com/presentation/d/${data.presentationId}`
+  );
+}
+
+export async function handleGetGoogleSlidesContent(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = GetGoogleSlidesContentSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const presentation = await slides.presentations.get({
+    presentationId: data.presentationId
+  });
+
+  if (!presentation.data.slides) {
+    return errorResponse(
+      `No slides found in presentation ${data.presentationId}. ` +
+      `The presentation may be empty or inaccessible.`
+    );
+  }
+
+  let content = 'Presentation content with element IDs:\n\n';
+  const slidesToShow = data.slideIndex !== undefined
+    ? [presentation.data.slides[data.slideIndex]]
+    : presentation.data.slides;
+
+  slidesToShow.forEach((slide, index) => {
+    if (!slide || !slide.objectId) return;
+
+    content += `\nSlide ${data.slideIndex ?? index} (ID: ${slide.objectId}):\n`;
+    content += '----------------------------\n';
+
+    if (slide.pageElements) {
+      slide.pageElements.forEach((element) => {
+        if (!element.objectId) return;
+
+        if (element.shape?.text) {
+          content += `  Text Box (ID: ${element.objectId}):\n`;
+          const textElements = element.shape.text.textElements || [];
+          let text = '';
+          textElements.forEach((textElement) => {
+            if (textElement.textRun?.content) {
+              text += textElement.textRun.content;
+            }
+          });
+          content += `    "${text.trim()}"\n`;
+        } else if (element.shape) {
+          content += `  Shape (ID: ${element.objectId}): ${element.shape.shapeType || 'Unknown'}\n`;
+        } else if (element.image) {
+          content += `  Image (ID: ${element.objectId})\n`;
+        } else if (element.video) {
+          content += `  Video (ID: ${element.objectId})\n`;
+        } else if (element.table) {
+          content += `  Table (ID: ${element.objectId})\n`;
+        }
+      });
+    }
+  });
+
+  return successResponse(content);
+}
+
+export async function handleFormatGoogleSlidesText(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = FormatGoogleSlidesTextSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const textStyle: Record<string, unknown> = {};
+  const fields: string[] = [];
+
+  if (data.bold !== undefined) {
+    textStyle.bold = data.bold;
+    fields.push('bold');
+  }
+
+  if (data.italic !== undefined) {
+    textStyle.italic = data.italic;
+    fields.push('italic');
+  }
+
+  if (data.underline !== undefined) {
+    textStyle.underline = data.underline;
+    fields.push('underline');
+  }
+
+  if (data.strikethrough !== undefined) {
+    textStyle.strikethrough = data.strikethrough;
+    fields.push('strikethrough');
+  }
+
+  if (data.fontSize !== undefined) {
+    textStyle.fontSize = { magnitude: data.fontSize, unit: 'PT' };
+    fields.push('fontSize');
+  }
+
+  if (data.fontFamily !== undefined) {
+    textStyle.fontFamily = data.fontFamily;
+    fields.push('fontFamily');
+  }
+
+  if (data.foregroundColor) {
+    textStyle.foregroundColor = {
+      opaqueColor: {
+        rgbColor: {
+          red: data.foregroundColor.red || 0,
+          green: data.foregroundColor.green || 0,
+          blue: data.foregroundColor.blue || 0
+        }
+      }
+    };
+    fields.push('foregroundColor');
+  }
+
+  if (fields.length === 0) {
+    return errorResponse(
+      "No text formatting options specified. Provide at least one of: " +
+      "bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor."
+    );
+  }
+
+  const updateRequest: slides_v1.Schema$Request = {
+    updateTextStyle: {
+      objectId: data.objectId,
+      style: textStyle,
+      fields: fields.join(','),
+      textRange: (data.startIndex !== undefined && data.endIndex !== undefined)
+        ? { type: 'FIXED_RANGE', startIndex: data.startIndex, endIndex: data.endIndex }
+        : { type: 'ALL' }
+    }
+  };
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests: [updateRequest] }
+  });
+
+  return successResponse(`Applied text formatting to object ${data.objectId}`);
+}
+
+export async function handleFormatGoogleSlidesParagraph(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = FormatGoogleSlidesParagraphSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const requests: slides_v1.Schema$Request[] = [];
+
+  if (data.alignment) {
+    requests.push({
+      updateParagraphStyle: {
+        objectId: data.objectId,
+        style: { alignment: data.alignment },
+        fields: 'alignment'
+      }
+    });
+  }
+
+  if (data.lineSpacing !== undefined) {
+    requests.push({
+      updateParagraphStyle: {
+        objectId: data.objectId,
+        style: { lineSpacing: data.lineSpacing },
+        fields: 'lineSpacing'
+      }
+    });
+  }
+
+  if (data.bulletStyle) {
+    if (data.bulletStyle === 'NONE') {
+      requests.push({ deleteParagraphBullets: { objectId: data.objectId } });
+    } else if (data.bulletStyle === 'NUMBERED') {
+      requests.push({
+        createParagraphBullets: {
+          objectId: data.objectId,
+          bulletPreset: 'NUMBERED_DIGIT_ALPHA_ROMAN'
+        }
+      });
+    } else {
+      requests.push({
+        createParagraphBullets: {
+          objectId: data.objectId,
+          bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`
+        }
+      });
+    }
+  }
+
+  if (requests.length === 0) {
+    return errorResponse(
+      "No paragraph formatting options specified. Provide at least one of: " +
+      "alignment, lineSpacing, bulletStyle."
+    );
+  }
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  return successResponse(`Applied paragraph formatting to object ${data.objectId}`);
+}
+
+export async function handleStyleGoogleSlidesShape(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = StyleGoogleSlidesShapeSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const shapeProperties: Record<string, unknown> = {};
+  const fields: string[] = [];
+
+  if (data.backgroundColor) {
+    shapeProperties.shapeBackgroundFill = {
+      solidFill: {
+        color: {
+          rgbColor: {
+            red: data.backgroundColor.red || 0,
+            green: data.backgroundColor.green || 0,
+            blue: data.backgroundColor.blue || 0
+          }
+        },
+        alpha: data.backgroundColor.alpha || 1
+      }
+    };
+    fields.push('shapeBackgroundFill');
+  }
+
+  const outline: Record<string, unknown> = {};
+  let hasOutlineChanges = false;
+
+  if (data.outlineColor) {
+    outline.outlineFill = {
+      solidFill: {
+        color: {
+          rgbColor: {
+            red: data.outlineColor.red || 0,
+            green: data.outlineColor.green || 0,
+            blue: data.outlineColor.blue || 0
+          }
+        }
+      }
+    };
+    hasOutlineChanges = true;
+  }
+
+  if (data.outlineWeight !== undefined) {
+    outline.weight = { magnitude: data.outlineWeight, unit: 'PT' };
+    hasOutlineChanges = true;
+  }
+
+  if (data.outlineDashStyle !== undefined) {
+    outline.dashStyle = data.outlineDashStyle;
+    hasOutlineChanges = true;
+  }
+
+  if (hasOutlineChanges) {
+    shapeProperties.outline = outline;
+    fields.push('outline');
+  }
+
+  if (fields.length === 0) {
+    return errorResponse(
+      "No shape styling options specified. Provide at least one of: " +
+      "backgroundColor, outlineColor, outlineWeight, outlineDashStyle."
+    );
+  }
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: {
+      requests: [{
+        updateShapeProperties: {
+          objectId: data.objectId,
+          shapeProperties,
+          fields: fields.join(',')
+        }
+      }]
+    }
+  });
+
+  return successResponse(`Applied styling to shape ${data.objectId}`);
+}
+
+export async function handleSetGoogleSlidesBackground(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = SetGoogleSlidesBackgroundSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const requests = data.pageObjectIds.map(pageObjectId => ({
+    updatePageProperties: {
+      objectId: pageObjectId,
+      pageProperties: {
+        pageBackgroundFill: {
+          solidFill: {
+            color: {
+              rgbColor: {
+                red: data.backgroundColor.red || 0,
+                green: data.backgroundColor.green || 0,
+                blue: data.backgroundColor.blue || 0
+              }
+            },
+            alpha: data.backgroundColor.alpha || 1
+          }
+        }
+      },
+      fields: 'pageBackgroundFill'
+    }
+  }));
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  return successResponse(`Set background color for ${data.pageObjectIds.length} slide(s)`);
+}
+
+export async function handleCreateGoogleSlidesTextBox(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = CreateGoogleSlidesTextBoxSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const elementId = `textBox_${uuidv4().substring(0, 8)}`;
+
+  const requests: slides_v1.Schema$Request[] = [
+    {
+      createShape: {
+        objectId: elementId,
+        shapeType: 'TEXT_BOX',
+        elementProperties: {
+          pageObjectId: data.pageObjectId,
+          size: {
+            width: { magnitude: data.width, unit: 'EMU' },
+            height: { magnitude: data.height, unit: 'EMU' }
+          },
+          transform: {
+            scaleX: 1,
+            scaleY: 1,
+            translateX: data.x,
+            translateY: data.y,
+            unit: 'EMU'
+          }
+        }
+      }
+    },
+    {
+      insertText: {
+        objectId: elementId,
+        text: data.text,
+        insertionIndex: 0
+      }
+    }
+  ];
+
+  // Apply optional formatting
+  if (data.fontSize || data.bold || data.italic) {
+    const textStyle: Record<string, unknown> = {};
+    const fields: string[] = [];
+
+    if (data.fontSize) {
+      textStyle.fontSize = { magnitude: data.fontSize, unit: 'PT' };
+      fields.push('fontSize');
+    }
+
+    if (data.bold !== undefined) {
+      textStyle.bold = data.bold;
+      fields.push('bold');
+    }
+
+    if (data.italic !== undefined) {
+      textStyle.italic = data.italic;
+      fields.push('italic');
+    }
+
+    if (fields.length > 0) {
+      requests.push({
+        updateTextStyle: {
+          objectId: elementId,
+          style: textStyle,
+          fields: fields.join(','),
+          textRange: { type: 'ALL' }
+        }
+      });
+    }
+  }
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  return successResponse(`Created text box with ID: ${elementId}`);
+}
+
+export async function handleCreateGoogleSlidesShape(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = CreateGoogleSlidesShapeSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const elementId = `shape_${uuidv4().substring(0, 8)}`;
+
+  const requests: slides_v1.Schema$Request[] = [
+    {
+      createShape: {
+        objectId: elementId,
+        shapeType: data.shapeType,
+        elementProperties: {
+          pageObjectId: data.pageObjectId,
+          size: {
+            width: { magnitude: data.width, unit: 'EMU' },
+            height: { magnitude: data.height, unit: 'EMU' }
+          },
+          transform: {
+            scaleX: 1,
+            scaleY: 1,
+            translateX: data.x,
+            translateY: data.y,
+            unit: 'EMU'
+          }
+        }
+      }
+    }
+  ];
+
+  // Apply background color if specified
+  if (data.backgroundColor) {
+    requests.push({
+      updateShapeProperties: {
+        objectId: elementId,
+        shapeProperties: {
+          shapeBackgroundFill: {
+            solidFill: {
+              color: {
+                rgbColor: {
+                  red: data.backgroundColor.red || 0,
+                  green: data.backgroundColor.green || 0,
+                  blue: data.backgroundColor.blue || 0
+                }
+              },
+              alpha: data.backgroundColor.alpha || 1
+            }
+          }
+        },
+        fields: 'shapeBackgroundFill'
+      }
+    });
+  }
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  return successResponse(`Created ${data.shapeType} shape with ID: ${elementId}`);
+}
+
+export async function handleGetGoogleSlidesSpeakerNotes(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = GetGoogleSlidesSpeakerNotesSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get the presentation to access the slide
+  const presentation = await slides.presentations.get({
+    presentationId: data.presentationId
+  });
+
+  const slideCount = presentation.data.slides?.length || 0;
+  if (!presentation.data.slides || data.slideIndex >= slideCount) {
+    return errorResponse(
+      `Slide index ${data.slideIndex} not found in presentation (has ${slideCount} slides)`
+    );
+  }
+
+  const slide = presentation.data.slides[data.slideIndex];
+
+  // Get the notes page object ID from the slide properties
+  const notesObjectId = slide.slideProperties?.notesPage?.notesProperties?.speakerNotesObjectId;
+
+  if (!notesObjectId) {
+    return successResponse("No speaker notes found for this slide");
+  }
+
+  // Find the notes page for this slide (already fetched in presentation)
+  const notesPage = slide.slideProperties?.notesPage;
+
+  if (!notesPage || !notesPage.pageElements) {
+    return successResponse("No speaker notes found for this slide");
+  }
+
+  // Find the speaker notes shape
+  const speakerNotesElement = notesPage.pageElements.find(
+    element => element.objectId === notesObjectId
+  );
+
+  if (!speakerNotesElement || !speakerNotesElement.shape?.text) {
+    return successResponse("No speaker notes found for this slide");
+  }
+
+  // Extract the text from the speaker notes
+  let notesText = '';
+  const textElements = speakerNotesElement.shape.text.textElements || [];
+  textElements.forEach((textElement) => {
+    if (textElement.textRun?.content) {
+      notesText += textElement.textRun.content;
+    }
+  });
+
+  return successResponse(notesText.trim() || "No speaker notes found for this slide");
+}
+
+export async function handleUpdateGoogleSlidesSpeakerNotes(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = UpdateGoogleSlidesSpeakerNotesSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get the presentation to access the slide
+  const presentation = await slides.presentations.get({
+    presentationId: data.presentationId
+  });
+
+  const slideCount = presentation.data.slides?.length || 0;
+  if (!presentation.data.slides || data.slideIndex >= slideCount) {
+    return errorResponse(
+      `Slide index ${data.slideIndex} not found in presentation (has ${slideCount} slides)`
+    );
+  }
+
+  const slide = presentation.data.slides[data.slideIndex];
+
+  // Get the notes page object ID from the slide properties
+  const notesObjectId = slide.slideProperties?.notesPage?.notesProperties?.speakerNotesObjectId;
+
+  if (!notesObjectId) {
+    return errorResponse(
+      "This slide does not have a speaker notes object. " +
+      "Speaker notes may need to be initialized manually in Google Slides first."
+    );
+  }
+
+  // Create the batchUpdate request to replace the speaker notes text
+  const requests: slides_v1.Schema$Request[] = [
+    {
+      deleteText: {
+        objectId: notesObjectId,
+        textRange: { type: 'ALL' }
+      }
+    },
+    {
+      insertText: {
+        objectId: notesObjectId,
+        text: data.notes,
+        insertionIndex: 0
+      }
+    }
+  ];
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  return successResponse(`Successfully updated speaker notes for slide ${data.slideIndex}`);
+}

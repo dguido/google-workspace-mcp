@@ -1,0 +1,540 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { drive_v3, sheets_v4 } from 'googleapis';
+import {
+  handleCreateGoogleSheet,
+  handleUpdateGoogleSheet,
+  handleGetGoogleSheetContent,
+  handleFormatGoogleSheetCells,
+  handleFormatGoogleSheetText,
+  handleFormatGoogleSheetNumbers,
+  handleSetGoogleSheetBorders,
+  handleMergeGoogleSheetCells,
+  handleAddGoogleSheetConditionalFormat,
+  handleCreateSheetTab,
+  handleDeleteSheetTab,
+  handleRenameSheetTab
+} from './sheets.js';
+
+vi.mock('../utils/index.js', () => ({
+  log: vi.fn(),
+  successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
+  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true })
+}));
+
+vi.mock('../utils/sheetCache.js', () => ({
+  getCachedSheetMetadata: vi.fn(() => undefined),
+  setCachedSheetMetadata: vi.fn(),
+  clearSheetCache: vi.fn()
+}));
+
+function createMockDrive(): drive_v3.Drive {
+  return {
+    files: {
+      list: vi.fn(),
+      update: vi.fn()
+    }
+  } as unknown as drive_v3.Drive;
+}
+
+function createMockSheets(): sheets_v4.Sheets {
+  return {
+    spreadsheets: {
+      create: vi.fn(),
+      get: vi.fn(),
+      batchUpdate: vi.fn(),
+      values: {
+        update: vi.fn(),
+        get: vi.fn()
+      }
+    }
+  } as unknown as sheets_v4.Sheets;
+}
+
+describe('handleCreateGoogleSheet', () => {
+  let mockDrive: drive_v3.Drive;
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+    mockSheets = createMockSheets();
+    vi.mocked(mockDrive.files.list).mockResolvedValue({ data: { files: [] } } as never);
+  });
+
+  it('creates spreadsheet successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.create).mockResolvedValue({
+      data: { spreadsheetId: 'sheet123' }
+    } as never);
+    vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
+    vi.mocked(mockSheets.spreadsheets.values.update).mockResolvedValue({} as never);
+
+    const result = await handleCreateGoogleSheet(mockDrive, mockSheets, {
+      name: 'Test Sheet',
+      data: [['A1', 'B1'], ['A2', 'B2']]
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Created Google Sheet');
+  });
+
+  it('returns error when sheet already exists', async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: { files: [{ id: 'existing123' }] }
+    } as never);
+
+    const result = await handleCreateGoogleSheet(mockDrive, mockSheets, {
+      name: 'Existing Sheet',
+      data: [[]]
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('already exists');
+  });
+
+  it('returns error for empty name', async () => {
+    const result = await handleCreateGoogleSheet(mockDrive, mockSheets, {
+      name: '',
+      data: [[]]
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('handleUpdateGoogleSheet', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+  });
+
+  it('updates spreadsheet successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.values.update).mockResolvedValue({} as never);
+
+    const result = await handleUpdateGoogleSheet(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2',
+      data: [['New', 'Data']]
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Updated Google Sheet');
+  });
+
+  it('returns error for empty spreadsheetId', async () => {
+    const result = await handleUpdateGoogleSheet(mockSheets, {
+      spreadsheetId: '',
+      range: 'A1',
+      data: [[]]
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('handleGetGoogleSheetContent', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+  });
+
+  it('returns content successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.values.get).mockResolvedValue({
+      data: { values: [['A1', 'B1'], ['A2', 'B2']] }
+    } as never);
+
+    const result = await handleGetGoogleSheetContent(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('A1');
+  });
+
+  it('handles empty range', async () => {
+    vi.mocked(mockSheets.spreadsheets.values.get).mockResolvedValue({
+      data: { values: undefined }
+    } as never);
+
+    const result = await handleGetGoogleSheetContent(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:A1'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('empty range');
+  });
+});
+
+describe('handleFormatGoogleSheetCells', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+  });
+
+  it('formats cells successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'Sheet1!A1:B2',
+      backgroundColor: { red: 1, green: 0, blue: 0 }
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Formatted cells');
+  });
+
+  it('returns error when sheet not found', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [] }
+    } as never);
+
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'NonExistent!A1',
+      backgroundColor: { red: 1 }
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('not found');
+  });
+});
+
+describe('handleFormatGoogleSheetText', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+  });
+
+  it('formats text successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetText(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2',
+      bold: true,
+      fontSize: 14
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Applied text formatting');
+  });
+});
+
+describe('handleFormatGoogleSheetNumbers', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+  });
+
+  it('applies number format successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetNumbers(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:A10',
+      pattern: '$#,##0.00'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Applied number formatting');
+  });
+
+  it('returns error for empty pattern', async () => {
+    const result = await handleFormatGoogleSheetNumbers(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1',
+      pattern: ''
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('handleSetGoogleSheetBorders', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+  });
+
+  it('sets borders successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleSetGoogleSheetBorders(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2',
+      style: 'SOLID'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Set borders');
+  });
+});
+
+describe('handleMergeGoogleSheetCells', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+  });
+
+  it('merges cells successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleMergeGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2',
+      mergeType: 'MERGE_ALL'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Merged cells');
+  });
+});
+
+describe('handleAddGoogleSheetConditionalFormat', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+  });
+
+  it('adds conditional format successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleAddGoogleSheetConditionalFormat(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'A1:A10',
+      condition: { type: 'NUMBER_GREATER', value: '100' },
+      format: { backgroundColor: { red: 1, green: 0, blue: 0 } }
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Added conditional formatting');
+  });
+});
+
+describe('handleCreateSheetTab', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+  });
+
+  it('creates sheet tab successfully', async () => {
+    // Sheet doesn't exist yet
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({
+      data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] }
+    } as never);
+
+    const result = await handleCreateSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      title: 'NewTab'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Created new sheet tab');
+    expect(result.content[0].text).toContain('NewTab');
+  });
+
+  it('creates sheet tab at specific index', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({
+      data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] }
+    } as never);
+
+    const result = await handleCreateSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      title: 'NewTab',
+      index: 0
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('returns error when tab already exists', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'ExistingTab' } }] }
+    } as never);
+
+    const result = await handleCreateSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      title: 'ExistingTab'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('already exists');
+  });
+
+  it('returns error for empty spreadsheetId', async () => {
+    const result = await handleCreateSheetTab(mockSheets, {
+      spreadsheetId: '',
+      title: 'NewTab'
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('returns error for empty title', async () => {
+    const result = await handleCreateSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      title: ''
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('handleDeleteSheetTab', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+  });
+
+  it('deletes sheet tab successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [
+        { properties: { sheetId: 0, title: 'Sheet1' } },
+        { properties: { sheetId: 1, title: 'ToDelete' } }
+      ] }
+    } as never);
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleDeleteSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      sheetTitle: 'ToDelete'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Deleted sheet tab');
+  });
+
+  it('returns error when tab not found', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+
+    const result = await handleDeleteSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      sheetTitle: 'NonExistent'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('not found');
+  });
+
+  it('returns error when trying to delete last sheet', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'LastSheet' } }] }
+    } as never);
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockRejectedValue(
+      new Error('Cannot delete the last sheet')
+    );
+
+    const result = await handleDeleteSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      sheetTitle: 'LastSheet'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('at least one sheet');
+  });
+
+  it('returns error for empty spreadsheetId', async () => {
+    const result = await handleDeleteSheetTab(mockSheets, {
+      spreadsheetId: '',
+      sheetTitle: 'Sheet1'
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('handleRenameSheetTab', () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+  });
+
+  it('renames sheet tab successfully', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'OldName' } }] }
+    } as never);
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleRenameSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      currentTitle: 'OldName',
+      newTitle: 'NewName'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Renamed sheet tab');
+    expect(result.content[0].text).toContain('OldName');
+    expect(result.content[0].text).toContain('NewName');
+  });
+
+  it('returns error when source tab not found', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+    } as never);
+
+    const result = await handleRenameSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      currentTitle: 'NonExistent',
+      newTitle: 'NewName'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('not found');
+  });
+
+  it('returns error when target name already exists', async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: { sheets: [
+        { properties: { sheetId: 0, title: 'OldName' } },
+        { properties: { sheetId: 1, title: 'ExistingName' } }
+      ] }
+    } as never);
+
+    const result = await handleRenameSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      currentTitle: 'OldName',
+      newTitle: 'ExistingName'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('already exists');
+  });
+
+  it('returns error for empty spreadsheetId', async () => {
+    const result = await handleRenameSheetTab(mockSheets, {
+      spreadsheetId: '',
+      currentTitle: 'OldName',
+      newTitle: 'NewName'
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('returns error for empty currentTitle', async () => {
+    const result = await handleRenameSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      currentTitle: '',
+      newTitle: 'NewName'
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('returns error for empty newTitle', async () => {
+    const result = await handleRenameSheetTab(mockSheets, {
+      spreadsheetId: 'sheet123',
+      currentTitle: 'OldName',
+      newTitle: ''
+    });
+    expect(result.isError).toBe(true);
+  });
+});
