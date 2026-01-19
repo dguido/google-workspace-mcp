@@ -1,14 +1,17 @@
 {
-    "name": "@piotr-agier/google-drive-mcp",
-    "version": "1.1.1",
+    "name": "@dguido/google-drive-mcp",
+    "version": "1.2.0",
     "description": "Google Drive MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, and Slides through MCP clients e.g. Claude Desktop",
     "license": "MIT",
     "author": "Piotr Agier <piotr.agier@gmail.com>",
-    "homepage": "https://piotragier.net",
-    "bugs": "https://github.com/piotr-agier/google-drive-mcp/issues",
+    "contributors": [
+        "Dan Guido <dan@trailofbits.com>"
+    ],
+    "homepage": "https://github.com/dguido/google-drive-mcp",
+    "bugs": "https://github.com/dguido/google-drive-mcp/issues",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/piotr-agier/google-drive-mcp.git"
+        "url": "git+https://github.com/dguido/google-drive-mcp.git"
     },
     "keywords": [
         "mcp",
@@ -46,22 +49,22 @@
         "lint": "tsc --noEmit"
     },
     "dependencies": {
-        "@google-cloud/local-auth": "^3.0.1",
-        "@modelcontextprotocol/sdk": "1.16.0",
-        "@types/express": "^5.0.3",
-        "express": "^5.1.0",
-        "google-auth-library": "^9.15.0",
-        "googleapis": "^144.0.0",
-        "open": "^10.2.0",
-        "punycode": "^2.3.1",
-        "uuid": "^11.0.3",
-        "zod": "^3.25.76"
+        "@google-cloud/local-auth": "3.0.1",
+        "@modelcontextprotocol/sdk": "1.25.2",
+        "@types/express": "5.0.6",
+        "express": "5.2.1",
+        "google-auth-library": "10.5.0",
+        "googleapis": "170.1.0",
+        "open": "11.0.0",
+        "punycode": "2.3.1",
+        "uuid": "13.0.0",
+        "zod": "3.25.76"
     },
     "devDependencies": {
-        "@types/node": "^22.9.3",
-        "@types/uuid": "^10.0.0",
-        "esbuild": "^0.25.8",
-        "shx": "^0.3.4",
-        "typescript": "^5.6.2"
+        "@types/node": "22.19.7",
+        "@types/uuid": "10.0.0",
+        "esbuild": "0.25.12",
+        "shx": "0.4.0",
+        "typescript": "5.9.3"
     }
 }
