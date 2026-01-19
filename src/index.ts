@@ -124,7 +124,9 @@ async function resolvePath(pathStr: string): Promise<string> {
     let response = await drive.files.list({
       q: `'${currentFolderId}' in parents and name = '${part}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
       fields: 'files(id)',
-      spaces: 'drive'
+      spaces: 'drive',
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
     });
 
     // If the folder segment doesn't exist, create it
@@ -136,7 +138,8 @@ async function resolvePath(pathStr: string): Promise<string> {
       };
       const folder = await drive.files.create({
         requestBody: folderMetadata,
-        fields: 'id'
+        fields: 'id',
+        supportsAllDrives: true
       });
 
       if (!folder.data.id) {
@@ -238,7 +241,9 @@ async function checkFileExists(name: string, parentFolderId: string = 'root'): P
     const res = await drive.files.list({
       q: query,
       fields: 'files(id, name, mimeType)',
-      pageSize: 1
+      pageSize: 1,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
     });
     
     if (res.data.files && res.data.files.length > 0) {
@@ -255,7 +260,9 @@ async function checkFileExists(name: string, parentFolderId: string = 'root'): P
 // INPUT VALIDATION SCHEMAS
 // -----------------------------------------------------------------------------
 const SearchSchema = z.object({
-  query: z.string().min(1, "Search query is required")
+  query: z.string().min(1, "Search query is required"),
+  pageSize: z.number().int().min(1).max(100).optional(),
+  pageToken: z.string().optional()
 });
 
 const CreateTextFileSchema = z.object({
@@ -277,7 +284,7 @@ const CreateFolderSchema = z.object({
 
 const ListFolderSchema = z.object({
   folderId: z.string().optional(),
-  pageSize: z.number().min(1).max(100).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
   pageToken: z.string().optional()
 });
 
@@ -309,13 +316,15 @@ const UpdateGoogleDocSchema = z.object({
 const CreateGoogleSheetSchema = z.object({
   name: z.string().min(1, "Sheet name is required"),
   data: z.array(z.array(z.string())),
-  parentFolderId: z.string().optional()
+  parentFolderId: z.string().optional(),
+  valueInputOption: z.enum(["RAW", "USER_ENTERED"]).optional()
 });
 
 const UpdateGoogleSheetSchema = z.object({
   spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
   range: z.string().min(1, "Range is required"),
-  data: z.array(z.array(z.string()))
+  data: z.array(z.array(z.string())),
+  valueInputOption: z.enum(["RAW", "USER_ENTERED"]).optional()
 });
 
 const GetGoogleSheetContentSchema = z.object({
@@ -619,11 +628,15 @@ server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
     pageSize: number,
     fields: string,
     pageToken?: string,
-    q: string
+    q: string,
+    includeItemsFromAllDrives: boolean,
+    supportsAllDrives: boolean
   } = {
     pageSize,
     fields: "nextPageToken, files(id, name, mimeType)",
-    q: `trashed = false`
+    q: `trashed = false`,
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true
   };
 
   if (request.params?.cursor) {
@@ -652,6 +665,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const file = await drive.files.get({
     fileId,
     fields: "mimeType",
+    supportsAllDrives: true
   });
   const mimeType = file.data.mimeType;
 
@@ -671,7 +685,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     }
 
     const res = await drive.files.export(
-      { fileId, mimeType: exportMimeType },
+      { fileId, mimeType: exportMimeType, supportsAllDrives: true },
       { responseType: "text" },
     );
 
@@ -688,7 +702,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   } else {
     // Regular file download
     const res = await drive.files.get(
-      { fileId, alt: "media" },
+      { fileId, alt: "media", supportsAllDrives: true },
       { responseType: "arraybuffer" },
     );
     const contentMime = mimeType || "application/octet-stream";
@@ -727,6 +741,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             query: { type: "string", description: "Search query" },
+            pageSize: { type: "number", description: "Results per page (default 50, max 100)" },
+            pageToken: { type: "string", description: "Token for next page of results" }
           },
           required: ["query"],
         },
@@ -739,7 +755,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             name: { type: "string", description: "File name (.txt or .md)" },
             content: { type: "string", description: "File content" },
-            parentFolderId: { type: "string", description: "Optional parent folder ID", optional: true }
+            parentFolderId: { type: "string", description: "Optional parent folder ID" }
           },
           required: ["name", "content"]
         }
@@ -752,7 +768,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             fileId: { type: "string", description: "ID of the file to update" },
             content: { type: "string", description: "New file content" },
-            name: { type: "string", description: "Optional new name (.txt or .md)", optional: true }
+            name: { type: "string", description: "Optional new name (.txt or .md)" }
           },
           required: ["fileId", "content"]
         }
@@ -764,7 +780,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             name: { type: "string", description: "Folder name" },
-            parent: { type: "string", description: "Optional parent folder ID or path", optional: true }
+            parent: { type: "string", description: "Optional parent folder ID or path" }
           },
           required: ["name"]
         }
@@ -775,9 +791,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            folderId: { type: "string", description: "Folder ID", optional: true },
-            pageSize: { type: "number", description: "Items to return (default 50, max 100)", optional: true },
-            pageToken: { type: "string", description: "Token for next page", optional: true }
+            folderId: { type: "string", description: "Folder ID" },
+            pageSize: { type: "number", description: "Items to return (default 50, max 100)" },
+            pageToken: { type: "string", description: "Token for next page" }
           }
         }
       },
@@ -811,7 +827,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             itemId: { type: "string", description: "ID of the item to move" },
-            destinationFolderId: { type: "string", description: "Destination folder ID", optional: true }
+            destinationFolderId: { type: "string", description: "Destination folder ID" }
           },
           required: ["itemId"]
         }
@@ -824,7 +840,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             name: { type: "string", description: "Doc name" },
             content: { type: "string", description: "Doc content" },
-            parentFolderId: { type: "string", description: "Parent folder ID", optional: true }
+            parentFolderId: { type: "string", description: "Parent folder ID" }
           },
           required: ["name", "content"]
         }
@@ -843,7 +859,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "createGoogleSheet",
-        description: "Create a new Google Sheet",
+        description: "Create a new Google Sheet. By default uses RAW mode which stores values as-is. Set valueInputOption to 'USER_ENTERED' only when you need formulas to be evaluated.",
         inputSchema: {
           type: "object",
           properties: {
@@ -853,22 +869,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Data as array of arrays",
               items: { type: "array", items: { type: "string" } }
             },
-            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)", optional: true }
+            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)" },
+            valueInputOption: {
+              type: "string",
+              enum: ["RAW", "USER_ENTERED"],
+              description: "RAW (default): Values stored exactly as provided - formulas stored as text strings. Safe for untrusted data. USER_ENTERED: Values parsed like spreadsheet UI - formulas (=SUM, =IF, etc.) are evaluated. SECURITY WARNING: USER_ENTERED can execute formulas, only use with trusted data, never with user-provided input that could contain malicious formulas like =IMPORTDATA() or =IMPORTRANGE()."
+            }
           },
           required: ["name", "data"]
         }
       },
       {
         name: "updateGoogleSheet",
-        description: "Update an existing Google Sheet",
+        description: "Update an existing Google Sheet. By default uses RAW mode which stores values as-is. Set valueInputOption to 'USER_ENTERED' only when you need formulas to be evaluated.",
         inputSchema: {
           type: "object",
           properties: {
             spreadsheetId: { type: "string", description: "Sheet ID" },
-            range: { type: "string", description: "Range to update" },
+            range: { type: "string", description: "Range to update (e.g., 'Sheet1!A1:C10')" },
             data: {
               type: "array",
+              description: "2D array of values to write",
               items: { type: "array", items: { type: "string" } }
+            },
+            valueInputOption: {
+              type: "string",
+              enum: ["RAW", "USER_ENTERED"],
+              description: "RAW (default): Values stored exactly as provided - formulas stored as text strings. Safe for untrusted data. USER_ENTERED: Values parsed like spreadsheet UI - formulas (=SUM, =IF, etc.) are evaluated. SECURITY WARNING: USER_ENTERED can execute formulas, only use with trusted data, never with user-provided input that could contain malicious formulas like =IMPORTDATA() or =IMPORTRANGE()."
             }
           },
           required: ["spreadsheetId", "range", "data"]
@@ -898,29 +925,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Background color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             },
             horizontalAlignment: {
               type: "string",
               description: "Horizontal alignment",
               enum: ["LEFT", "CENTER", "RIGHT"],
-              optional: true
             },
             verticalAlignment: {
               type: "string",
               description: "Vertical alignment",
               enum: ["TOP", "MIDDLE", "BOTTOM"],
-              optional: true
             },
             wrapStrategy: {
               type: "string",
               description: "Text wrapping",
               enum: ["OVERFLOW_CELL", "CLIP", "WRAP"],
-              optional: true
             }
           },
           required: ["spreadsheetId", "range"]
@@ -934,21 +957,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             spreadsheetId: { type: "string", description: "Spreadsheet ID" },
             range: { type: "string", description: "Range to format (e.g., 'A1:C10')" },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true },
-            strikethrough: { type: "boolean", description: "Strikethrough text", optional: true },
-            underline: { type: "boolean", description: "Underline text", optional: true },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
-            fontFamily: { type: "string", description: "Font family name", optional: true },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" },
+            strikethrough: { type: "boolean", description: "Strikethrough text" },
+            underline: { type: "boolean", description: "Underline text" },
+            fontSize: { type: "number", description: "Font size in points" },
+            fontFamily: { type: "string", description: "Font family name" },
             foregroundColor: {
               type: "object",
               description: "Text color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["spreadsheetId", "range"]
@@ -970,7 +992,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Format type",
               enum: ["NUMBER", "CURRENCY", "PERCENT", "DATE", "TIME", "DATE_TIME", "SCIENTIFIC"],
-              optional: true
             }
           },
           required: ["spreadsheetId", "range", "pattern"]
@@ -989,23 +1010,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Border style",
               enum: ["SOLID", "DASHED", "DOTTED", "DOUBLE"]
             },
-            width: { type: "number", description: "Border width (1-3)", optional: true },
+            width: { type: "number", description: "Border width (1-3)" },
             color: {
               type: "object",
               description: "Border color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             },
-            top: { type: "boolean", description: "Apply to top border", optional: true },
-            bottom: { type: "boolean", description: "Apply to bottom border", optional: true },
-            left: { type: "boolean", description: "Apply to left border", optional: true },
-            right: { type: "boolean", description: "Apply to right border", optional: true },
-            innerHorizontal: { type: "boolean", description: "Apply to inner horizontal borders", optional: true },
-            innerVertical: { type: "boolean", description: "Apply to inner vertical borders", optional: true }
+            top: { type: "boolean", description: "Apply to top border" },
+            bottom: { type: "boolean", description: "Apply to bottom border" },
+            left: { type: "boolean", description: "Apply to left border" },
+            right: { type: "boolean", description: "Apply to right border" },
+            innerHorizontal: { type: "boolean", description: "Apply to inner horizontal borders" },
+            innerVertical: { type: "boolean", description: "Apply to inner vertical borders" }
           },
           required: ["spreadsheetId", "range", "style"]
         }
@@ -1054,27 +1074,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 backgroundColor: {
                   type: "object",
                   properties: {
-                    red: { type: "number", optional: true },
-                    green: { type: "number", optional: true },
-                    blue: { type: "number", optional: true }
+                    red: { type: "number" },
+                    green: { type: "number" },
+                    blue: { type: "number" }
                   },
-                  optional: true
                 },
                 textFormat: {
                   type: "object",
                   properties: {
-                    bold: { type: "boolean", optional: true },
+                    bold: { type: "boolean" },
                     foregroundColor: {
                       type: "object",
                       properties: {
-                        red: { type: "number", optional: true },
-                        green: { type: "number", optional: true },
-                        blue: { type: "number", optional: true }
+                        red: { type: "number" },
+                        green: { type: "number" },
+                        blue: { type: "number" }
                       },
-                      optional: true
                     }
                   },
-                  optional: true
                 }
               }
             }
@@ -1100,7 +1117,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 }
               }
             },
-            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)", optional: true }
+            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)" }
           },
           required: ["name", "slides"]
         }
@@ -1136,20 +1153,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             documentId: { type: "string", description: "Document ID" },
             startIndex: { type: "number", description: "Start index (1-based)" },
             endIndex: { type: "number", description: "End index (1-based)" },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true },
-            underline: { type: "boolean", description: "Underline text", optional: true },
-            strikethrough: { type: "boolean", description: "Strikethrough text", optional: true },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" },
+            underline: { type: "boolean", description: "Underline text" },
+            strikethrough: { type: "boolean", description: "Strikethrough text" },
+            fontSize: { type: "number", description: "Font size in points" },
             foregroundColor: {
               type: "object",
               description: "Text color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["documentId", "startIndex", "endIndex"]
@@ -1168,17 +1184,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Paragraph style",
               enum: ["NORMAL_TEXT", "TITLE", "SUBTITLE", "HEADING_1", "HEADING_2", "HEADING_3", "HEADING_4", "HEADING_5", "HEADING_6"],
-              optional: true
             },
             alignment: {
               type: "string",
               description: "Text alignment",
               enum: ["START", "CENTER", "END", "JUSTIFIED"],
-              optional: true
             },
-            lineSpacing: { type: "number", description: "Line spacing multiplier", optional: true },
-            spaceAbove: { type: "number", description: "Space above paragraph in points", optional: true },
-            spaceBelow: { type: "number", description: "Space below paragraph in points", optional: true }
+            lineSpacing: { type: "number", description: "Line spacing multiplier" },
+            spaceAbove: { type: "number", description: "Space above paragraph in points" },
+            spaceBelow: { type: "number", description: "Space below paragraph in points" }
           },
           required: ["documentId", "startIndex", "endIndex"]
         }
@@ -1201,7 +1215,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             presentationId: { type: "string", description: "Presentation ID" },
-            slideIndex: { type: "number", description: "Specific slide index (optional)", optional: true }
+            slideIndex: { type: "number", description: "Specific slide index (optional)" }
           },
           required: ["presentationId"]
         }
@@ -1214,23 +1228,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             presentationId: { type: "string", description: "Presentation ID" },
             objectId: { type: "string", description: "Object ID of the text element" },
-            startIndex: { type: "number", description: "Start index (0-based)", optional: true },
-            endIndex: { type: "number", description: "End index (0-based)", optional: true },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true },
-            underline: { type: "boolean", description: "Underline text", optional: true },
-            strikethrough: { type: "boolean", description: "Strikethrough text", optional: true },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
-            fontFamily: { type: "string", description: "Font family name", optional: true },
+            startIndex: { type: "number", description: "Start index (0-based)" },
+            endIndex: { type: "number", description: "End index (0-based)" },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" },
+            underline: { type: "boolean", description: "Underline text" },
+            strikethrough: { type: "boolean", description: "Strikethrough text" },
+            fontSize: { type: "number", description: "Font size in points" },
+            fontFamily: { type: "string", description: "Font family name" },
             foregroundColor: {
               type: "object",
               description: "Text color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["presentationId", "objectId"]
@@ -1248,14 +1261,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Text alignment",
               enum: ["START", "CENTER", "END", "JUSTIFIED"],
-              optional: true
             },
-            lineSpacing: { type: "number", description: "Line spacing multiplier", optional: true },
+            lineSpacing: { type: "number", description: "Line spacing multiplier" },
             bulletStyle: {
               type: "string",
               description: "Bullet style",
               enum: ["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"],
-              optional: true
             }
           },
           required: ["presentationId", "objectId"]
@@ -1273,29 +1284,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Background color (RGBA values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true },
-                alpha: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" },
+                alpha: { type: "number" }
               },
-              optional: true
             },
             outlineColor: {
               type: "object",
               description: "Outline color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             },
-            outlineWeight: { type: "number", description: "Outline thickness in points", optional: true },
+            outlineWeight: { type: "number", description: "Outline thickness in points" },
             outlineDashStyle: {
               type: "string",
               description: "Outline dash style",
               enum: ["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"],
-              optional: true
             }
           },
           required: ["presentationId", "objectId"]
@@ -1317,10 +1325,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Background color (RGBA values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true },
-                alpha: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" },
+                alpha: { type: "number" }
               }
             }
           },
@@ -1340,9 +1348,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             y: { type: "number", description: "Y position in EMU" },
             width: { type: "number", description: "Width in EMU" },
             height: { type: "number", description: "Height in EMU" },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true }
+            fontSize: { type: "number", description: "Font size in points" },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" }
           },
           required: ["presentationId", "pageObjectId", "text", "x", "y", "width", "height"]
         }
@@ -1368,12 +1376,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Fill color (RGBA values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true },
-                alpha: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" },
+                alpha: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["presentationId", "pageObjectId", "shapeType", "x", "y", "width", "height"]
@@ -1431,22 +1438,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!validation.success) {
           return errorResponse(validation.error.errors[0].message);
         }
-        const { query: userQuery } = validation.data;
+        const { query: userQuery, pageSize, pageToken } = validation.data;
 
         const escapedQuery = userQuery.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
         const formattedQuery = `fullText contains '${escapedQuery}' and trashed = false`;
 
         const res = await drive.files.list({
           q: formattedQuery,
-          pageSize: 10,
-          fields: "files(id, name, mimeType, modifiedTime, size)",
+          pageSize: Math.min(pageSize || 50, 100),
+          pageToken: pageToken,
+          fields: "nextPageToken, files(id, name, mimeType, modifiedTime, size)",
+          includeItemsFromAllDrives: true,
+          supportsAllDrives: true
         });
 
         const fileList = res.data.files?.map((f: drive_v3.Schema$File) => `${f.name} (${f.mimeType})`).join("\n") || '';
         log('Search results', { query: userQuery, resultCount: res.data.files?.length });
 
+        let response = `Found ${res.data.files?.length ?? 0} files:\n${fileList}`;
+        if (res.data.nextPageToken) {
+          response += `\n\nMore results available. Use pageToken: ${res.data.nextPageToken}`;
+        }
+
         return {
-          content: [{ type: "text", text: `Found ${res.data.files?.length ?? 0} files:\n${fileList}` }],
+          content: [{ type: "text", text: response }],
           isError: false,
         };
       }
@@ -1489,6 +1504,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             mimeType: fileMetadata.mimeType,
             body: args.content,
           },
+          supportsAllDrives: true
         });
 
         log('File created successfully', { fileId: file.data?.id });
@@ -1511,7 +1527,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Check file MIME type
         const existingFile = await drive.files.get({
           fileId: args.fileId,
-          fields: 'mimeType, name, parents'
+          fields: 'mimeType, name, parents',
+          supportsAllDrives: true
         });
 
         const currentMimeType = existingFile.data.mimeType || 'text/plain';
@@ -1533,7 +1550,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             mimeType: updateMetadata.mimeType || currentMimeType,
             body: args.content
           },
-          fields: 'id, name, modifiedTime, webViewLink'
+          fields: 'id, name, modifiedTime, webViewLink',
+          supportsAllDrives: true
         });
 
         return {
@@ -1570,7 +1588,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const folder = await drive.files.create({
           requestBody: folderMetadata,
-          fields: 'id, name, webViewLink'
+          fields: 'id, name, webViewLink',
+          supportsAllDrives: true
         });
 
         log('Folder created successfully', { folderId: folder.data.id, name: folder.data.name });
@@ -1599,7 +1618,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           pageSize: Math.min(args.pageSize || 50, 100),
           pageToken: args.pageToken,
           fields: "nextPageToken, files(id, name, mimeType, modifiedTime, size)",
-          orderBy: "name"
+          orderBy: "name",
+          includeItemsFromAllDrives: true,
+          supportsAllDrives: true
         });
 
         const files = res.data.files || [];
@@ -1626,14 +1647,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const args = validation.data;
 
-        const item = await drive.files.get({ fileId: args.itemId, fields: 'name' });
+        const item = await drive.files.get({ fileId: args.itemId, fields: 'name', supportsAllDrives: true });
         
         // Move to trash instead of permanent deletion
         await drive.files.update({
           fileId: args.itemId,
           requestBody: {
             trashed: true
-          }
+          },
+          supportsAllDrives: true
         });
 
         log('Item moved to trash successfully', { itemId: args.itemId, name: item.data.name });
@@ -1651,7 +1673,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = validation.data;
 
         // If it's a text file, check extension
-        const item = await drive.files.get({ fileId: args.itemId, fields: 'name, mimeType' });
+        const item = await drive.files.get({ fileId: args.itemId, fields: 'name, mimeType', supportsAllDrives: true });
         if (Object.values(TEXT_MIME_TYPES).includes(item.data.mimeType || '')) {
           validateTextFileExtension(args.newName);
         }
@@ -1659,7 +1681,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const updatedItem = await drive.files.update({
           fileId: args.itemId,
           requestBody: { name: args.newName },
-          fields: 'id, name, modifiedTime'
+          fields: 'id, name, modifiedTime',
+          supportsAllDrives: true
         });
 
         return {
@@ -1687,20 +1710,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return errorResponse("Cannot move a folder into itself.");
         }
 
-        const item = await drive.files.get({ fileId: args.itemId, fields: 'name, parents' });
+        const item = await drive.files.get({ fileId: args.itemId, fields: 'name, parents', supportsAllDrives: true });
 
         // Perform move
         await drive.files.update({
           fileId: args.itemId,
           addParents: destinationFolderId,
           removeParents: item.data.parents?.join(',') || '',
-          fields: 'id, name, parents'
+          fields: 'id, name, parents',
+          supportsAllDrives: true
         });
 
         // Get the destination folder name for a nice response
         const destinationFolder = await drive.files.get({
           fileId: destinationFolderId,
-          fields: 'name'
+          fields: 'name',
+          supportsAllDrives: true
         });
 
         return {
@@ -1755,7 +1780,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               mimeType: 'application/vnd.google-apps.document',
               parents: [parentFolderId]
             },
-            fields: 'id, name, webViewLink'
+            fields: 'id, name, webViewLink',
+            supportsAllDrives: true
           });
         } catch (createError: any) {
           log('Drive files.create error details:', {
@@ -1900,14 +1926,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await drive.files.update({
           fileId: spreadsheet.data.spreadsheetId || '',
           addParents: parentFolderId,
-          fields: 'id, name, webViewLink'
+          removeParents: 'root',
+          fields: 'id, name, webViewLink',
+          supportsAllDrives: true
         });
 
         // Now update with data
         await sheets.spreadsheets.values.update({
           spreadsheetId: spreadsheet.data.spreadsheetId!,
           range: 'Sheet1!A1',
-          valueInputOption: 'RAW',
+          valueInputOption: args.valueInputOption || 'RAW',
           requestBody: { values: args.data }
         });
 
@@ -1928,7 +1956,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await sheets.spreadsheets.values.update({
           spreadsheetId: args.spreadsheetId,
           range: args.range,
-          valueInputOption: 'RAW',
+          valueInputOption: args.valueInputOption || 'RAW',
           requestBody: { values: args.data }
         });
 
@@ -2399,6 +2427,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           fileId: presentation.data.presentationId!,
           addParents: parentFolderId,
           removeParents: 'root',
+          supportsAllDrives: true
         });
 
         for (const slide of args.slides) {
