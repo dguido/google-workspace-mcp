@@ -742,7 +742,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             name: { type: "string", description: "File name (.txt or .md)" },
             content: { type: "string", description: "File content" },
-            parentFolderId: { type: "string", description: "Optional parent folder ID", optional: true }
+            parentFolderId: { type: "string", description: "Optional parent folder ID" }
           },
           required: ["name", "content"]
         }
@@ -755,7 +755,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             fileId: { type: "string", description: "ID of the file to update" },
             content: { type: "string", description: "New file content" },
-            name: { type: "string", description: "Optional new name (.txt or .md)", optional: true }
+            name: { type: "string", description: "Optional new name (.txt or .md)" }
           },
           required: ["fileId", "content"]
         }
@@ -767,7 +767,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             name: { type: "string", description: "Folder name" },
-            parent: { type: "string", description: "Optional parent folder ID or path", optional: true }
+            parent: { type: "string", description: "Optional parent folder ID or path" }
           },
           required: ["name"]
         }
@@ -778,9 +778,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            folderId: { type: "string", description: "Folder ID", optional: true },
-            pageSize: { type: "number", description: "Items to return (default 50, max 100)", optional: true },
-            pageToken: { type: "string", description: "Token for next page", optional: true }
+            folderId: { type: "string", description: "Folder ID" },
+            pageSize: { type: "number", description: "Items to return (default 50, max 100)" },
+            pageToken: { type: "string", description: "Token for next page" }
           }
         }
       },
@@ -814,7 +814,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             itemId: { type: "string", description: "ID of the item to move" },
-            destinationFolderId: { type: "string", description: "Destination folder ID", optional: true }
+            destinationFolderId: { type: "string", description: "Destination folder ID" }
           },
           required: ["itemId"]
         }
@@ -827,7 +827,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             name: { type: "string", description: "Doc name" },
             content: { type: "string", description: "Doc content" },
-            parentFolderId: { type: "string", description: "Parent folder ID", optional: true }
+            parentFolderId: { type: "string", description: "Parent folder ID" }
           },
           required: ["name", "content"]
         }
@@ -856,7 +856,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Data as array of arrays",
               items: { type: "array", items: { type: "string" } }
             },
-            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)", optional: true }
+            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)" }
           },
           required: ["name", "data"]
         }
@@ -901,29 +901,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Background color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             },
             horizontalAlignment: {
               type: "string",
               description: "Horizontal alignment",
               enum: ["LEFT", "CENTER", "RIGHT"],
-              optional: true
             },
             verticalAlignment: {
               type: "string",
               description: "Vertical alignment",
               enum: ["TOP", "MIDDLE", "BOTTOM"],
-              optional: true
             },
             wrapStrategy: {
               type: "string",
               description: "Text wrapping",
               enum: ["OVERFLOW_CELL", "CLIP", "WRAP"],
-              optional: true
             }
           },
           required: ["spreadsheetId", "range"]
@@ -937,21 +933,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             spreadsheetId: { type: "string", description: "Spreadsheet ID" },
             range: { type: "string", description: "Range to format (e.g., 'A1:C10')" },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true },
-            strikethrough: { type: "boolean", description: "Strikethrough text", optional: true },
-            underline: { type: "boolean", description: "Underline text", optional: true },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
-            fontFamily: { type: "string", description: "Font family name", optional: true },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" },
+            strikethrough: { type: "boolean", description: "Strikethrough text" },
+            underline: { type: "boolean", description: "Underline text" },
+            fontSize: { type: "number", description: "Font size in points" },
+            fontFamily: { type: "string", description: "Font family name" },
             foregroundColor: {
               type: "object",
               description: "Text color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["spreadsheetId", "range"]
@@ -973,7 +968,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Format type",
               enum: ["NUMBER", "CURRENCY", "PERCENT", "DATE", "TIME", "DATE_TIME", "SCIENTIFIC"],
-              optional: true
             }
           },
           required: ["spreadsheetId", "range", "pattern"]
@@ -992,23 +986,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Border style",
               enum: ["SOLID", "DASHED", "DOTTED", "DOUBLE"]
             },
-            width: { type: "number", description: "Border width (1-3)", optional: true },
+            width: { type: "number", description: "Border width (1-3)" },
             color: {
               type: "object",
               description: "Border color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             },
-            top: { type: "boolean", description: "Apply to top border", optional: true },
-            bottom: { type: "boolean", description: "Apply to bottom border", optional: true },
-            left: { type: "boolean", description: "Apply to left border", optional: true },
-            right: { type: "boolean", description: "Apply to right border", optional: true },
-            innerHorizontal: { type: "boolean", description: "Apply to inner horizontal borders", optional: true },
-            innerVertical: { type: "boolean", description: "Apply to inner vertical borders", optional: true }
+            top: { type: "boolean", description: "Apply to top border" },
+            bottom: { type: "boolean", description: "Apply to bottom border" },
+            left: { type: "boolean", description: "Apply to left border" },
+            right: { type: "boolean", description: "Apply to right border" },
+            innerHorizontal: { type: "boolean", description: "Apply to inner horizontal borders" },
+            innerVertical: { type: "boolean", description: "Apply to inner vertical borders" }
           },
           required: ["spreadsheetId", "range", "style"]
         }
@@ -1057,27 +1050,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 backgroundColor: {
                   type: "object",
                   properties: {
-                    red: { type: "number", optional: true },
-                    green: { type: "number", optional: true },
-                    blue: { type: "number", optional: true }
+                    red: { type: "number" },
+                    green: { type: "number" },
+                    blue: { type: "number" }
                   },
-                  optional: true
                 },
                 textFormat: {
                   type: "object",
                   properties: {
-                    bold: { type: "boolean", optional: true },
+                    bold: { type: "boolean" },
                     foregroundColor: {
                       type: "object",
                       properties: {
-                        red: { type: "number", optional: true },
-                        green: { type: "number", optional: true },
-                        blue: { type: "number", optional: true }
+                        red: { type: "number" },
+                        green: { type: "number" },
+                        blue: { type: "number" }
                       },
-                      optional: true
                     }
                   },
-                  optional: true
                 }
               }
             }
@@ -1103,7 +1093,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 }
               }
             },
-            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)", optional: true }
+            parentFolderId: { type: "string", description: "Parent folder ID (defaults to root)" }
           },
           required: ["name", "slides"]
         }
@@ -1139,20 +1129,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             documentId: { type: "string", description: "Document ID" },
             startIndex: { type: "number", description: "Start index (1-based)" },
             endIndex: { type: "number", description: "End index (1-based)" },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true },
-            underline: { type: "boolean", description: "Underline text", optional: true },
-            strikethrough: { type: "boolean", description: "Strikethrough text", optional: true },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" },
+            underline: { type: "boolean", description: "Underline text" },
+            strikethrough: { type: "boolean", description: "Strikethrough text" },
+            fontSize: { type: "number", description: "Font size in points" },
             foregroundColor: {
               type: "object",
               description: "Text color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["documentId", "startIndex", "endIndex"]
@@ -1171,17 +1160,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Paragraph style",
               enum: ["NORMAL_TEXT", "TITLE", "SUBTITLE", "HEADING_1", "HEADING_2", "HEADING_3", "HEADING_4", "HEADING_5", "HEADING_6"],
-              optional: true
             },
             alignment: {
               type: "string",
               description: "Text alignment",
               enum: ["START", "CENTER", "END", "JUSTIFIED"],
-              optional: true
             },
-            lineSpacing: { type: "number", description: "Line spacing multiplier", optional: true },
-            spaceAbove: { type: "number", description: "Space above paragraph in points", optional: true },
-            spaceBelow: { type: "number", description: "Space below paragraph in points", optional: true }
+            lineSpacing: { type: "number", description: "Line spacing multiplier" },
+            spaceAbove: { type: "number", description: "Space above paragraph in points" },
+            spaceBelow: { type: "number", description: "Space below paragraph in points" }
           },
           required: ["documentId", "startIndex", "endIndex"]
         }
@@ -1204,7 +1191,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             presentationId: { type: "string", description: "Presentation ID" },
-            slideIndex: { type: "number", description: "Specific slide index (optional)", optional: true }
+            slideIndex: { type: "number", description: "Specific slide index (optional)" }
           },
           required: ["presentationId"]
         }
@@ -1217,23 +1204,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             presentationId: { type: "string", description: "Presentation ID" },
             objectId: { type: "string", description: "Object ID of the text element" },
-            startIndex: { type: "number", description: "Start index (0-based)", optional: true },
-            endIndex: { type: "number", description: "End index (0-based)", optional: true },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true },
-            underline: { type: "boolean", description: "Underline text", optional: true },
-            strikethrough: { type: "boolean", description: "Strikethrough text", optional: true },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
-            fontFamily: { type: "string", description: "Font family name", optional: true },
+            startIndex: { type: "number", description: "Start index (0-based)" },
+            endIndex: { type: "number", description: "End index (0-based)" },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" },
+            underline: { type: "boolean", description: "Underline text" },
+            strikethrough: { type: "boolean", description: "Strikethrough text" },
+            fontSize: { type: "number", description: "Font size in points" },
+            fontFamily: { type: "string", description: "Font family name" },
             foregroundColor: {
               type: "object",
               description: "Text color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["presentationId", "objectId"]
@@ -1251,14 +1237,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Text alignment",
               enum: ["START", "CENTER", "END", "JUSTIFIED"],
-              optional: true
             },
-            lineSpacing: { type: "number", description: "Line spacing multiplier", optional: true },
+            lineSpacing: { type: "number", description: "Line spacing multiplier" },
             bulletStyle: {
               type: "string",
               description: "Bullet style",
               enum: ["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"],
-              optional: true
             }
           },
           required: ["presentationId", "objectId"]
@@ -1276,29 +1260,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Background color (RGBA values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true },
-                alpha: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" },
+                alpha: { type: "number" }
               },
-              optional: true
             },
             outlineColor: {
               type: "object",
               description: "Outline color (RGB values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" }
               },
-              optional: true
             },
-            outlineWeight: { type: "number", description: "Outline thickness in points", optional: true },
+            outlineWeight: { type: "number", description: "Outline thickness in points" },
             outlineDashStyle: {
               type: "string",
               description: "Outline dash style",
               enum: ["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"],
-              optional: true
             }
           },
           required: ["presentationId", "objectId"]
@@ -1320,10 +1301,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Background color (RGBA values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true },
-                alpha: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" },
+                alpha: { type: "number" }
               }
             }
           },
@@ -1343,9 +1324,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             y: { type: "number", description: "Y position in EMU" },
             width: { type: "number", description: "Width in EMU" },
             height: { type: "number", description: "Height in EMU" },
-            fontSize: { type: "number", description: "Font size in points", optional: true },
-            bold: { type: "boolean", description: "Make text bold", optional: true },
-            italic: { type: "boolean", description: "Make text italic", optional: true }
+            fontSize: { type: "number", description: "Font size in points" },
+            bold: { type: "boolean", description: "Make text bold" },
+            italic: { type: "boolean", description: "Make text italic" }
           },
           required: ["presentationId", "pageObjectId", "text", "x", "y", "width", "height"]
         }
@@ -1371,12 +1352,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Fill color (RGBA values 0-1)",
               properties: {
-                red: { type: "number", optional: true },
-                green: { type: "number", optional: true },
-                blue: { type: "number", optional: true },
-                alpha: { type: "number", optional: true }
+                red: { type: "number" },
+                green: { type: "number" },
+                blue: { type: "number" },
+                alpha: { type: "number" }
               },
-              optional: true
             }
           },
           required: ["presentationId", "pageObjectId", "shapeType", "x", "y", "width", "height"]
