@@ -33,9 +33,10 @@ jobs:
       - name: Remove token auth from .npmrc (use OIDC instead)
         run: |
           # Remove the auth token line so npm uses OIDC trusted publishing
-          sed -i '/:_authToken/d' ~/.npmrc
-          echo "Contents of .npmrc:"
-          cat ~/.npmrc
+          NPMRC="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          sed -i '/:_authToken/d' "$NPMRC"
+          echo "Contents of .npmrc ($NPMRC):"
+          cat "$NPMRC"
 
       - name: Install dependencies
         run: npm ci
