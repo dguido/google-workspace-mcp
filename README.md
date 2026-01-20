@@ -351,26 +351,12 @@ Add the server to your Claude Desktop configuration:
   - `documentId`: Document ID
   - Returns text with character positions for formatting
 
-- **formatGoogleDocText** - Apply text formatting to a range
+- **formatGoogleDocRange** - Unified formatting for Google Docs (text + paragraph)
   - `documentId`: Document ID
-  - `startIndex`: Start position (1-based)
-  - `endIndex`: End position (1-based)
-  - `bold`: Make text bold (optional)
-  - `italic`: Make text italic (optional)
-  - `underline`: Underline text (optional)
-  - `strikethrough`: Strikethrough text (optional)
-  - `fontSize`: Font size in points (optional)
-  - `foregroundColor`: Text color as RGB (0-1) (optional)
-
-- **formatGoogleDocParagraph** - Apply paragraph formatting to a range
-  - `documentId`: Document ID
-  - `startIndex`: Start position (1-based)
-  - `endIndex`: End position (1-based)
-  - `namedStyleType`: Style like HEADING_1, HEADING_2, etc. (optional)
-  - `alignment`: START, CENTER, END, or JUSTIFIED (optional)
-  - `lineSpacing`: Line spacing multiplier (optional)
-  - `spaceAbove`: Space above paragraph in points (optional)
-  - `spaceBelow`: Space below paragraph in points (optional)
+  - `startIndex`: Start position (optional, defaults to 1)
+  - `endIndex`: End position (optional, defaults to end)
+  - Text formatting: `bold`, `italic`, `underline`, `strikethrough`, `fontSize`, `fontFamily`, `foregroundColor`
+  - Paragraph formatting: `namedStyleType`, `alignment`, `lineSpacing`, `spaceAbove`, `spaceBelow`
 
 - **createGoogleSheet** - Create a Google Sheet
   - `name`: Spreadsheet name
@@ -454,34 +440,14 @@ Add the server to your Claude Desktop configuration:
   - `slideIndex`: Specific slide index (optional)
   - Returns element IDs for formatting
 
-- **formatGoogleSlidesText** - Apply text formatting to slide elements
+- **formatGoogleSlidesElement** - Unified formatting for Google Slides
   - `presentationId`: Presentation ID
-  - `objectId`: Element ID
-  - `startIndex`/`endIndex`: Text range (optional)
-  - `bold`, `italic`, `underline`, `strikethrough`: Text styling
-  - `fontSize`: Font size in points
-  - `fontFamily`: Font name
-  - `foregroundColor`: Text color (RGB 0-1)
-
-- **formatGoogleSlidesParagraph** - Apply paragraph formatting
-  - `presentationId`: Presentation ID
-  - `objectId`: Element ID
-  - `alignment`: START, CENTER, END, or JUSTIFIED
-  - `lineSpacing`: Line spacing multiplier
-  - `bulletStyle`: NONE, DISC, ARROW, SQUARE, DIAMOND, STAR, or NUMBERED
-
-- **styleGoogleSlidesShape** - Style shapes and elements
-  - `presentationId`: Presentation ID
-  - `objectId`: Shape ID
-  - `backgroundColor`: Fill color (RGBA 0-1)
-  - `outlineColor`: Border color (RGB 0-1)
-  - `outlineWeight`: Border thickness in points
-  - `outlineDashStyle`: SOLID, DOT, DASH, etc.
-
-- **setGoogleSlidesBackground** - Set slide background color
-  - `presentationId`: Presentation ID
-  - `pageObjectIds`: Array of slide IDs
-  - `backgroundColor`: Background color (RGBA 0-1)
+  - `targetType`: `text`, `shape`, or `slide`
+  - `objectId`: Required for text/shape targets
+  - `pageObjectIds`: Required for slide targets (array of slide IDs)
+  - Text formatting: `bold`, `italic`, `fontSize`, `fontFamily`, `foregroundColor`, `alignment`, `lineSpacing`, `bulletStyle`
+  - Shape formatting: `backgroundColor`, `outlineColor`, `outlineWeight`, `outlineDashStyle`
+  - Slide formatting: `slideBackgroundColor`
 
 - **createGoogleSlidesTextBox** - Create formatted text box
   - `presentationId`: Presentation ID
@@ -505,6 +471,81 @@ Add the server to your Claude Desktop configuration:
   - `presentationId`: Presentation ID
   - `slideIndex`: Slide index (0-based)
   - `notes`: Speaker notes content
+
+## Tool Search Optimization
+
+For MCP clients with tool search (regex/BM25), tools can be configured for deferred loading to reduce context overhead.
+
+### Core Tools (keep non-deferred)
+These tools are used frequently and should remain in the main tool list:
+- `search` - Finding files
+- `listFolder` - Navigation
+- `getFileContent` - Reading content
+- `createFile` - Creating files
+- `updateFile` - Modifying files
+- `resolveFilePath` - Path resolution
+
+### Specialized Tools (good for defer_loading)
+These tools are used less frequently and can be loaded on-demand:
+
+**Formatting:**
+- `formatGoogleDocRange` - Document text and paragraph styling
+- `formatGoogleSheetCells` - Spreadsheet cell formatting
+- `formatGoogleSlidesElement` - Slides text, shape, and background formatting
+
+**Batch Operations:**
+- `batchDelete` - Delete multiple files
+- `batchMove` - Move multiple files
+- `batchShare` - Share multiple files
+
+**Trash Management:**
+- `listTrash` - View trashed files
+- `restoreFromTrash` - Recover files
+- `emptyTrash` - Permanently delete trash
+
+**Revision History:**
+- `listRevisions` - View file versions
+- `restoreRevision` - Restore previous version
+
+**Slides Creation:**
+- `createGoogleSlidesTextBox` - Add text boxes
+- `createGoogleSlidesShape` - Add shapes
+
+**Speaker Notes:**
+- `getGoogleSlidesSpeakerNotes` - Read notes
+- `updateGoogleSlidesSpeakerNotes` - Edit notes
+
+### MCP Client Configuration Example
+
+```json
+{
+  "mcpServers": {
+    "google-drive": {
+      "command": "npx",
+      "args": ["@piotr-agier/google-drive-mcp"],
+      "tool_configuration": {
+        "defer_loading": [
+          "formatGoogleDocRange",
+          "formatGoogleSheetCells",
+          "formatGoogleSlidesElement",
+          "batchDelete",
+          "batchMove",
+          "batchShare",
+          "listTrash",
+          "restoreFromTrash",
+          "emptyTrash",
+          "listRevisions",
+          "restoreRevision",
+          "createGoogleSlidesTextBox",
+          "createGoogleSlidesShape",
+          "getGoogleSlidesSpeakerNotes",
+          "updateGoogleSlidesSpeakerNotes"
+        ]
+      }
+    }
+  }
+}
+```
 
 ## Authentication Flow
 

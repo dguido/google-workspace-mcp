@@ -1,5 +1,6 @@
 // Drive schemas
 export {
+  GetFolderTreeSchema,
   SearchSchema,
   CreateTextFileSchema,
   UpdateTextFileSchema,
@@ -18,10 +19,19 @@ export {
   DownloadFileSchema,
   UploadFileSchema,
   GetStorageQuotaSchema,
-  StarFileSchema
+  StarFileSchema,
+  ResolveFilePathSchema,
+  BatchDeleteSchema,
+  BatchMoveSchema,
+  BatchShareSchema,
+  RemovePermissionSchema,
+  ListTrashSchema,
+  RestoreFromTrashSchema,
+  EmptyTrashSchema
 } from './drive.js';
 
 export type {
+  GetFolderTreeInput,
   SearchInput,
   CreateTextFileInput,
   UpdateTextFileInput,
@@ -40,37 +50,47 @@ export type {
   DownloadFileInput,
   UploadFileInput,
   GetStorageQuotaInput,
-  StarFileInput
+  StarFileInput,
+  ResolveFilePathInput,
+  BatchDeleteInput,
+  BatchMoveInput,
+  BatchShareInput,
+  RemovePermissionInput,
+  ListTrashInput,
+  RestoreFromTrashInput,
+  EmptyTrashInput
 } from './drive.js';
 
 // Docs schemas
 export {
   CreateGoogleDocSchema,
   UpdateGoogleDocSchema,
-  FormatGoogleDocTextSchema,
-  FormatGoogleDocParagraphSchema,
   GetGoogleDocContentSchema,
-  AppendToDocSchema
+  AppendToDocSchema,
+  InsertTextInDocSchema,
+  DeleteTextInDocSchema,
+  ReplaceTextInDocSchema,
+  FormatGoogleDocRangeSchema
 } from './docs.js';
 
 export type {
   CreateGoogleDocInput,
   UpdateGoogleDocInput,
-  FormatGoogleDocTextInput,
-  FormatGoogleDocParagraphInput,
   GetGoogleDocContentInput,
-  AppendToDocInput
+  AppendToDocInput,
+  InsertTextInDocInput,
+  DeleteTextInDocInput,
+  ReplaceTextInDocInput,
+  FormatGoogleDocRangeInput
 } from './docs.js';
 
 // Sheets schemas
 export {
+  ListSheetTabsSchema,
   CreateGoogleSheetSchema,
   UpdateGoogleSheetSchema,
   GetGoogleSheetContentSchema,
   FormatGoogleSheetCellsSchema,
-  FormatGoogleSheetTextSchema,
-  FormatGoogleSheetNumbersSchema,
-  SetGoogleSheetBordersSchema,
   MergeGoogleSheetCellsSchema,
   AddGoogleSheetConditionalFormatSchema,
   CreateSheetTabSchema,
@@ -79,13 +99,11 @@ export {
 } from './sheets.js';
 
 export type {
+  ListSheetTabsInput,
   CreateGoogleSheetInput,
   UpdateGoogleSheetInput,
   GetGoogleSheetContentInput,
   FormatGoogleSheetCellsInput,
-  FormatGoogleSheetTextInput,
-  FormatGoogleSheetNumbersInput,
-  SetGoogleSheetBordersInput,
   MergeGoogleSheetCellsInput,
   AddGoogleSheetConditionalFormatInput,
   CreateSheetTabInput,
@@ -95,29 +113,38 @@ export type {
 
 // Slides schemas
 export {
+  ListSlidePagesSchema,
   CreateGoogleSlidesSchema,
   UpdateGoogleSlidesSchema,
   GetGoogleSlidesContentSchema,
-  FormatGoogleSlidesTextSchema,
-  FormatGoogleSlidesParagraphSchema,
-  StyleGoogleSlidesShapeSchema,
-  SetGoogleSlidesBackgroundSchema,
   CreateGoogleSlidesTextBoxSchema,
   CreateGoogleSlidesShapeSchema,
   GetGoogleSlidesSpeakerNotesSchema,
-  UpdateGoogleSlidesSpeakerNotesSchema
+  UpdateGoogleSlidesSpeakerNotesSchema,
+  FormatGoogleSlidesElementSchema
 } from './slides.js';
 
 export type {
+  ListSlidePagesInput,
   CreateGoogleSlidesInput,
   UpdateGoogleSlidesInput,
   GetGoogleSlidesContentInput,
-  FormatGoogleSlidesTextInput,
-  FormatGoogleSlidesParagraphInput,
-  StyleGoogleSlidesShapeInput,
-  SetGoogleSlidesBackgroundInput,
   CreateGoogleSlidesTextBoxInput,
   CreateGoogleSlidesShapeInput,
   GetGoogleSlidesSpeakerNotesInput,
-  UpdateGoogleSlidesSpeakerNotesInput
+  UpdateGoogleSlidesSpeakerNotesInput,
+  FormatGoogleSlidesElementInput
 } from './slides.js';
+
+// Unified schemas
+export {
+  CreateFileSchema,
+  UpdateFileSchema,
+  GetFileContentSchema
+} from './unified.js';
+
+export type {
+  CreateFileInput,
+  UpdateFileInput,
+  GetFileContentInput
+} from './unified.js';

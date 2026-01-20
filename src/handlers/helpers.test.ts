@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   getExtensionFromFilename,
   getMimeTypeFromFilename,
   validateTextFileExtension,
-  convertA1ToGridRange
+  convertA1ToGridRange,
+  processBatchOperation
 } from './helpers.js';
+import type { HandlerContext } from './helpers.js';
 
 describe('getExtensionFromFilename', () => {
   it('returns extension for simple filename', () => {
@@ -135,5 +137,99 @@ describe('convertA1ToGridRange', () => {
     expect(() => convertA1ToGridRange('invalid!', 0)).toThrow(
       'Invalid A1 notation: invalid!'
     );
+  });
+});
+
+describe('processBatchOperation', () => {
+  it('processes all items successfully without context', async () => {
+    const ids = ['id1', 'id2', 'id3'];
+    const operation = vi.fn().mockImplementation(async (id: string) => ({ id, processed: true }));
+
+    const result = await processBatchOperation(ids, operation, undefined, {
+      operationName: 'test operation'
+    });
+
+    expect(result.success).toHaveLength(3);
+    expect(result.failed).toHaveLength(0);
+    expect(result.success).toEqual([
+      { id: 'id1', processed: true },
+      { id: 'id2', processed: true },
+      { id: 'id3', processed: true }
+    ]);
+    expect(operation).toHaveBeenCalledTimes(3);
+  });
+
+  it('handles partial failures', async () => {
+    const ids = ['id1', 'id2', 'id3'];
+    const operation = vi.fn().mockImplementation(async (id: string) => {
+      if (id === 'id2') {
+        throw new Error('Operation failed for id2');
+      }
+      return { id, processed: true };
+    });
+
+    const result = await processBatchOperation(ids, operation, undefined, {
+      operationName: 'test operation'
+    });
+
+    expect(result.success).toHaveLength(2);
+    expect(result.failed).toHaveLength(1);
+    expect(result.success).toEqual([
+      { id: 'id1', processed: true },
+      { id: 'id3', processed: true }
+    ]);
+    expect(result.failed).toEqual([
+      { id: 'id2', error: 'Operation failed for id2' }
+    ]);
+  });
+
+  it('handles all failures', async () => {
+    const ids = ['id1', 'id2'];
+    const operation = vi.fn().mockRejectedValue(new Error('All failed'));
+
+    const result = await processBatchOperation(ids, operation, undefined, {
+      operationName: 'test operation'
+    });
+
+    expect(result.success).toHaveLength(0);
+    expect(result.failed).toHaveLength(2);
+    expect(result.failed[0].error).toBe('All failed');
+    expect(result.failed[1].error).toBe('All failed');
+  });
+
+  it('handles empty ids array', async () => {
+    const ids: string[] = [];
+    const operation = vi.fn();
+
+    const result = await processBatchOperation(ids, operation, undefined, {
+      operationName: 'test operation'
+    });
+
+    expect(result.success).toHaveLength(0);
+    expect(result.failed).toHaveLength(0);
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it('respects concurrency option', async () => {
+    const ids = ['id1', 'id2', 'id3', 'id4', 'id5', 'id6'];
+    const concurrentCalls: number[] = [];
+    let currentConcurrent = 0;
+
+    const operation = vi.fn().mockImplementation(async (id: string) => {
+      currentConcurrent++;
+      concurrentCalls.push(currentConcurrent);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      currentConcurrent--;
+      return { id, processed: true };
+    });
+
+    const result = await processBatchOperation(ids, operation, undefined, {
+      operationName: 'test operation',
+      concurrency: 2
+    });
+
+    expect(result.success).toHaveLength(6);
+    // Max concurrent should never exceed 2
+    expect(Math.max(...concurrentCalls)).toBeLessThanOrEqual(2);
   });
 });

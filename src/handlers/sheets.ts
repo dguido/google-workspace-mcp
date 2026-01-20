@@ -1,26 +1,37 @@
 import type { drive_v3, sheets_v4 } from 'googleapis';
-import { successResponse, errorResponse } from '../utils/index.js';
+import { successResponse, structuredResponse, errorResponse, withTimeout } from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
 import {
+  ListSheetTabsSchema,
   CreateGoogleSheetSchema,
   UpdateGoogleSheetSchema,
   GetGoogleSheetContentSchema,
   FormatGoogleSheetCellsSchema,
-  FormatGoogleSheetTextSchema,
-  FormatGoogleSheetNumbersSchema,
-  SetGoogleSheetBordersSchema,
   MergeGoogleSheetCellsSchema,
   AddGoogleSheetConditionalFormatSchema,
   CreateSheetTabSchema,
   DeleteSheetTabSchema,
   RenameSheetTabSchema
 } from '../schemas/index.js';
-import { resolveFolderId, checkFileExists, convertA1ToGridRange } from './helpers.js';
+import { resolveOptionalFolderPath, checkFileExists, convertA1ToGridRange } from './helpers.js';
 import {
   getCachedSheetMetadata,
   setCachedSheetMetadata,
   clearSheetCache
 } from '../utils/sheetCache.js';
+
+/**
+ * Helper to convert RGB color object to Google Sheets colorStyle format.
+ */
+function toColorStyle(color: { red?: number; green?: number; blue?: number }) {
+  return {
+    rgbColor: {
+      red: color.red || 0,
+      green: color.green || 0,
+      blue: color.blue || 0
+    }
+  };
+}
 
 async function getSheetInfo(
   sheets: sheets_v4.Sheets,
@@ -56,7 +67,8 @@ async function getSheetInfo(
 
   const sheet = sheetsData.find(s => s.title === sheetName);
   if (!sheet) {
-    throw new Error(`Sheet "${sheetName}" not found`);
+    const availableSheets = sheetsData.map(s => s.title).join(', ');
+    throw new Error(`Sheet "${sheetName}" not found. Available sheets: ${availableSheets || 'none'}`);
   }
 
   return { sheetId: sheet.sheetId, a1Range };
@@ -73,7 +85,7 @@ export async function handleCreateGoogleSheet(
   }
   const data = validation.data;
 
-  const parentFolderId = await resolveFolderId(drive, data.parentFolderId);
+  const parentFolderId = await resolveOptionalFolderPath(drive, data.parentFolderId, data.parentPath);
 
   // Check if spreadsheet already exists
   const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
@@ -152,10 +164,14 @@ export async function handleGetGoogleSheetContent(
   }
   const data = validation.data;
 
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: data.spreadsheetId,
-    range: data.range
-  });
+  const response = await withTimeout(
+    sheets.spreadsheets.values.get({
+      spreadsheetId: data.spreadsheetId,
+      range: data.range
+    }),
+    30000,
+    'Get sheet content'
+  );
 
   const values = response.data.values || [];
   let content = `Content for range ${data.range}:\n\n`;
@@ -168,7 +184,16 @@ export async function handleGetGoogleSheetContent(
     });
   }
 
-  return successResponse(content);
+  const rowCount = values.length;
+  const columnCount = values.length > 0 ? Math.max(...values.map(row => row.length)) : 0;
+
+  return structuredResponse(content, {
+    spreadsheetId: data.spreadsheetId,
+    range: data.range,
+    values: values,
+    rowCount: rowCount,
+    columnCount: columnCount
+  });
 }
 
 export async function handleFormatGoogleSheetCells(
@@ -189,204 +214,130 @@ export async function handleFormatGoogleSheetCells(
   }
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
+  const requests: sheets_v4.Schema$Request[] = [];
+  const appliedFormats: string[] = [];
 
-  const requests: sheets_v4.Schema$Request[] = [{
-    repeatCell: {
-      range: gridRange,
-      cell: {
-        userEnteredFormat: {
-          ...(data.backgroundColor && {
-            backgroundColor: {
-              red: data.backgroundColor.red || 0,
-              green: data.backgroundColor.green || 0,
-              blue: data.backgroundColor.blue || 0
-            }
-          }),
-          ...(data.horizontalAlignment && { horizontalAlignment: data.horizontalAlignment }),
-          ...(data.verticalAlignment && { verticalAlignment: data.verticalAlignment }),
-          ...(data.wrapStrategy && { wrapStrategy: data.wrapStrategy })
-        }
-      },
-      fields: [
-        data.backgroundColor && 'userEnteredFormat.backgroundColor',
-        data.horizontalAlignment && 'userEnteredFormat.horizontalAlignment',
-        data.verticalAlignment && 'userEnteredFormat.verticalAlignment',
-        data.wrapStrategy && 'userEnteredFormat.wrapStrategy'
-      ].filter(Boolean).join(',')
-    }
-  }];
+  // Build cell format (background, alignment, wrap, text, number)
+  const cellFields: string[] = [];
+  const userEnteredFormat: sheets_v4.Schema$CellFormat = {};
 
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: data.spreadsheetId,
-    requestBody: { requests }
-  });
-
-  return successResponse(`Formatted cells in range ${data.range}`);
-}
-
-export async function handleFormatGoogleSheetText(
-  sheets: sheets_v4.Sheets,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = FormatGoogleSheetTextSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  let sheetInfo;
-  try {
-    sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
-  } catch (err) {
-    return errorResponse((err as Error).message);
+  // Background color
+  if (data.backgroundColor) {
+    userEnteredFormat.backgroundColorStyle = toColorStyle(data.backgroundColor);
+    cellFields.push('userEnteredFormat.backgroundColorStyle');
   }
 
-  const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
+  // Alignment and wrap
+  if (data.horizontalAlignment) {
+    userEnteredFormat.horizontalAlignment = data.horizontalAlignment;
+    cellFields.push('userEnteredFormat.horizontalAlignment');
+  }
+  if (data.verticalAlignment) {
+    userEnteredFormat.verticalAlignment = data.verticalAlignment;
+    cellFields.push('userEnteredFormat.verticalAlignment');
+  }
+  if (data.wrapStrategy) {
+    userEnteredFormat.wrapStrategy = data.wrapStrategy;
+    cellFields.push('userEnteredFormat.wrapStrategy');
+  }
 
-  const textFormat: Record<string, unknown> = {};
-  const fields: string[] = [];
+  // Text formatting
+  const textFormatFields: string[] = [];
+  const textFormat: sheets_v4.Schema$TextFormat = {};
 
   if (data.bold !== undefined) {
     textFormat.bold = data.bold;
-    fields.push('bold');
+    textFormatFields.push('bold');
   }
   if (data.italic !== undefined) {
     textFormat.italic = data.italic;
-    fields.push('italic');
+    textFormatFields.push('italic');
   }
   if (data.strikethrough !== undefined) {
     textFormat.strikethrough = data.strikethrough;
-    fields.push('strikethrough');
+    textFormatFields.push('strikethrough');
   }
   if (data.underline !== undefined) {
     textFormat.underline = data.underline;
-    fields.push('underline');
+    textFormatFields.push('underline');
   }
   if (data.fontSize !== undefined) {
     textFormat.fontSize = data.fontSize;
-    fields.push('fontSize');
+    textFormatFields.push('fontSize');
   }
   if (data.fontFamily !== undefined) {
     textFormat.fontFamily = data.fontFamily;
-    fields.push('fontFamily');
+    textFormatFields.push('fontFamily');
   }
   if (data.foregroundColor) {
-    textFormat.foregroundColor = {
-      red: data.foregroundColor.red || 0,
-      green: data.foregroundColor.green || 0,
-      blue: data.foregroundColor.blue || 0
+    textFormat.foregroundColorStyle = toColorStyle(data.foregroundColor);
+    textFormatFields.push('foregroundColorStyle');
+  }
+
+  if (textFormatFields.length > 0) {
+    userEnteredFormat.textFormat = textFormat;
+    cellFields.push('userEnteredFormat.textFormat(' + textFormatFields.join(',') + ')');
+    appliedFormats.push('text');
+  }
+
+  // Number formatting
+  if (data.numberFormat) {
+    userEnteredFormat.numberFormat = {
+      pattern: data.numberFormat.pattern,
+      ...(data.numberFormat.type && { type: data.numberFormat.type })
     };
-    fields.push('foregroundColor');
+    cellFields.push('userEnteredFormat.numberFormat');
+    appliedFormats.push('number');
   }
 
-  const requests: sheets_v4.Schema$Request[] = [{
-    repeatCell: {
-      range: gridRange,
-      cell: {
-        userEnteredFormat: { textFormat }
-      },
-      fields: 'userEnteredFormat.textFormat(' + fields.join(',') + ')'
+  // Add repeatCell request if any cell formatting specified
+  if (cellFields.length > 0) {
+    requests.push({
+      repeatCell: {
+        range: gridRange,
+        cell: { userEnteredFormat },
+        fields: cellFields.join(',')
+      }
+    });
+    if (!appliedFormats.includes('text') && !appliedFormats.includes('number')) {
+      appliedFormats.push('cell');
     }
-  }];
+  }
+
+  // Border formatting (uses separate updateBorders request)
+  if (data.borders) {
+    const border: sheets_v4.Schema$Border = {
+      style: data.borders.style,
+      width: data.borders.width || 1,
+      ...(data.borders.color && { colorStyle: toColorStyle(data.borders.color) })
+    };
+
+    const updateBordersRequest: sheets_v4.Schema$UpdateBordersRequest = {
+      range: gridRange
+    };
+
+    if (data.borders.top !== false) updateBordersRequest.top = border;
+    if (data.borders.bottom !== false) updateBordersRequest.bottom = border;
+    if (data.borders.left !== false) updateBordersRequest.left = border;
+    if (data.borders.right !== false) updateBordersRequest.right = border;
+    if (data.borders.innerHorizontal) updateBordersRequest.innerHorizontal = border;
+    if (data.borders.innerVertical) updateBordersRequest.innerVertical = border;
+
+    requests.push({ updateBorders: updateBordersRequest });
+    appliedFormats.push('borders');
+  }
+
+  if (requests.length === 0) {
+    return errorResponse('No formatting options specified');
+  }
 
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: data.spreadsheetId,
     requestBody: { requests }
   });
 
-  return successResponse(`Applied text formatting to range ${data.range}`);
-}
-
-export async function handleFormatGoogleSheetNumbers(
-  sheets: sheets_v4.Sheets,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = FormatGoogleSheetNumbersSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  let sheetInfo;
-  try {
-    sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
-  } catch (err) {
-    return errorResponse((err as Error).message);
-  }
-
-  const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
-
-  const numberFormat: Record<string, unknown> = {
-    pattern: data.pattern
-  };
-  if (data.type) {
-    numberFormat.type = data.type;
-  }
-
-  const requests: sheets_v4.Schema$Request[] = [{
-    repeatCell: {
-      range: gridRange,
-      cell: {
-        userEnteredFormat: { numberFormat }
-      },
-      fields: 'userEnteredFormat.numberFormat'
-    }
-  }];
-
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: data.spreadsheetId,
-    requestBody: { requests }
-  });
-
-  return successResponse(`Applied number formatting to range ${data.range}`);
-}
-
-export async function handleSetGoogleSheetBorders(
-  sheets: sheets_v4.Sheets,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = SetGoogleSheetBordersSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  let sheetInfo;
-  try {
-    sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
-  } catch (err) {
-    return errorResponse((err as Error).message);
-  }
-
-  const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
-
-  const border = {
-    style: data.style,
-    width: data.width || 1,
-    color: data.color ? {
-      red: data.color.red || 0,
-      green: data.color.green || 0,
-      blue: data.color.blue || 0
-    } : undefined
-  };
-
-  const updateBordersRequest: sheets_v4.Schema$UpdateBordersRequest = {
-    range: gridRange
-  };
-
-  if (data.top !== false) updateBordersRequest.top = border;
-  if (data.bottom !== false) updateBordersRequest.bottom = border;
-  if (data.left !== false) updateBordersRequest.left = border;
-  if (data.right !== false) updateBordersRequest.right = border;
-  if (data.innerHorizontal) updateBordersRequest.innerHorizontal = border;
-  if (data.innerVertical) updateBordersRequest.innerVertical = border;
-
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: data.spreadsheetId,
-    requestBody: { requests: [{ updateBorders: updateBordersRequest }] }
-  });
-
-  return successResponse(`Set borders for range ${data.range}`);
+  const formatDesc = appliedFormats.join(', ');
+  return successResponse(`Formatted cells in range ${data.range} (${formatDesc})`);
 }
 
 export async function handleMergeGoogleSheetCells(
@@ -452,11 +403,7 @@ export async function handleAddGoogleSheetConditionalFormat(
 
   const format: sheets_v4.Schema$CellFormat = {};
   if (data.format.backgroundColor) {
-    format.backgroundColor = {
-      red: data.format.backgroundColor.red || 0,
-      green: data.format.backgroundColor.green || 0,
-      blue: data.format.backgroundColor.blue || 0
-    };
+    format.backgroundColorStyle = toColorStyle(data.format.backgroundColor);
   }
   if (data.format.textFormat) {
     format.textFormat = {};
@@ -464,11 +411,7 @@ export async function handleAddGoogleSheetConditionalFormat(
       format.textFormat.bold = data.format.textFormat.bold;
     }
     if (data.format.textFormat.foregroundColor) {
-      format.textFormat.foregroundColor = {
-        red: data.format.textFormat.foregroundColor.red || 0,
-        green: data.format.textFormat.foregroundColor.green || 0,
-        blue: data.format.textFormat.foregroundColor.blue || 0
-      };
+      format.textFormat.foregroundColorStyle = toColorStyle(data.format.textFormat.foregroundColor);
     }
   }
 
@@ -586,8 +529,11 @@ export async function handleDeleteSheetTab(
   // Resolve sheet title to sheetId
   const sheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.sheetTitle);
   if (sheetId === null) {
+    // Fetch available sheets for better error message
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: data.spreadsheetId });
+    const availableSheets = spreadsheet.data.sheets?.map(s => s.properties?.title).filter(Boolean).join(', ') || 'none';
     return errorResponse(
-      `Sheet tab "${data.sheetTitle}" not found in this spreadsheet.`
+      `Sheet tab "${data.sheetTitle}" not found. Available sheets: ${availableSheets}`
     );
   }
 
@@ -631,8 +577,11 @@ export async function handleRenameSheetTab(
   // Resolve current title to sheetId
   const sheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.currentTitle);
   if (sheetId === null) {
+    // Fetch available sheets for better error message
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: data.spreadsheetId });
+    const availableSheets = spreadsheet.data.sheets?.map(s => s.properties?.title).filter(Boolean).join(', ') || 'none';
     return errorResponse(
-      `Sheet tab "${data.currentTitle}" not found in this spreadsheet.`
+      `Sheet tab "${data.currentTitle}" not found. Available sheets: ${availableSheets}`
     );
   }
 
@@ -665,5 +614,39 @@ export async function handleRenameSheetTab(
 
   return successResponse(
     `Renamed sheet tab "${data.currentTitle}" to "${data.newTitle}"`
+  );
+}
+
+export async function handleListSheetTabs(
+  sheets: sheets_v4.Sheets,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = ListSheetTabsSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const response = await sheets.spreadsheets.get({
+    spreadsheetId: data.spreadsheetId,
+    fields: 'spreadsheetId,sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))'
+  });
+
+  const tabs = response.data.sheets?.map(sheet => ({
+    sheetId: sheet.properties?.sheetId,
+    title: sheet.properties?.title,
+    index: sheet.properties?.index,
+    rowCount: sheet.properties?.gridProperties?.rowCount,
+    columnCount: sheet.properties?.gridProperties?.columnCount
+  })) || [];
+
+  const tabList = tabs.map(t => `${t.index}: ${t.title} (${t.rowCount}x${t.columnCount})`).join('\n');
+
+  return structuredResponse(
+    `Spreadsheet has ${tabs.length} tab(s):\n${tabList}`,
+    {
+      spreadsheetId: data.spreadsheetId,
+      tabs
+    }
   );
 }

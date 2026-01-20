@@ -3,14 +3,11 @@ import {
   CreateGoogleSlidesSchema,
   UpdateGoogleSlidesSchema,
   GetGoogleSlidesContentSchema,
-  FormatGoogleSlidesTextSchema,
-  FormatGoogleSlidesParagraphSchema,
-  StyleGoogleSlidesShapeSchema,
-  SetGoogleSlidesBackgroundSchema,
   CreateGoogleSlidesTextBoxSchema,
   CreateGoogleSlidesShapeSchema,
   GetGoogleSlidesSpeakerNotesSchema,
-  UpdateGoogleSlidesSpeakerNotesSchema
+  UpdateGoogleSlidesSpeakerNotesSchema,
+  FormatGoogleSlidesElementSchema
 } from './slides.js';
 
 describe('CreateGoogleSlidesSchema', () => {
@@ -108,129 +105,6 @@ describe('GetGoogleSlidesContentSchema', () => {
     const result = GetGoogleSlidesContentSchema.safeParse({
       presentationId: 'pres123',
       slideIndex: -1
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-describe('FormatGoogleSlidesTextSchema', () => {
-  it('accepts valid input with formatting', () => {
-    const result = FormatGoogleSlidesTextSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: 'obj123',
-      bold: true
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts all formatting options', () => {
-    const result = FormatGoogleSlidesTextSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: 'obj123',
-      startIndex: 0,
-      endIndex: 10,
-      bold: true,
-      italic: true,
-      underline: true,
-      strikethrough: true,
-      fontSize: 14,
-      fontFamily: 'Arial',
-      foregroundColor: { red: 1, green: 0, blue: 0 }
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects empty objectId', () => {
-    const result = FormatGoogleSlidesTextSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: '',
-      bold: true
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-describe('FormatGoogleSlidesParagraphSchema', () => {
-  it('accepts valid input', () => {
-    const result = FormatGoogleSlidesParagraphSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: 'obj123',
-      alignment: 'CENTER'
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts all bullet styles', () => {
-    const styles = ['NONE', 'DISC', 'ARROW', 'SQUARE', 'DIAMOND', 'STAR', 'NUMBERED'];
-    styles.forEach(style => {
-      const result = FormatGoogleSlidesParagraphSchema.safeParse({
-        presentationId: 'pres123',
-        objectId: 'obj123',
-        bulletStyle: style
-      });
-      expect(result.success).toBe(true);
-    });
-  });
-
-  it('rejects invalid alignment', () => {
-    const result = FormatGoogleSlidesParagraphSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: 'obj123',
-      alignment: 'INVALID'
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-describe('StyleGoogleSlidesShapeSchema', () => {
-  it('accepts valid input with backgroundColor', () => {
-    const result = StyleGoogleSlidesShapeSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: 'shape123',
-      backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.5 }
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts outline options', () => {
-    const result = StyleGoogleSlidesShapeSchema.safeParse({
-      presentationId: 'pres123',
-      objectId: 'shape123',
-      outlineColor: { red: 0, green: 0, blue: 0 },
-      outlineWeight: 2,
-      outlineDashStyle: 'DASH'
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts all dash styles', () => {
-    const styles = ['SOLID', 'DOT', 'DASH', 'DASH_DOT', 'LONG_DASH', 'LONG_DASH_DOT'];
-    styles.forEach(style => {
-      const result = StyleGoogleSlidesShapeSchema.safeParse({
-        presentationId: 'pres123',
-        objectId: 'shape123',
-        outlineDashStyle: style
-      });
-      expect(result.success).toBe(true);
-    });
-  });
-});
-
-describe('SetGoogleSlidesBackgroundSchema', () => {
-  it('accepts valid input', () => {
-    const result = SetGoogleSlidesBackgroundSchema.safeParse({
-      presentationId: 'pres123',
-      pageObjectIds: ['page1', 'page2'],
-      backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 }
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects empty pageObjectIds', () => {
-    const result = SetGoogleSlidesBackgroundSchema.safeParse({
-      presentationId: 'pres123',
-      pageObjectIds: [],
-      backgroundColor: { red: 1 }
     });
     expect(result.success).toBe(false);
   });
@@ -382,5 +256,190 @@ describe('UpdateGoogleSlidesSpeakerNotesSchema', () => {
       notes: 'notes'
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('FormatGoogleSlidesElementSchema', () => {
+  describe('targetType validation', () => {
+    it('requires objectId for text targetType', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'text',
+        bold: true
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.errors[0].message).toContain('objectId required');
+      }
+    });
+
+    it('requires objectId for shape targetType', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'shape',
+        backgroundColor: { red: 1, green: 0, blue: 0 }
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.errors[0].message).toContain('objectId required');
+      }
+    });
+
+    it('requires pageObjectIds for slide targetType', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'slide',
+        slideBackgroundColor: { red: 1, green: 1, blue: 1 }
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.errors[0].message).toContain('pageObjectIds required');
+      }
+    });
+
+    it('rejects empty pageObjectIds array for slide targetType', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'slide',
+        pageObjectIds: [],
+        slideBackgroundColor: { red: 1, green: 1, blue: 1 }
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('text formatting', () => {
+    it('accepts valid text formatting with objectId', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'text',
+        objectId: 'obj456',
+        bold: true,
+        italic: false,
+        fontSize: 14,
+        fontFamily: 'Arial',
+        foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 }
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts paragraph formatting options', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'text',
+        objectId: 'obj456',
+        alignment: 'CENTER',
+        lineSpacing: 1.5,
+        bulletStyle: 'DISC'
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts text range for partial formatting', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'text',
+        objectId: 'obj456',
+        startIndex: 0,
+        endIndex: 10,
+        bold: true
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('shape formatting', () => {
+    it('accepts valid shape formatting with objectId', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'shape',
+        objectId: 'shape789',
+        backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
+        outlineColor: { red: 0, green: 0, blue: 0 },
+        outlineWeight: 2,
+        outlineDashStyle: 'SOLID'
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('validates outline dash style enum', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'shape',
+        objectId: 'shape789',
+        outlineDashStyle: 'INVALID'
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('slide background', () => {
+    it('accepts valid slide background with pageObjectIds', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'slide',
+        pageObjectIds: ['slide1', 'slide2'],
+        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 }
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('color validation', () => {
+    it('rejects color values outside 0-1 range', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'text',
+        objectId: 'obj456',
+        foregroundColor: { red: 255, green: 0, blue: 0 }
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts color values at boundaries (0 and 1)', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'text',
+        objectId: 'obj456',
+        foregroundColor: { red: 0, green: 1, blue: 0.5 }
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('enum validations', () => {
+    it('validates alignment enum', () => {
+      const validAlignments = ['START', 'CENTER', 'END', 'JUSTIFIED'];
+      for (const alignment of validAlignments) {
+        const result = FormatGoogleSlidesElementSchema.safeParse({
+          presentationId: 'pres123',
+          targetType: 'text',
+          objectId: 'obj456',
+          alignment
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it('validates bulletStyle enum', () => {
+      const validStyles = ['NONE', 'DISC', 'ARROW', 'SQUARE', 'DIAMOND', 'STAR', 'NUMBERED'];
+      for (const bulletStyle of validStyles) {
+        const result = FormatGoogleSlidesElementSchema.safeParse({
+          presentationId: 'pres123',
+          targetType: 'text',
+          objectId: 'obj456',
+          bulletStyle
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it('validates targetType enum', () => {
+      const result = FormatGoogleSlidesElementSchema.safeParse({
+        presentationId: 'pres123',
+        targetType: 'invalid'
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });

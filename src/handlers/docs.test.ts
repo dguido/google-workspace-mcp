@@ -3,16 +3,21 @@ import type { drive_v3, docs_v1 } from 'googleapis';
 import {
   handleCreateGoogleDoc,
   handleUpdateGoogleDoc,
-  handleFormatGoogleDocText,
-  handleFormatGoogleDocParagraph,
   handleGetGoogleDocContent,
-  handleAppendToDoc
+  handleAppendToDoc,
+  handleFormatGoogleDocRange
 } from './docs.js';
 
 vi.mock('../utils/index.js', () => ({
   log: vi.fn(),
   successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true })
+  structuredResponse: (text: string, data: Record<string, unknown>) => ({
+    content: [{ type: 'text', text }],
+    structuredContent: data,
+    isError: false
+  }),
+  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
+  withTimeout: <T>(promise: Promise<T>) => promise
 }));
 
 function createMockDrive(): drive_v3.Drive {
@@ -109,111 +114,6 @@ describe('handleUpdateGoogleDoc', () => {
       content: 'Content'
     });
     expect(result.isError).toBe(true);
-  });
-});
-
-describe('handleFormatGoogleDocText', () => {
-  let mockDocs: docs_v1.Docs;
-
-  beforeEach(() => {
-    mockDocs = createMockDocs();
-  });
-
-  it('applies text formatting successfully', async () => {
-    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleFormatGoogleDocText(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 1,
-      endIndex: 10,
-      bold: true
-    });
-    expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain('Applied text formatting');
-  });
-
-  it('returns error when no formatting specified', async () => {
-    const result = await handleFormatGoogleDocText(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 1,
-      endIndex: 10
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('No formatting options');
-  });
-
-  it('returns error for invalid startIndex', async () => {
-    const result = await handleFormatGoogleDocText(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 0,
-      endIndex: 10,
-      bold: true
-    });
-    expect(result.isError).toBe(true);
-  });
-
-  it('accepts all formatting options', async () => {
-    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleFormatGoogleDocText(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 1,
-      endIndex: 10,
-      bold: true,
-      italic: true,
-      underline: true,
-      strikethrough: true,
-      fontSize: 14,
-      foregroundColor: { red: 1, green: 0, blue: 0 }
-    });
-    expect(result.isError).toBe(false);
-  });
-});
-
-describe('handleFormatGoogleDocParagraph', () => {
-  let mockDocs: docs_v1.Docs;
-
-  beforeEach(() => {
-    mockDocs = createMockDocs();
-  });
-
-  it('applies paragraph formatting successfully', async () => {
-    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleFormatGoogleDocParagraph(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 1,
-      endIndex: 10,
-      alignment: 'CENTER'
-    });
-    expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain('Applied paragraph formatting');
-  });
-
-  it('returns error when no formatting specified', async () => {
-    const result = await handleFormatGoogleDocParagraph(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 1,
-      endIndex: 10
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('No paragraph formatting');
-  });
-
-  it('accepts all paragraph options', async () => {
-    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleFormatGoogleDocParagraph(mockDocs, {
-      documentId: 'doc123',
-      startIndex: 1,
-      endIndex: 10,
-      namedStyleType: 'HEADING_1',
-      alignment: 'CENTER',
-      lineSpacing: 150,
-      spaceAbove: 12,
-      spaceBelow: 12
-    });
-    expect(result.isError).toBe(false);
   });
 });
 
@@ -333,5 +233,145 @@ describe('handleAppendToDoc', () => {
       text: ''
     });
     expect(result.isError).toBe(true);
+  });
+});
+
+describe('handleFormatGoogleDocRange', () => {
+  let mockDocs: docs_v1.Docs;
+
+  beforeEach(() => {
+    mockDocs = createMockDocs();
+  });
+
+  it('applies text formatting successfully', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 100 }] } }
+    } as never);
+    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      startIndex: 1,
+      endIndex: 10,
+      bold: true
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Applied formatting');
+    expect(result.content[0].text).toContain('bold');
+  });
+
+  it('applies paragraph formatting successfully', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 100 }] } }
+    } as never);
+    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      startIndex: 1,
+      endIndex: 10,
+      alignment: 'CENTER'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Applied formatting');
+    expect(result.content[0].text).toContain('alignment');
+  });
+
+  it('applies combined text and paragraph formatting', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 100 }] } }
+    } as never);
+    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      startIndex: 1,
+      endIndex: 10,
+      bold: true,
+      italic: true,
+      alignment: 'CENTER',
+      namedStyleType: 'HEADING_1'
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('bold');
+    expect(result.content[0].text).toContain('italic');
+    expect(result.content[0].text).toContain('alignment');
+    expect(result.content[0].text).toContain('namedStyleType');
+  });
+
+  it('defaults to entire document when no range specified', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 50 }] } }
+    } as never);
+    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      bold: true
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('1-50');
+  });
+
+  it('returns error when no formatting specified', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 100 }] } }
+    } as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      startIndex: 1,
+      endIndex: 10
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('No formatting options');
+  });
+
+  it('returns error for empty documentId', async () => {
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: '',
+      bold: true
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('accepts all text formatting options', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 100 }] } }
+    } as never);
+    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      startIndex: 1,
+      endIndex: 10,
+      bold: true,
+      italic: true,
+      underline: true,
+      strikethrough: true,
+      fontSize: 14,
+      fontFamily: 'Arial',
+      foregroundColor: { red: 1, green: 0, blue: 0 }
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('accepts all paragraph formatting options', async () => {
+    vi.mocked(mockDocs.documents.get).mockResolvedValue({
+      data: { body: { content: [{ endIndex: 100 }] } }
+    } as never);
+    vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleDocRange(mockDocs, {
+      documentId: 'doc123',
+      startIndex: 1,
+      endIndex: 10,
+      namedStyleType: 'HEADING_1',
+      alignment: 'CENTER',
+      lineSpacing: 150,
+      spaceAbove: 12,
+      spaceBelow: 12
+    });
+    expect(result.isError).toBe(false);
   });
 });

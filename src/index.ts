@@ -7,6 +7,8 @@ import {
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { google } from "googleapis";
 import type { drive_v3 } from "googleapis";
@@ -20,6 +22,9 @@ import { log, successResponse, errorResponse, getDocsService, getSheetsService, 
 
 // Import all tool definitions
 import { getAllTools } from './tools/index.js';
+
+// Import prompts
+import { PROMPTS, generatePromptMessages } from './prompts/index.js';
 
 // Import all handlers
 import {
@@ -43,39 +48,51 @@ import {
   handleUploadFile,
   handleGetStorageQuota,
   handleStarFile,
+  handleResolveFilePath,
+  handleBatchDelete,
+  handleBatchMove,
+  handleBatchShare,
+  handleRemovePermission,
+  handleListTrash,
+  handleRestoreFromTrash,
+  handleEmptyTrash,
+  handleGetFolderTree,
   // Docs handlers
   handleCreateGoogleDoc,
   handleUpdateGoogleDoc,
-  handleFormatGoogleDocText,
-  handleFormatGoogleDocParagraph,
   handleGetGoogleDocContent,
   handleAppendToDoc,
+  handleInsertTextInDoc,
+  handleDeleteTextInDoc,
+  handleReplaceTextInDoc,
+  handleFormatGoogleDocRange,
   // Sheets handlers
   handleCreateGoogleSheet,
   handleUpdateGoogleSheet,
   handleGetGoogleSheetContent,
   handleFormatGoogleSheetCells,
-  handleFormatGoogleSheetText,
-  handleFormatGoogleSheetNumbers,
-  handleSetGoogleSheetBorders,
   handleMergeGoogleSheetCells,
   handleAddGoogleSheetConditionalFormat,
   handleCreateSheetTab,
   handleDeleteSheetTab,
   handleRenameSheetTab,
+  handleListSheetTabs,
   // Slides handlers
   handleCreateGoogleSlides,
   handleUpdateGoogleSlides,
   handleGetGoogleSlidesContent,
-  handleFormatGoogleSlidesText,
-  handleFormatGoogleSlidesParagraph,
-  handleStyleGoogleSlidesShape,
-  handleSetGoogleSlidesBackground,
   handleCreateGoogleSlidesTextBox,
   handleCreateGoogleSlidesShape,
   handleGetGoogleSlidesSpeakerNotes,
-  handleUpdateGoogleSlidesSpeakerNotes
+  handleUpdateGoogleSlidesSpeakerNotes,
+  handleFormatGoogleSlidesElement,
+  handleListSlidePages,
+  // Unified handlers
+  handleCreateFile,
+  handleUpdateFile,
+  handleGetFileContent
 } from './handlers/index.js';
+import type { HandlerContext } from './handlers/index.js';
 
 // -----------------------------------------------------------------------------
 // CONSTANTS & GLOBAL STATE
@@ -151,7 +168,12 @@ const server = new Server(
   {
     capabilities: {
       resources: {},
-      tools: {},
+      tools: {
+        listChanged: true,
+      },
+      prompts: {
+        listChanged: true,
+      },
     },
   },
 );
@@ -312,6 +334,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 // -----------------------------------------------------------------------------
+// PROMPT REQUEST HANDLERS
+// -----------------------------------------------------------------------------
+
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  log('Handling ListPrompts request');
+  return {
+    prompts: PROMPTS.map(prompt => ({
+      name: prompt.name,
+      description: prompt.description,
+      arguments: prompt.arguments
+    }))
+  };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  log('Handling GetPrompt request', { name: request.params.name });
+
+  const promptName = request.params.name;
+  const promptDef = PROMPTS.find(p => p.name === promptName);
+
+  if (!promptDef) {
+    throw new Error(`Unknown prompt: ${promptName}`);
+  }
+
+  const args = request.params.arguments || {};
+  const messages = generatePromptMessages(promptName, args);
+
+  return {
+    description: promptDef.description,
+    messages
+  };
+});
+
+// -----------------------------------------------------------------------------
 // TOOL CALL REQUEST HANDLER
 // -----------------------------------------------------------------------------
 
@@ -323,6 +379,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     const args = request.params.arguments;
+
+    // Create handler context for MCP features (progress, elicitation)
+    const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
+    const context: HandlerContext = {
+      server,
+      progressToken: meta?.progressToken
+    };
 
     // Get Google API services
     const docs = getDocsService(authClient);
@@ -369,20 +432,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return handleGetStorageQuota(drive!, args);
       case "starFile":
         return handleStarFile(drive!, args);
+      case "resolveFilePath":
+        return handleResolveFilePath(drive!, args, context);
+      case "batchDelete":
+        return handleBatchDelete(drive!, args, context);
+      case "batchMove":
+        return handleBatchMove(drive!, args, context);
+      case "batchShare":
+        return handleBatchShare(drive!, args, context);
+      case "removePermission":
+        return handleRemovePermission(drive!, args);
+      case "listTrash":
+        return handleListTrash(drive!, args);
+      case "restoreFromTrash":
+        return handleRestoreFromTrash(drive!, args);
+      case "emptyTrash":
+        return handleEmptyTrash(drive!, args, context);
+      case "getFolderTree":
+        return handleGetFolderTree(drive!, args);
 
       // Docs tools
       case "createGoogleDoc":
         return handleCreateGoogleDoc(drive!, docs, args);
       case "updateGoogleDoc":
         return handleUpdateGoogleDoc(docs, args);
-      case "formatGoogleDocText":
-        return handleFormatGoogleDocText(docs, args);
-      case "formatGoogleDocParagraph":
-        return handleFormatGoogleDocParagraph(docs, args);
       case "getGoogleDocContent":
         return handleGetGoogleDocContent(docs, args);
       case "appendToDoc":
         return handleAppendToDoc(docs, args);
+      case "insertTextInDoc":
+        return handleInsertTextInDoc(docs, args);
+      case "deleteTextInDoc":
+        return handleDeleteTextInDoc(docs, args);
+      case "replaceTextInDoc":
+        return handleReplaceTextInDoc(docs, args);
+      case "formatGoogleDocRange":
+        return handleFormatGoogleDocRange(docs, args);
 
       // Sheets tools
       case "createGoogleSheet":
@@ -393,12 +478,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return handleGetGoogleSheetContent(sheets, args);
       case "formatGoogleSheetCells":
         return handleFormatGoogleSheetCells(sheets, args);
-      case "formatGoogleSheetText":
-        return handleFormatGoogleSheetText(sheets, args);
-      case "formatGoogleSheetNumbers":
-        return handleFormatGoogleSheetNumbers(sheets, args);
-      case "setGoogleSheetBorders":
-        return handleSetGoogleSheetBorders(sheets, args);
       case "mergeGoogleSheetCells":
         return handleMergeGoogleSheetCells(sheets, args);
       case "addGoogleSheetConditionalFormat":
@@ -409,6 +488,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return handleDeleteSheetTab(sheets, args);
       case "renameSheetTab":
         return handleRenameSheetTab(sheets, args);
+      case "listSheetTabs":
+        return handleListSheetTabs(sheets, args);
 
       // Slides tools
       case "createGoogleSlides":
@@ -417,14 +498,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return handleUpdateGoogleSlides(slides, args);
       case "getGoogleSlidesContent":
         return handleGetGoogleSlidesContent(slides, args);
-      case "formatGoogleSlidesText":
-        return handleFormatGoogleSlidesText(slides, args);
-      case "formatGoogleSlidesParagraph":
-        return handleFormatGoogleSlidesParagraph(slides, args);
-      case "styleGoogleSlidesShape":
-        return handleStyleGoogleSlidesShape(slides, args);
-      case "setGoogleSlidesBackground":
-        return handleSetGoogleSlidesBackground(slides, args);
       case "createGoogleSlidesTextBox":
         return handleCreateGoogleSlidesTextBox(slides, args);
       case "createGoogleSlidesShape":
@@ -433,6 +506,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return handleGetGoogleSlidesSpeakerNotes(slides, args);
       case "updateGoogleSlidesSpeakerNotes":
         return handleUpdateGoogleSlidesSpeakerNotes(slides, args);
+      case "formatGoogleSlidesElement":
+        return handleFormatGoogleSlidesElement(slides, args);
+      case "listSlidePages":
+        return handleListSlidePages(slides, args);
+
+      // Unified smart tools
+      case "createFile":
+        return handleCreateFile(drive!, docs, sheets, slides, args);
+      case "updateFile":
+        return handleUpdateFile(drive!, docs, sheets, slides, args);
+      case "getFileContent":
+        return handleGetFileContent(drive!, docs, sheets, slides, args);
 
       default:
         return errorResponse(`Unknown tool: ${request.params.name}`);

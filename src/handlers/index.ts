@@ -18,17 +18,28 @@ export {
   handleDownloadFile,
   handleUploadFile,
   handleGetStorageQuota,
-  handleStarFile
+  handleStarFile,
+  handleResolveFilePath,
+  handleBatchDelete,
+  handleBatchMove,
+  handleBatchShare,
+  handleRemovePermission,
+  handleListTrash,
+  handleRestoreFromTrash,
+  handleEmptyTrash,
+  handleGetFolderTree
 } from './drive.js';
 
 // Docs handlers
 export {
   handleCreateGoogleDoc,
   handleUpdateGoogleDoc,
-  handleFormatGoogleDocText,
-  handleFormatGoogleDocParagraph,
   handleGetGoogleDocContent,
-  handleAppendToDoc
+  handleAppendToDoc,
+  handleInsertTextInDoc,
+  handleDeleteTextInDoc,
+  handleReplaceTextInDoc,
+  handleFormatGoogleDocRange
 } from './docs.js';
 
 // Sheets handlers
@@ -37,14 +48,12 @@ export {
   handleUpdateGoogleSheet,
   handleGetGoogleSheetContent,
   handleFormatGoogleSheetCells,
-  handleFormatGoogleSheetText,
-  handleFormatGoogleSheetNumbers,
-  handleSetGoogleSheetBorders,
   handleMergeGoogleSheetCells,
   handleAddGoogleSheetConditionalFormat,
   handleCreateSheetTab,
   handleDeleteSheetTab,
-  handleRenameSheetTab
+  handleRenameSheetTab,
+  handleListSheetTabs
 } from './sheets.js';
 
 // Slides handlers
@@ -52,15 +61,20 @@ export {
   handleCreateGoogleSlides,
   handleUpdateGoogleSlides,
   handleGetGoogleSlidesContent,
-  handleFormatGoogleSlidesText,
-  handleFormatGoogleSlidesParagraph,
-  handleStyleGoogleSlidesShape,
-  handleSetGoogleSlidesBackground,
   handleCreateGoogleSlidesTextBox,
   handleCreateGoogleSlidesShape,
   handleGetGoogleSlidesSpeakerNotes,
-  handleUpdateGoogleSlidesSpeakerNotes
+  handleUpdateGoogleSlidesSpeakerNotes,
+  handleFormatGoogleSlidesElement,
+  handleListSlidePages
 } from './slides.js';
+
+// Unified handlers
+export {
+  handleCreateFile,
+  handleUpdateFile,
+  handleGetFileContent
+} from './unified.js';
 
 // Helper utilities
 export {
@@ -74,3 +88,4 @@ export {
   checkFileExists,
   convertA1ToGridRange
 } from './helpers.js';
+export type { HandlerContext } from './helpers.js';

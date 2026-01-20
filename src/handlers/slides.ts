@@ -1,21 +1,39 @@
 import type { drive_v3, slides_v1 } from 'googleapis';
 import { v4 as uuidv4 } from 'uuid';
-import { successResponse, errorResponse } from '../utils/index.js';
+import { successResponse, structuredResponse, errorResponse, withTimeout } from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
 import {
+  ListSlidePagesSchema,
   CreateGoogleSlidesSchema,
   UpdateGoogleSlidesSchema,
   GetGoogleSlidesContentSchema,
-  FormatGoogleSlidesTextSchema,
-  FormatGoogleSlidesParagraphSchema,
-  StyleGoogleSlidesShapeSchema,
-  SetGoogleSlidesBackgroundSchema,
   CreateGoogleSlidesTextBoxSchema,
   CreateGoogleSlidesShapeSchema,
   GetGoogleSlidesSpeakerNotesSchema,
-  UpdateGoogleSlidesSpeakerNotesSchema
+  UpdateGoogleSlidesSpeakerNotesSchema,
+  FormatGoogleSlidesElementSchema
 } from '../schemas/index.js';
-import { resolveFolderId, checkFileExists } from './helpers.js';
+
+// Color conversion helpers
+function toColorStyle(color: { red?: number; green?: number; blue?: number }) {
+  return {
+    rgbColor: {
+      red: color.red || 0,
+      green: color.green || 0,
+      blue: color.blue || 0
+    }
+  };
+}
+
+function toSolidFill(color: { red?: number; green?: number; blue?: number; alpha?: number }) {
+  return {
+    solidFill: {
+      color: toColorStyle(color),
+      alpha: color.alpha ?? 1
+    }
+  };
+}
+import { resolveOptionalFolderPath, checkFileExists } from './helpers.js';
 
 export async function handleCreateGoogleSlides(
   drive: drive_v3.Drive,
@@ -28,7 +46,7 @@ export async function handleCreateGoogleSlides(
   }
   const data = validation.data;
 
-  const parentFolderId = await resolveFolderId(drive, data.parentFolderId);
+  const parentFolderId = await resolveOptionalFolderPath(drive, data.parentFolderId, data.parentPath);
 
   // Check if presentation already exists
   const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
@@ -277,9 +295,13 @@ export async function handleGetGoogleSlidesContent(
   }
   const data = validation.data;
 
-  const presentation = await slides.presentations.get({
-    presentationId: data.presentationId
-  });
+  const presentation = await withTimeout(
+    slides.presentations.get({
+      presentationId: data.presentationId
+    }),
+    30000,
+    'Get presentation content'
+  );
 
   if (!presentation.data.slides) {
     return errorResponse(
@@ -293,11 +315,33 @@ export async function handleGetGoogleSlidesContent(
     ? [presentation.data.slides[data.slideIndex]]
     : presentation.data.slides;
 
+  interface SlideElement {
+    objectId: string;
+    type: string;
+    text?: string;
+    shapeType?: string;
+  }
+
+  interface SlideData {
+    index: number;
+    objectId: string;
+    elements: SlideElement[];
+  }
+
+  const structuredSlides: SlideData[] = [];
+
   slidesToShow.forEach((slide, index) => {
     if (!slide || !slide.objectId) return;
 
-    content += `\nSlide ${data.slideIndex ?? index} (ID: ${slide.objectId}):\n`;
+    const slideIndex = data.slideIndex ?? index;
+    content += `\nSlide ${slideIndex} (ID: ${slide.objectId}):\n`;
     content += '----------------------------\n';
+
+    const slideData: SlideData = {
+      index: slideIndex,
+      objectId: slide.objectId,
+      elements: []
+    };
 
     if (slide.pageElements) {
       slide.pageElements.forEach((element) => {
@@ -313,293 +357,49 @@ export async function handleGetGoogleSlidesContent(
             }
           });
           content += `    "${text.trim()}"\n`;
+          slideData.elements.push({
+            objectId: element.objectId,
+            type: 'textBox',
+            text: text.trim()
+          });
         } else if (element.shape) {
           content += `  Shape (ID: ${element.objectId}): ${element.shape.shapeType || 'Unknown'}\n`;
+          slideData.elements.push({
+            objectId: element.objectId,
+            type: 'shape',
+            shapeType: element.shape.shapeType || undefined
+          });
         } else if (element.image) {
           content += `  Image (ID: ${element.objectId})\n`;
+          slideData.elements.push({
+            objectId: element.objectId,
+            type: 'image'
+          });
         } else if (element.video) {
           content += `  Video (ID: ${element.objectId})\n`;
+          slideData.elements.push({
+            objectId: element.objectId,
+            type: 'video'
+          });
         } else if (element.table) {
           content += `  Table (ID: ${element.objectId})\n`;
+          slideData.elements.push({
+            objectId: element.objectId,
+            type: 'table'
+          });
         }
       });
     }
+
+    structuredSlides.push(slideData);
   });
 
-  return successResponse(content);
-}
-
-export async function handleFormatGoogleSlidesText(
-  slides: slides_v1.Slides,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = FormatGoogleSlidesTextSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  const textStyle: Record<string, unknown> = {};
-  const fields: string[] = [];
-
-  if (data.bold !== undefined) {
-    textStyle.bold = data.bold;
-    fields.push('bold');
-  }
-
-  if (data.italic !== undefined) {
-    textStyle.italic = data.italic;
-    fields.push('italic');
-  }
-
-  if (data.underline !== undefined) {
-    textStyle.underline = data.underline;
-    fields.push('underline');
-  }
-
-  if (data.strikethrough !== undefined) {
-    textStyle.strikethrough = data.strikethrough;
-    fields.push('strikethrough');
-  }
-
-  if (data.fontSize !== undefined) {
-    textStyle.fontSize = { magnitude: data.fontSize, unit: 'PT' };
-    fields.push('fontSize');
-  }
-
-  if (data.fontFamily !== undefined) {
-    textStyle.fontFamily = data.fontFamily;
-    fields.push('fontFamily');
-  }
-
-  if (data.foregroundColor) {
-    textStyle.foregroundColor = {
-      opaqueColor: {
-        rgbColor: {
-          red: data.foregroundColor.red || 0,
-          green: data.foregroundColor.green || 0,
-          blue: data.foregroundColor.blue || 0
-        }
-      }
-    };
-    fields.push('foregroundColor');
-  }
-
-  if (fields.length === 0) {
-    return errorResponse(
-      "No text formatting options specified. Provide at least one of: " +
-      "bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor."
-    );
-  }
-
-  const updateRequest: slides_v1.Schema$Request = {
-    updateTextStyle: {
-      objectId: data.objectId,
-      style: textStyle,
-      fields: fields.join(','),
-      textRange: (data.startIndex !== undefined && data.endIndex !== undefined)
-        ? { type: 'FIXED_RANGE', startIndex: data.startIndex, endIndex: data.endIndex }
-        : { type: 'ALL' }
-    }
-  };
-
-  await slides.presentations.batchUpdate({
+  return structuredResponse(content, {
     presentationId: data.presentationId,
-    requestBody: { requests: [updateRequest] }
+    title: presentation.data.title,
+    slideCount: presentation.data.slides?.length || 0,
+    slides: structuredSlides
   });
-
-  return successResponse(`Applied text formatting to object ${data.objectId}`);
-}
-
-export async function handleFormatGoogleSlidesParagraph(
-  slides: slides_v1.Slides,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = FormatGoogleSlidesParagraphSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  const requests: slides_v1.Schema$Request[] = [];
-
-  if (data.alignment) {
-    requests.push({
-      updateParagraphStyle: {
-        objectId: data.objectId,
-        style: { alignment: data.alignment },
-        fields: 'alignment'
-      }
-    });
-  }
-
-  if (data.lineSpacing !== undefined) {
-    requests.push({
-      updateParagraphStyle: {
-        objectId: data.objectId,
-        style: { lineSpacing: data.lineSpacing },
-        fields: 'lineSpacing'
-      }
-    });
-  }
-
-  if (data.bulletStyle) {
-    if (data.bulletStyle === 'NONE') {
-      requests.push({ deleteParagraphBullets: { objectId: data.objectId } });
-    } else if (data.bulletStyle === 'NUMBERED') {
-      requests.push({
-        createParagraphBullets: {
-          objectId: data.objectId,
-          bulletPreset: 'NUMBERED_DIGIT_ALPHA_ROMAN'
-        }
-      });
-    } else {
-      requests.push({
-        createParagraphBullets: {
-          objectId: data.objectId,
-          bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`
-        }
-      });
-    }
-  }
-
-  if (requests.length === 0) {
-    return errorResponse(
-      "No paragraph formatting options specified. Provide at least one of: " +
-      "alignment, lineSpacing, bulletStyle."
-    );
-  }
-
-  await slides.presentations.batchUpdate({
-    presentationId: data.presentationId,
-    requestBody: { requests }
-  });
-
-  return successResponse(`Applied paragraph formatting to object ${data.objectId}`);
-}
-
-export async function handleStyleGoogleSlidesShape(
-  slides: slides_v1.Slides,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = StyleGoogleSlidesShapeSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  const shapeProperties: Record<string, unknown> = {};
-  const fields: string[] = [];
-
-  if (data.backgroundColor) {
-    shapeProperties.shapeBackgroundFill = {
-      solidFill: {
-        color: {
-          rgbColor: {
-            red: data.backgroundColor.red || 0,
-            green: data.backgroundColor.green || 0,
-            blue: data.backgroundColor.blue || 0
-          }
-        },
-        alpha: data.backgroundColor.alpha || 1
-      }
-    };
-    fields.push('shapeBackgroundFill');
-  }
-
-  const outline: Record<string, unknown> = {};
-  let hasOutlineChanges = false;
-
-  if (data.outlineColor) {
-    outline.outlineFill = {
-      solidFill: {
-        color: {
-          rgbColor: {
-            red: data.outlineColor.red || 0,
-            green: data.outlineColor.green || 0,
-            blue: data.outlineColor.blue || 0
-          }
-        }
-      }
-    };
-    hasOutlineChanges = true;
-  }
-
-  if (data.outlineWeight !== undefined) {
-    outline.weight = { magnitude: data.outlineWeight, unit: 'PT' };
-    hasOutlineChanges = true;
-  }
-
-  if (data.outlineDashStyle !== undefined) {
-    outline.dashStyle = data.outlineDashStyle;
-    hasOutlineChanges = true;
-  }
-
-  if (hasOutlineChanges) {
-    shapeProperties.outline = outline;
-    fields.push('outline');
-  }
-
-  if (fields.length === 0) {
-    return errorResponse(
-      "No shape styling options specified. Provide at least one of: " +
-      "backgroundColor, outlineColor, outlineWeight, outlineDashStyle."
-    );
-  }
-
-  await slides.presentations.batchUpdate({
-    presentationId: data.presentationId,
-    requestBody: {
-      requests: [{
-        updateShapeProperties: {
-          objectId: data.objectId,
-          shapeProperties,
-          fields: fields.join(',')
-        }
-      }]
-    }
-  });
-
-  return successResponse(`Applied styling to shape ${data.objectId}`);
-}
-
-export async function handleSetGoogleSlidesBackground(
-  slides: slides_v1.Slides,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = SetGoogleSlidesBackgroundSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  const requests = data.pageObjectIds.map(pageObjectId => ({
-    updatePageProperties: {
-      objectId: pageObjectId,
-      pageProperties: {
-        pageBackgroundFill: {
-          solidFill: {
-            color: {
-              rgbColor: {
-                red: data.backgroundColor.red || 0,
-                green: data.backgroundColor.green || 0,
-                blue: data.backgroundColor.blue || 0
-              }
-            },
-            alpha: data.backgroundColor.alpha || 1
-          }
-        }
-      },
-      fields: 'pageBackgroundFill'
-    }
-  }));
-
-  await slides.presentations.batchUpdate({
-    presentationId: data.presentationId,
-    requestBody: { requests }
-  });
-
-  return successResponse(`Set background color for ${data.pageObjectIds.length} slide(s)`);
 }
 
 export async function handleCreateGoogleSlidesTextBox(
@@ -767,9 +567,9 @@ export async function handleGetGoogleSlidesSpeakerNotes(
   });
 
   const slideCount = presentation.data.slides?.length || 0;
-  if (!presentation.data.slides || data.slideIndex >= slideCount) {
+  if (!presentation.data.slides || data.slideIndex < 0 || data.slideIndex >= slideCount) {
     return errorResponse(
-      `Slide index ${data.slideIndex} not found in presentation (has ${slideCount} slides)`
+      `Slide index ${data.slideIndex} is invalid. Valid range: 0 to ${slideCount - 1} (presentation has ${slideCount} slides)`
     );
   }
 
@@ -826,9 +626,9 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
   });
 
   const slideCount = presentation.data.slides?.length || 0;
-  if (!presentation.data.slides || data.slideIndex >= slideCount) {
+  if (!presentation.data.slides || data.slideIndex < 0 || data.slideIndex >= slideCount) {
     return errorResponse(
-      `Slide index ${data.slideIndex} not found in presentation (has ${slideCount} slides)`
+      `Slide index ${data.slideIndex} is invalid. Valid range: 0 to ${slideCount - 1} (presentation has ${slideCount} slides)`
     );
   }
 
@@ -867,4 +667,232 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
   });
 
   return successResponse(`Successfully updated speaker notes for slide ${data.slideIndex}`);
+}
+
+export async function handleFormatGoogleSlidesElement(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = FormatGoogleSlidesElementSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const requests: slides_v1.Schema$Request[] = [];
+  const appliedFormats: string[] = [];
+
+  if (data.targetType === 'text') {
+    // Text formatting (style)
+    const textStyle: Record<string, unknown> = {};
+    const textFields: string[] = [];
+
+    if (data.bold !== undefined) {
+      textStyle.bold = data.bold;
+      textFields.push('bold');
+    }
+    if (data.italic !== undefined) {
+      textStyle.italic = data.italic;
+      textFields.push('italic');
+    }
+    if (data.underline !== undefined) {
+      textStyle.underline = data.underline;
+      textFields.push('underline');
+    }
+    if (data.strikethrough !== undefined) {
+      textStyle.strikethrough = data.strikethrough;
+      textFields.push('strikethrough');
+    }
+    if (data.fontSize !== undefined) {
+      textStyle.fontSize = { magnitude: data.fontSize, unit: 'PT' };
+      textFields.push('fontSize');
+    }
+    if (data.fontFamily !== undefined) {
+      textStyle.fontFamily = data.fontFamily;
+      textFields.push('fontFamily');
+    }
+    if (data.foregroundColor) {
+      textStyle.foregroundColor = { opaqueColor: toColorStyle(data.foregroundColor) };
+      textFields.push('foregroundColor');
+    }
+
+    if (textFields.length > 0) {
+      requests.push({
+        updateTextStyle: {
+          objectId: data.objectId!,
+          style: textStyle,
+          fields: textFields.join(','),
+          textRange: (data.startIndex !== undefined && data.endIndex !== undefined)
+            ? { type: 'FIXED_RANGE', startIndex: data.startIndex, endIndex: data.endIndex }
+            : { type: 'ALL' }
+        }
+      });
+      appliedFormats.push('text style');
+    }
+
+    // Paragraph formatting
+    if (data.alignment) {
+      requests.push({
+        updateParagraphStyle: {
+          objectId: data.objectId!,
+          style: { alignment: data.alignment },
+          fields: 'alignment'
+        }
+      });
+      appliedFormats.push('alignment');
+    }
+
+    if (data.lineSpacing !== undefined) {
+      requests.push({
+        updateParagraphStyle: {
+          objectId: data.objectId!,
+          style: { lineSpacing: data.lineSpacing },
+          fields: 'lineSpacing'
+        }
+      });
+      appliedFormats.push('line spacing');
+    }
+
+    if (data.bulletStyle) {
+      if (data.bulletStyle === 'NONE') {
+        requests.push({ deleteParagraphBullets: { objectId: data.objectId! } });
+      } else if (data.bulletStyle === 'NUMBERED') {
+        requests.push({
+          createParagraphBullets: {
+            objectId: data.objectId!,
+            bulletPreset: 'NUMBERED_DIGIT_ALPHA_ROMAN'
+          }
+        });
+      } else {
+        requests.push({
+          createParagraphBullets: {
+            objectId: data.objectId!,
+            bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`
+          }
+        });
+      }
+      appliedFormats.push('bullet style');
+    }
+  } else if (data.targetType === 'shape') {
+    const shapeProperties: Record<string, unknown> = {};
+    const fields: string[] = [];
+
+    if (data.backgroundColor) {
+      shapeProperties.shapeBackgroundFill = toSolidFill(data.backgroundColor);
+      fields.push('shapeBackgroundFill');
+      appliedFormats.push('background color');
+    }
+
+    const outline: Record<string, unknown> = {};
+    let hasOutlineChanges = false;
+
+    if (data.outlineColor) {
+      outline.outlineFill = {
+        solidFill: {
+          color: toColorStyle(data.outlineColor)
+        }
+      };
+      hasOutlineChanges = true;
+      appliedFormats.push('outline color');
+    }
+
+    if (data.outlineWeight !== undefined) {
+      outline.weight = { magnitude: data.outlineWeight, unit: 'PT' };
+      hasOutlineChanges = true;
+      appliedFormats.push('outline weight');
+    }
+
+    if (data.outlineDashStyle !== undefined) {
+      outline.dashStyle = data.outlineDashStyle;
+      hasOutlineChanges = true;
+      appliedFormats.push('outline dash style');
+    }
+
+    if (hasOutlineChanges) {
+      shapeProperties.outline = outline;
+      fields.push('outline');
+    }
+
+    if (fields.length > 0) {
+      requests.push({
+        updateShapeProperties: {
+          objectId: data.objectId!,
+          shapeProperties,
+          fields: fields.join(',')
+        }
+      });
+    }
+  } else if (data.targetType === 'slide') {
+    if (data.slideBackgroundColor) {
+      const bgRequests = data.pageObjectIds!.map(pageObjectId => ({
+        updatePageProperties: {
+          objectId: pageObjectId,
+          pageProperties: {
+            pageBackgroundFill: toSolidFill(data.slideBackgroundColor!)
+          },
+          fields: 'pageBackgroundFill'
+        }
+      }));
+      requests.push(...bgRequests);
+      appliedFormats.push(`slide background (${data.pageObjectIds!.length} slide(s))`);
+    }
+  }
+
+  if (requests.length === 0) {
+    return errorResponse(
+      "No formatting options specified. For text: provide bold, italic, underline, strikethrough, " +
+      "fontSize, fontFamily, foregroundColor, alignment, lineSpacing, or bulletStyle. " +
+      "For shape: provide backgroundColor, outlineColor, outlineWeight, or outlineDashStyle. " +
+      "For slide: provide slideBackgroundColor."
+    );
+  }
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests }
+  });
+
+  const targetDesc = data.targetType === 'slide'
+    ? `${data.pageObjectIds!.length} slide(s)`
+    : `${data.targetType} ${data.objectId}`;
+
+  return successResponse(`Applied formatting to ${targetDesc}: ${appliedFormats.join(', ')}`);
+}
+
+export async function handleListSlidePages(
+  slides: slides_v1.Slides,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = ListSlidePagesSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const response = await slides.presentations.get({
+    presentationId: data.presentationId,
+    fields: 'presentationId,slides(objectId,slideProperties(layoutObjectId))'
+  });
+
+  const pages = response.data.slides?.map((slide, index) => {
+    // Try to find a title placeholder for the slide name
+    let title: string | undefined;
+
+    return {
+      objectId: slide.objectId,
+      index,
+      pageType: 'SLIDE' as const,
+      title
+    };
+  }) || [];
+
+  const pageList = pages.map(p => `${p.index}: ${p.objectId}${p.title ? ` - "${p.title}"` : ''}`).join('\n');
+
+  return structuredResponse(
+    `Presentation has ${pages.length} slide(s):\n${pageList}`,
+    {
+      presentationId: data.presentationId,
+      pages
+    }
+  );
 }

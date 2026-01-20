@@ -25,7 +25,13 @@ import {
 vi.mock('../utils/index.js', () => ({
   log: vi.fn(),
   successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true })
+  structuredResponse: (text: string, data: Record<string, unknown>) => ({
+    content: [{ type: 'text', text }],
+    structuredContent: data,
+    isError: false
+  }),
+  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
+  withTimeout: <T>(promise: Promise<T>) => promise
 }));
 
 function createMockDrive(): drive_v3.Drive {

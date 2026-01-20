@@ -1,7 +1,18 @@
 import type { drive_v3 } from 'googleapis';
-import { log, successResponse, errorResponse } from '../utils/index.js';
+import {
+  log,
+  successResponse,
+  structuredResponse,
+  errorResponse,
+  withTimeout,
+  withRetry,
+  elicitFileSelection,
+  elicitConfirmation,
+  formatDisambiguationOptions
+} from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
 import {
+  GetFolderTreeSchema,
   SearchSchema,
   CreateTextFileSchema,
   UpdateTextFileSchema,
@@ -20,7 +31,15 @@ import {
   DownloadFileSchema,
   UploadFileSchema,
   GetStorageQuotaSchema,
-  StarFileSchema
+  StarFileSchema,
+  ResolveFilePathSchema,
+  BatchDeleteSchema,
+  BatchMoveSchema,
+  BatchShareSchema,
+  RemovePermissionSchema,
+  ListTrashSchema,
+  RestoreFromTrashSchema,
+  EmptyTrashSchema
 } from '../schemas/index.js';
 import {
   FOLDER_MIME_TYPE,
@@ -28,8 +47,11 @@ import {
   getMimeTypeFromFilename,
   validateTextFileExtension,
   resolveFolderId,
-  checkFileExists
+  resolveOptionalFolderPath,
+  checkFileExists,
+  processBatchOperation
 } from './helpers.js';
+import type { HandlerContext } from './helpers.js';
 
 export async function handleSearch(
   drive: drive_v3.Drive,
@@ -77,7 +99,7 @@ export async function handleCreateTextFile(
   const data = validation.data;
 
   validateTextFileExtension(data.name);
-  const parentFolderId = await resolveFolderId(drive, data.parentFolderId);
+  const parentFolderId = await resolveOptionalFolderPath(drive, data.parentFolderId, data.parentPath);
 
   // Check if file already exists
   const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
@@ -169,7 +191,7 @@ export async function handleCreateFolder(
   }
   const data = validation.data;
 
-  const parentFolderId = await resolveFolderId(drive, data.parent);
+  const parentFolderId = await resolveOptionalFolderPath(drive, data.parent, data.parentPath);
 
   // Check if folder already exists
   const existingFolderId = await checkFileExists(drive, data.name, parentFolderId);
@@ -304,12 +326,14 @@ export async function handleMoveItem(
   }
   const data = validation.data;
 
-  const destinationFolderId = data.destinationFolderId
-    ? await resolveFolderId(drive, data.destinationFolderId)
-    : 'root';
+  const destinationFolderId = await resolveOptionalFolderPath(
+    drive,
+    data.destinationFolderId,
+    data.destinationPath
+  );
 
   // Check we aren't moving a folder into itself
-  if (data.destinationFolderId === data.itemId) {
+  if (destinationFolderId === data.itemId) {
     return errorResponse("Cannot move a folder into itself.");
   }
 
@@ -399,17 +423,21 @@ export async function handleGetFileMetadata(
   }
   const data = validation.data;
 
-  const file = await drive.files.get({
-    fileId: data.fileId,
-    fields: 'id, name, mimeType, size, createdTime, modifiedTime, owners, shared, webViewLink, parents, description, starred',
-    supportsAllDrives: true
-  });
+  const file = await withTimeout(
+    drive.files.get({
+      fileId: data.fileId,
+      fields: 'id, name, mimeType, size, createdTime, modifiedTime, owners, shared, webViewLink, parents, description, starred',
+      supportsAllDrives: true
+    }),
+    30000,
+    'Get file metadata'
+  );
 
   const metadata = file.data;
   const ownerNames = metadata.owners?.map(o => o.displayName || o.emailAddress).join(', ') || 'Unknown';
   const sizeStr = metadata.size ? `${(parseInt(metadata.size) / 1024).toFixed(2)} KB` : 'N/A';
 
-  const response = [
+  const textResponse = [
     `Name: ${metadata.name}`,
     `ID: ${metadata.id}`,
     `Type: ${metadata.mimeType}`,
@@ -424,7 +452,23 @@ export async function handleGetFileMetadata(
     `Link: ${metadata.webViewLink}`
   ].filter(Boolean).join('\n');
 
-  return successResponse(response);
+  return structuredResponse(textResponse, {
+    id: metadata.id,
+    name: metadata.name,
+    mimeType: metadata.mimeType,
+    size: metadata.size,
+    createdTime: metadata.createdTime,
+    modifiedTime: metadata.modifiedTime,
+    owners: metadata.owners?.map(o => ({
+      displayName: o.displayName,
+      emailAddress: o.emailAddress
+    })),
+    shared: metadata.shared,
+    starred: metadata.starred,
+    description: metadata.description,
+    webViewLink: metadata.webViewLink,
+    parents: metadata.parents
+  });
 }
 
 const EXPORT_MIME_TYPES: Record<string, string> = {
@@ -603,18 +647,26 @@ export async function handleGetSharing(
   const data = validation.data;
 
   // Get file name
-  const file = await drive.files.get({
-    fileId: data.fileId,
-    fields: 'name, webViewLink',
-    supportsAllDrives: true
-  });
+  const file = await withTimeout(
+    drive.files.get({
+      fileId: data.fileId,
+      fields: 'name, webViewLink',
+      supportsAllDrives: true
+    }),
+    30000,
+    'Get file info'
+  );
 
   // Get permissions
-  const permissions = await drive.permissions.list({
-    fileId: data.fileId,
-    fields: 'permissions(id, role, type, emailAddress, domain, displayName)',
-    supportsAllDrives: true
-  });
+  const permissions = await withTimeout(
+    drive.permissions.list({
+      fileId: data.fileId,
+      fields: 'permissions(id, role, type, emailAddress, domain, displayName)',
+      supportsAllDrives: true
+    }),
+    30000,
+    'List permissions'
+  );
 
   const permissionList = permissions.data.permissions || [];
 
@@ -630,9 +682,20 @@ export async function handleGetSharing(
     return `• ${target}: ${p.role} (ID: ${p.id})`;
   }).join('\n');
 
-  return successResponse(
-    `Sharing settings for "${file.data.name}":\n\n${formattedPermissions}\n\nLink: ${file.data.webViewLink}`
-  );
+  const textResponse = `Sharing settings for "${file.data.name}":\n\n${formattedPermissions}\n\nLink: ${file.data.webViewLink}`;
+
+  return structuredResponse(textResponse, {
+    fileName: file.data.name,
+    webViewLink: file.data.webViewLink,
+    permissions: permissionList.map(p => ({
+      id: p.id,
+      role: p.role,
+      type: p.type,
+      emailAddress: p.emailAddress,
+      domain: p.domain,
+      displayName: p.displayName
+    }))
+  });
 }
 
 // -----------------------------------------------------------------------------
@@ -650,11 +713,15 @@ export async function handleListRevisions(
   const data = validation.data;
 
   // Get file name
-  const file = await drive.files.get({
-    fileId: data.fileId,
-    fields: 'name, mimeType',
-    supportsAllDrives: true
-  });
+  const file = await withTimeout(
+    drive.files.get({
+      fileId: data.fileId,
+      fields: 'name, mimeType',
+      supportsAllDrives: true
+    }),
+    30000,
+    'Get file info'
+  );
 
   // Check if file supports revisions (Google Workspace files use different versioning)
   if (file.data.mimeType?.startsWith('application/vnd.google-apps')) {
@@ -664,11 +731,15 @@ export async function handleListRevisions(
     );
   }
 
-  const revisions = await drive.revisions.list({
-    fileId: data.fileId,
-    pageSize: data.pageSize || 100,
-    fields: 'revisions(id, modifiedTime, lastModifyingUser, size, keepForever)'
-  });
+  const revisions = await withTimeout(
+    drive.revisions.list({
+      fileId: data.fileId,
+      pageSize: data.pageSize || 100,
+      fields: 'revisions(id, modifiedTime, lastModifyingUser, size, keepForever)'
+    }),
+    30000,
+    'List revisions'
+  );
 
   const revisionList = revisions.data.revisions || [];
 
@@ -683,9 +754,21 @@ export async function handleListRevisions(
     return `${idx + 1}. ID: ${r.id} | ${r.modifiedTime} | ${author} | ${sizeStr}${keepForever}`;
   }).join('\n');
 
-  return successResponse(
-    `Revisions for "${file.data.name}" (${revisionList.length} found):\n\n${formattedRevisions}`
-  );
+  const textResponse = `Revisions for "${file.data.name}" (${revisionList.length} found):\n\n${formattedRevisions}`;
+
+  return structuredResponse(textResponse, {
+    fileName: file.data.name,
+    revisions: revisionList.map(r => ({
+      id: r.id,
+      modifiedTime: r.modifiedTime,
+      size: r.size,
+      keepForever: r.keepForever,
+      lastModifyingUser: r.lastModifyingUser ? {
+        displayName: r.lastModifyingUser.displayName,
+        emailAddress: r.lastModifyingUser.emailAddress
+      } : undefined
+    }))
+  });
 }
 
 export async function handleRestoreRevision(
@@ -844,8 +927,8 @@ export async function handleUploadFile(
     mimeType = COMMON_MIME_TYPES[ext] || 'application/octet-stream';
   }
 
-  // Resolve folder ID
-  const folderId = data.folderId || 'root';
+  // Resolve folder ID (supports both folderId and folderPath)
+  const folderId = await resolveOptionalFolderPath(drive, data.folderId, data.folderPath);
 
   // Check if file already exists
   const existingFileId = await checkFileExists(drive, data.name, folderId);
@@ -902,9 +985,13 @@ export async function handleGetStorageQuota(
     return errorResponse(validation.error.errors[0].message);
   }
 
-  const about = await drive.about.get({
-    fields: 'storageQuota, user'
-  });
+  const about = await withTimeout(
+    drive.about.get({
+      fields: 'storageQuota, user'
+    }),
+    30000,
+    'Get storage quota'
+  );
 
   const quota = about.data.storageQuota;
   const user = about.data.user;
@@ -933,15 +1020,26 @@ export async function handleGetStorageQuota(
     available = formatBytes(String(availableBytes));
   }
 
-  return successResponse(
-    `Google Drive Storage Quota\n` +
+  const textResponse = `Google Drive Storage Quota\n` +
     `User: ${user?.emailAddress || 'Unknown'}\n\n` +
     `Total limit: ${limit}\n` +
     `Total usage: ${usage}\n` +
     `Usage in Drive: ${usageInDrive}\n` +
     `Usage in Trash: ${usageInTrash}\n` +
-    `Available: ${available}`
-  );
+    `Available: ${available}`;
+
+  return structuredResponse(textResponse, {
+    user: user ? {
+      displayName: user.displayName,
+      emailAddress: user.emailAddress
+    } : undefined,
+    storageQuota: {
+      limit: quota.limit,
+      usage: quota.usage,
+      usageInDrive: quota.usageInDrive,
+      usageInDriveTrash: quota.usageInDriveTrash
+    }
+  });
 }
 
 export async function handleStarFile(
@@ -971,4 +1069,730 @@ export async function handleStarFile(
   const action = data.starred ? 'starred' : 'unstarred';
   log(`File ${action} successfully`, { fileId: data.fileId });
   return successResponse(`Successfully ${action} "${file.data.name}"`);
+}
+
+// -----------------------------------------------------------------------------
+// FILE PATH RESOLUTION
+// -----------------------------------------------------------------------------
+
+export async function handleResolveFilePath(
+  drive: drive_v3.Drive,
+  args: unknown,
+  context?: HandlerContext
+): Promise<ToolResponse> {
+  const validation = ResolveFilePathSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  if (!data.path || data.path === '/') {
+    return structuredResponse('Resolved to root folder', {
+      id: 'root',
+      name: 'My Drive',
+      path: '/',
+      mimeType: FOLDER_MIME_TYPE,
+      modifiedTime: null
+    });
+  }
+
+  const parts = data.path.replace(/^\/+|\/+$/g, '').split('/');
+  let currentFolderId = 'root';
+  const resolvedPath: string[] = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+
+    const isLastPart = i === parts.length - 1;
+    const escapedPart = part.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+    // Build query based on whether we're looking for the final item or a folder
+    let query = `'${currentFolderId}' in parents and name = '${escapedPart}' and trashed = false`;
+
+    if (isLastPart && data.type !== 'any') {
+      if (data.type === 'folder') {
+        query += ` and mimeType = '${FOLDER_MIME_TYPE}'`;
+      } else if (data.type === 'file') {
+        query += ` and mimeType != '${FOLDER_MIME_TYPE}'`;
+      }
+    } else if (!isLastPart) {
+      // For intermediate parts, must be a folder
+      query += ` and mimeType = '${FOLDER_MIME_TYPE}'`;
+    }
+
+    const response = await drive.files.list({
+      q: query,
+      fields: 'files(id, name, mimeType, modifiedTime)',
+      pageSize: 10,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
+    });
+
+    const files = response.data.files || [];
+
+    if (files.length === 0) {
+      // Build helpful error message
+      const pathSoFar = '/' + resolvedPath.join('/');
+      const searchedIn = resolvedPath.length > 0 ? `"${resolvedPath[resolvedPath.length - 1]}"` : 'root';
+
+      // List what's in the current folder for context
+      const contentsResponse = await drive.files.list({
+        q: `'${currentFolderId}' in parents and trashed = false`,
+        fields: 'files(name, mimeType)',
+        pageSize: 20,
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true
+      });
+
+      const contents = (contentsResponse.data.files || [])
+        .map(f => f.mimeType === FOLDER_MIME_TYPE ? `📁 ${f.name}` : `📄 ${f.name}`)
+        .slice(0, 10);
+
+      const contentsStr = contents.length > 0
+        ? `\nContents of ${searchedIn}: ${contents.join(', ')}${contents.length >= 10 ? '...' : ''}`
+        : `\n${searchedIn} appears to be empty.`;
+
+      return errorResponse(
+        `Path segment "${part}" not found at "${pathSoFar || '/'}".${contentsStr}`
+      );
+    }
+
+    if (files.length > 1) {
+      // Multiple matches - try elicitation if context available
+      if (context?.server) {
+        const fileOptions = files.map(f => ({
+          id: f.id!,
+          name: f.name!,
+          mimeType: f.mimeType || undefined,
+          modifiedTime: f.modifiedTime || undefined,
+          path: '/' + [...resolvedPath, f.name!].join('/')
+        }));
+
+        const result = await elicitFileSelection(
+          context.server,
+          fileOptions,
+          `Multiple items named "${part}" found at "/${resolvedPath.join('/')}". Please select one:`
+        );
+
+        if (result.cancelled) {
+          return errorResponse('File selection cancelled');
+        }
+
+        if (result.error) {
+          // Elicitation not supported or failed - return disambiguation message
+          return errorResponse(result.error);
+        }
+
+        if (result.selectedFileId) {
+          const selectedFile = files.find(f => f.id === result.selectedFileId)!;
+          resolvedPath.push(selectedFile.name!);
+
+          if (isLastPart) {
+            log('Path resolved via elicitation', { path: data.path, fileId: selectedFile.id });
+            return structuredResponse(
+              `Resolved "${data.path}" to ${selectedFile.mimeType === FOLDER_MIME_TYPE ? 'folder' : 'file'} "${selectedFile.name}"`,
+              {
+                id: selectedFile.id,
+                name: selectedFile.name,
+                path: '/' + resolvedPath.join('/'),
+                mimeType: selectedFile.mimeType,
+                modifiedTime: selectedFile.modifiedTime
+              }
+            );
+          }
+
+          currentFolderId = selectedFile.id!;
+          continue;
+        }
+      }
+
+      // Fall back to error with disambiguation options
+      const disambiguationMessage = formatDisambiguationOptions(
+        files.map(f => ({
+          id: f.id!,
+          name: f.name!,
+          mimeType: f.mimeType || undefined,
+          modifiedTime: f.modifiedTime
+        })),
+        `Multiple items named "${part}" found at "/${resolvedPath.join('/')}".`
+      );
+      return errorResponse(disambiguationMessage);
+    }
+
+    const file = files[0];
+    resolvedPath.push(file.name!);
+
+    if (isLastPart) {
+      // We found the target
+      log('Path resolved successfully', { path: data.path, fileId: file.id });
+      return structuredResponse(
+        `Resolved "${data.path}" to ${file.mimeType === FOLDER_MIME_TYPE ? 'folder' : 'file'} "${file.name}"`,
+        {
+          id: file.id,
+          name: file.name,
+          path: '/' + resolvedPath.join('/'),
+          mimeType: file.mimeType,
+          modifiedTime: file.modifiedTime
+        }
+      );
+    }
+
+    // Not the last part - must be a folder
+    currentFolderId = file.id!;
+  }
+
+  // Should not reach here, but handle edge case
+  return errorResponse('Unable to resolve path');
+}
+
+// -----------------------------------------------------------------------------
+// BATCH OPERATIONS
+// -----------------------------------------------------------------------------
+
+export async function handleBatchDelete(
+  drive: drive_v3.Drive,
+  args: unknown,
+  context?: HandlerContext
+): Promise<ToolResponse> {
+  const validation = BatchDeleteSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const { success: deleted, failed } = await processBatchOperation(
+    data.fileIds,
+    async (fileId) => {
+      const file = await drive.files.get({
+        fileId,
+        fields: 'name',
+        supportsAllDrives: true
+      });
+
+      await drive.files.update({
+        fileId,
+        requestBody: { trashed: true },
+        supportsAllDrives: true
+      });
+
+      return { fileId, name: file.data.name };
+    },
+    context,
+    { operationName: 'Deleting files' }
+  );
+
+  const summary = `Batch delete: ${deleted.length} succeeded, ${failed.length} failed`;
+  log(summary, { deleted: deleted.length, failed: failed.length });
+
+  return structuredResponse(
+    summary +
+    (deleted.length > 0 ? `\n\nDeleted: ${deleted.map(d => d.name || d.fileId).join(', ')}` : '') +
+    (failed.length > 0 ? `\n\nFailed: ${failed.map(f => `${f.id}: ${f.error}`).join(', ')}` : ''),
+    { deleted, failed }
+  );
+}
+
+export async function handleBatchMove(
+  drive: drive_v3.Drive,
+  args: unknown,
+  context?: HandlerContext
+): Promise<ToolResponse> {
+  const validation = BatchMoveSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Resolve destination folder (supports both ID and path)
+  const destinationFolderId = await resolveOptionalFolderPath(
+    drive,
+    data.destinationFolderId,
+    data.destinationPath
+  );
+
+  // Get destination folder name for better reporting
+  let destName = 'root';
+  if (destinationFolderId !== 'root') {
+    try {
+      const destFolder = await withRetry(
+        () => drive.files.get({
+          fileId: destinationFolderId,
+          fields: 'name',
+          supportsAllDrives: true
+        }),
+        { operationName: 'getDestinationFolder' }
+      );
+      destName = destFolder.data.name || destinationFolderId;
+    } catch {
+      return errorResponse(`Destination folder not found: ${destinationFolderId}`);
+    }
+  }
+
+  const { success: moved, failed } = await processBatchOperation(
+    data.fileIds,
+    async (fileId) => {
+      const file = await drive.files.get({
+        fileId,
+        fields: 'name, parents',
+        supportsAllDrives: true
+      });
+
+      const previousParents = (file.data.parents || []).join(',');
+
+      await drive.files.update({
+        fileId,
+        addParents: destinationFolderId,
+        removeParents: previousParents,
+        supportsAllDrives: true
+      });
+
+      return { fileId, name: file.data.name };
+    },
+    context,
+    { operationName: `Moving files to "${destName}"` }
+  );
+
+  const summary = `Batch move to "${destName}": ${moved.length} succeeded, ${failed.length} failed`;
+  log(summary, { moved: moved.length, failed: failed.length });
+
+  return structuredResponse(
+    summary +
+    (moved.length > 0 ? `\n\nMoved: ${moved.map(m => m.name || m.fileId).join(', ')}` : '') +
+    (failed.length > 0 ? `\n\nFailed: ${failed.map(f => `${f.id}: ${f.error}`).join(', ')}` : ''),
+    { moved, failed, destinationFolder: { id: destinationFolderId, name: destName } }
+  );
+}
+
+export async function handleBatchShare(
+  drive: drive_v3.Drive,
+  args: unknown,
+  context?: HandlerContext
+): Promise<ToolResponse> {
+  const validation = BatchShareSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const { success: shared, failed } = await processBatchOperation(
+    data.fileIds,
+    async (fileId) => {
+      const file = await drive.files.get({
+        fileId,
+        fields: 'name',
+        supportsAllDrives: true
+      });
+
+      await drive.permissions.create({
+        fileId,
+        requestBody: {
+          role: data.role,
+          type: 'user',
+          emailAddress: data.email
+        },
+        sendNotificationEmail: data.sendNotification,
+        supportsAllDrives: true
+      });
+
+      return { fileId, name: file.data.name };
+    },
+    context,
+    { operationName: `Sharing files with ${data.email}` }
+  );
+
+  const summary = `Batch share with ${data.email} (${data.role}): ${shared.length} succeeded, ${failed.length} failed`;
+  log(summary, { shared: shared.length, failed: failed.length });
+
+  return structuredResponse(
+    summary +
+    (shared.length > 0 ? `\n\nShared: ${shared.map(s => s.name || s.fileId).join(', ')}` : '') +
+    (failed.length > 0 ? `\n\nFailed: ${failed.map(f => `${f.id}: ${f.error}`).join(', ')}` : ''),
+    { shared, failed, shareDetails: { email: data.email, role: data.role } }
+  );
+}
+
+// -----------------------------------------------------------------------------
+// PERMISSION MANAGEMENT
+// -----------------------------------------------------------------------------
+
+export async function handleRemovePermission(
+  drive: drive_v3.Drive,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = RemovePermissionSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get file name for reporting
+  const file = await drive.files.get({
+    fileId: data.fileId,
+    fields: 'name',
+    supportsAllDrives: true
+  });
+
+  let permissionIdToRemove = data.permissionId;
+
+  // If email provided, look up the permission ID
+  if (data.email && !permissionIdToRemove) {
+    const permissions = await drive.permissions.list({
+      fileId: data.fileId,
+      fields: 'permissions(id, emailAddress, role)',
+      supportsAllDrives: true
+    });
+
+    const permission = (permissions.data.permissions || []).find(
+      p => p.emailAddress?.toLowerCase() === data.email!.toLowerCase()
+    );
+
+    if (!permission) {
+      // List current permissions for context
+      const currentPerms = (permissions.data.permissions || [])
+        .map(p => `${p.emailAddress || 'anonymous'} (${p.role})`)
+        .join(', ');
+
+      return errorResponse(
+        `No permission found for email "${data.email}" on file "${file.data.name}". ` +
+        `Current permissions: ${currentPerms || 'none'}`
+      );
+    }
+
+    // Check if this is the owner
+    if (permission.role === 'owner') {
+      return errorResponse(
+        `Cannot remove owner permission for "${data.email}". ` +
+        `Transfer ownership first if you want to remove this user's access.`
+      );
+    }
+
+    permissionIdToRemove = permission.id!;
+  }
+
+  // Check if trying to remove owner by permissionId
+  if (permissionIdToRemove) {
+    const permDetails = await drive.permissions.get({
+      fileId: data.fileId,
+      permissionId: permissionIdToRemove,
+      fields: 'role, emailAddress',
+      supportsAllDrives: true
+    });
+
+    if (permDetails.data.role === 'owner') {
+      return errorResponse(
+        `Cannot remove owner permission (${permDetails.data.emailAddress}). ` +
+        `Transfer ownership first if you want to remove this user's access.`
+      );
+    }
+  }
+
+  await drive.permissions.delete({
+    fileId: data.fileId,
+    permissionId: permissionIdToRemove!,
+    supportsAllDrives: true
+  });
+
+  log('Permission removed successfully', { fileId: data.fileId, permissionId: permissionIdToRemove });
+  return successResponse(
+    `Removed permission from "${file.data.name}"` +
+    (data.email ? ` for ${data.email}` : ` (permission ID: ${permissionIdToRemove})`)
+  );
+}
+
+// -----------------------------------------------------------------------------
+// TRASH MANAGEMENT
+// -----------------------------------------------------------------------------
+
+export async function handleListTrash(
+  drive: drive_v3.Drive,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = ListTrashSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  const response = await withTimeout(
+    drive.files.list({
+      q: 'trashed = true',
+      pageSize: data.pageSize,
+      pageToken: data.pageToken,
+      fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size, trashedTime)',
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
+    }),
+    30000,
+    'List trash'
+  );
+
+  const files = response.data.files || [];
+
+  if (files.length === 0) {
+    return structuredResponse('Trash is empty', {
+      files: [],
+      nextPageToken: null
+    });
+  }
+
+  const formatSize = (size: string | null | undefined): string => {
+    if (!size) return 'N/A';
+    const num = parseInt(size);
+    if (num >= 1048576) return `${(num / 1048576).toFixed(1)} MB`;
+    if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`;
+    return `${num} B`;
+  };
+
+  const fileList = files.map(f => {
+    const icon = f.mimeType === FOLDER_MIME_TYPE ? '📁' : '📄';
+    const size = f.mimeType === FOLDER_MIME_TYPE ? '' : ` (${formatSize(f.size)})`;
+    return `${icon} ${f.name}${size} - ID: ${f.id}`;
+  }).join('\n');
+
+  const textResponse = `Trash contents (${files.length} items):\n\n${fileList}` +
+    (response.data.nextPageToken ? '\n\n(More items available - use nextPageToken to continue)' : '');
+
+  return structuredResponse(textResponse, {
+    files: files.map(f => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: f.size,
+      trashedTime: f.trashedTime
+    })),
+    nextPageToken: response.data.nextPageToken || null
+  });
+}
+
+export async function handleRestoreFromTrash(
+  drive: drive_v3.Drive,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = RestoreFromTrashSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get file info
+  const file = await drive.files.get({
+    fileId: data.fileId,
+    fields: 'name, trashed',
+    supportsAllDrives: true
+  });
+
+  if (!file.data.trashed) {
+    return errorResponse(`File "${file.data.name}" is not in trash`);
+  }
+
+  await drive.files.update({
+    fileId: data.fileId,
+    requestBody: { trashed: false },
+    supportsAllDrives: true
+  });
+
+  log('File restored from trash', { fileId: data.fileId });
+  return successResponse(`Restored "${file.data.name}" from trash`);
+}
+
+export async function handleEmptyTrash(
+  drive: drive_v3.Drive,
+  args: unknown,
+  context?: HandlerContext
+): Promise<ToolResponse> {
+  const validation = EmptyTrashSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Count items in trash first
+  const listParams: { q: string; fields: string; pageSize: number; driveId?: string; corpora?: string } = {
+    q: 'trashed = true',
+    fields: 'files(id, name)',
+    pageSize: 1000
+  };
+
+  // If driveId is specified, query that shared drive's trash
+  if (data.driveId) {
+    listParams.driveId = data.driveId;
+    listParams.corpora = 'drive';
+  }
+
+  const trashContents = await drive.files.list(listParams);
+
+  const itemCount = trashContents.data.files?.length || 0;
+
+  if (itemCount === 0) {
+    return successResponse(data.driveId ? 'Shared drive trash is already empty' : 'Trash is already empty');
+  }
+
+  // Use elicitation for confirmation if context available
+  if (context?.server) {
+    const sampleFiles = (trashContents.data.files || [])
+      .slice(0, 5)
+      .map(f => f.name)
+      .join(', ');
+    const moreText = itemCount > 5 ? ` and ${itemCount - 5} more` : '';
+
+    const confirmResult = await elicitConfirmation(
+      context.server,
+      `Permanently delete ${itemCount} item(s) from ${data.driveId ? 'shared drive ' : ''}trash?`,
+      `This action cannot be undone. Files: ${sampleFiles}${moreText}`
+    );
+
+    if (confirmResult.cancelled) {
+      return errorResponse('Empty trash operation cancelled');
+    }
+
+    if (!confirmResult.confirmed) {
+      return errorResponse(
+        `Empty trash requires confirmation. ${itemCount} item(s) will be permanently deleted. ` +
+        `Files include: ${sampleFiles}${moreText}`
+      );
+    }
+  }
+
+  // Empty trash - pass driveId if specified for shared drives
+  await drive.files.emptyTrash(data.driveId ? { driveId: data.driveId } : {});
+
+  log('Trash emptied', { itemCount, driveId: data.driveId });
+  return successResponse(
+    data.driveId
+      ? `Permanently deleted ${itemCount} item(s) from shared drive trash`
+      : `Permanently deleted ${itemCount} item(s) from trash`
+  );
+}
+
+// -----------------------------------------------------------------------------
+// FOLDER TREE DISCOVERY
+// -----------------------------------------------------------------------------
+
+interface FolderTreeNode {
+  id: string;
+  name: string;
+  type: 'folder' | 'file';
+  mimeType?: string;
+  children?: FolderTreeNode[];
+}
+
+async function buildFolderTree(
+  drive: drive_v3.Drive,
+  folderId: string,
+  folderName: string,
+  currentDepth: number,
+  maxDepth: number
+): Promise<FolderTreeNode> {
+  const node: FolderTreeNode = {
+    id: folderId,
+    name: folderName,
+    type: 'folder'
+  };
+
+  if (currentDepth >= maxDepth) {
+    return node;
+  }
+
+  // List contents of this folder
+  const response = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: 'files(id, name, mimeType)',
+    pageSize: 100,
+    orderBy: 'folder,name',
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true
+  });
+
+  const files = response.data.files || [];
+  const children: FolderTreeNode[] = [];
+
+  for (const file of files) {
+    if (file.mimeType === FOLDER_MIME_TYPE) {
+      // Recursively build tree for subfolders
+      const childNode = await buildFolderTree(
+        drive,
+        file.id!,
+        file.name!,
+        currentDepth + 1,
+        maxDepth
+      );
+      children.push(childNode);
+    } else {
+      // Add file node
+      children.push({
+        id: file.id!,
+        name: file.name!,
+        type: 'file',
+        mimeType: file.mimeType || undefined
+      });
+    }
+  }
+
+  if (children.length > 0) {
+    node.children = children;
+  }
+
+  return node;
+}
+
+function formatTreeAsText(node: FolderTreeNode, indent: string = '', isLast: boolean = true): string {
+  const prefix = indent + (isLast ? '└── ' : '├── ');
+  const icon = node.type === 'folder' ? '📁' : '📄';
+  let result = prefix + icon + ' ' + node.name + '\n';
+
+  if (node.children) {
+    const childIndent = indent + (isLast ? '    ' : '│   ');
+    node.children.forEach((child, index) => {
+      const isLastChild = index === node.children!.length - 1;
+      result += formatTreeAsText(child, childIndent, isLastChild);
+    });
+  }
+
+  return result;
+}
+
+export async function handleGetFolderTree(
+  drive: drive_v3.Drive,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = GetFolderTreeSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Resolve folder ID
+  const folderId = await resolveOptionalFolderPath(drive, data.folderId, data.folderPath);
+
+  // Get folder name
+  let folderName = 'My Drive';
+  let folderPath = '/';
+
+  if (folderId !== 'root') {
+    const folder = await drive.files.get({
+      fileId: folderId,
+      fields: 'name',
+      supportsAllDrives: true
+    });
+    folderName = folder.data.name || folderId;
+    folderPath = data.folderPath || `/${folderName}`;
+  }
+
+  // Build tree structure
+  const tree = await buildFolderTree(drive, folderId, folderName, 0, data.depth || 2);
+
+  // Format as text
+  const treeText = '📁 ' + folderName + '\n' + (tree.children
+    ? tree.children.map((child, index) =>
+        formatTreeAsText(child, '', index === tree.children!.length - 1)
+      ).join('')
+    : '(empty)');
+
+  return structuredResponse(treeText, {
+    id: folderId,
+    name: folderName,
+    path: folderPath,
+    children: tree.children || []
+  });
 }

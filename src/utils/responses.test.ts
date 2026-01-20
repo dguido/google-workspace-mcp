@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { successResponse, errorResponse } from './responses.js';
+import { successResponse, structuredResponse, errorResponse } from './responses.js';
 
 vi.mock('./logging.js', () => ({
   log: vi.fn()
@@ -20,6 +20,27 @@ describe('successResponse', () => {
       content: [{ type: 'text', text: '' }],
       isError: false
     });
+  });
+});
+
+describe('structuredResponse', () => {
+  it('returns correct structure with text and data', () => {
+    const result = structuredResponse('File metadata', { id: '123', name: 'test.txt' });
+    expect(result).toEqual({
+      content: [{ type: 'text', text: 'File metadata' }],
+      structuredContent: { id: '123', name: 'test.txt' },
+      isError: false
+    });
+  });
+
+  it('handles nested data structures', () => {
+    const data = {
+      user: { name: 'John', email: 'john@example.com' },
+      permissions: [{ role: 'reader' }, { role: 'writer' }]
+    };
+    const result = structuredResponse('Sharing info', data);
+    expect(result.structuredContent).toEqual(data);
+    expect(result.isError).toBe(false);
   });
 });
 

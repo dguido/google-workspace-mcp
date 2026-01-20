@@ -1,15 +1,42 @@
 import type { drive_v3, docs_v1 } from 'googleapis';
-import { log, successResponse, errorResponse } from '../utils/index.js';
+import { log, successResponse, structuredResponse, errorResponse, withTimeout } from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
 import {
   CreateGoogleDocSchema,
   UpdateGoogleDocSchema,
-  FormatGoogleDocTextSchema,
-  FormatGoogleDocParagraphSchema,
   GetGoogleDocContentSchema,
-  AppendToDocSchema
+  AppendToDocSchema,
+  InsertTextInDocSchema,
+  DeleteTextInDocSchema,
+  ReplaceTextInDocSchema,
+  FormatGoogleDocRangeSchema
 } from '../schemas/index.js';
-import { resolveFolderId, checkFileExists } from './helpers.js';
+import { resolveOptionalFolderPath, checkFileExists } from './helpers.js';
+
+/**
+ * Get the end index of a Google Doc's content.
+ * Used for calculating document length and insert positions.
+ */
+function getDocumentEndIndex(document: docs_v1.Schema$Document): number {
+  const content = document.body?.content;
+  if (!content || content.length === 0) return 1;
+  return content[content.length - 1]?.endIndex || 1;
+}
+
+/**
+ * Convert RGB color object to Google Docs color style format.
+ */
+function toDocsColorStyle(color: { red?: number; green?: number; blue?: number }) {
+  return {
+    color: {
+      rgbColor: {
+        red: color.red || 0,
+        green: color.green || 0,
+        blue: color.blue || 0
+      }
+    }
+  };
+}
 
 export async function handleCreateGoogleDoc(
   drive: drive_v3.Drive,
@@ -22,7 +49,7 @@ export async function handleCreateGoogleDoc(
   }
   const data = validation.data;
 
-  const parentFolderId = await resolveFolderId(drive, data.parentFolderId);
+  const parentFolderId = await resolveOptionalFolderPath(drive, data.parentFolderId, data.parentPath);
 
   // Check if document already exists
   const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
@@ -101,10 +128,7 @@ export async function handleUpdateGoogleDoc(
   const document = await docs.documents.get({ documentId: data.documentId });
 
   // Delete all content
-  // End index of last piece of content (body's last element, fallback to 1 if none)
-  const endIndex = document.data.body?.content?.[
-    document.data.body.content.length - 1
-  ]?.endIndex || 1;
+  const endIndex = getDocumentEndIndex(document.data);
 
   // Google Docs API doesn't allow deleting the final newline character
   // We need to leave at least one character in the document
@@ -151,162 +175,6 @@ export async function handleUpdateGoogleDoc(
   return successResponse(`Updated Google Doc: ${document.data.title}`);
 }
 
-export async function handleFormatGoogleDocText(
-  docs: docs_v1.Docs,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = FormatGoogleDocTextSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  // Build text style object
-  const textStyle: Record<string, unknown> = {};
-  const fields: string[] = [];
-
-  if (data.bold !== undefined) {
-    textStyle.bold = data.bold;
-    fields.push('bold');
-  }
-
-  if (data.italic !== undefined) {
-    textStyle.italic = data.italic;
-    fields.push('italic');
-  }
-
-  if (data.underline !== undefined) {
-    textStyle.underline = data.underline;
-    fields.push('underline');
-  }
-
-  if (data.strikethrough !== undefined) {
-    textStyle.strikethrough = data.strikethrough;
-    fields.push('strikethrough');
-  }
-
-  if (data.fontSize !== undefined) {
-    textStyle.fontSize = {
-      magnitude: data.fontSize,
-      unit: 'PT'
-    };
-    fields.push('fontSize');
-  }
-
-  if (data.foregroundColor) {
-    textStyle.foregroundColor = {
-      color: {
-        rgbColor: {
-          red: data.foregroundColor.red || 0,
-          green: data.foregroundColor.green || 0,
-          blue: data.foregroundColor.blue || 0
-        }
-      }
-    };
-    fields.push('foregroundColor');
-  }
-
-  if (fields.length === 0) {
-    return errorResponse(
-      "No formatting options specified. Provide at least one of: " +
-      "bold, italic, underline, strikethrough, fontSize, foregroundColor."
-    );
-  }
-
-  await docs.documents.batchUpdate({
-    documentId: data.documentId,
-    requestBody: {
-      requests: [{
-        updateTextStyle: {
-          range: {
-            startIndex: data.startIndex,
-            endIndex: data.endIndex
-          },
-          textStyle,
-          fields: fields.join(',')
-        }
-      }]
-    }
-  });
-
-  return successResponse(
-    `Applied text formatting to range ${data.startIndex}-${data.endIndex}`
-  );
-}
-
-export async function handleFormatGoogleDocParagraph(
-  docs: docs_v1.Docs,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = FormatGoogleDocParagraphSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
-  const data = validation.data;
-
-  // Build paragraph style object
-  const paragraphStyle: Record<string, unknown> = {};
-  const fields: string[] = [];
-
-  if (data.namedStyleType !== undefined) {
-    paragraphStyle.namedStyleType = data.namedStyleType;
-    fields.push('namedStyleType');
-  }
-
-  if (data.alignment !== undefined) {
-    paragraphStyle.alignment = data.alignment;
-    fields.push('alignment');
-  }
-
-  if (data.lineSpacing !== undefined) {
-    paragraphStyle.lineSpacing = data.lineSpacing;
-    fields.push('lineSpacing');
-  }
-
-  if (data.spaceAbove !== undefined) {
-    paragraphStyle.spaceAbove = {
-      magnitude: data.spaceAbove,
-      unit: 'PT'
-    };
-    fields.push('spaceAbove');
-  }
-
-  if (data.spaceBelow !== undefined) {
-    paragraphStyle.spaceBelow = {
-      magnitude: data.spaceBelow,
-      unit: 'PT'
-    };
-    fields.push('spaceBelow');
-  }
-
-  if (fields.length === 0) {
-    return errorResponse(
-      "No paragraph formatting options specified. Provide at least one of: " +
-      "namedStyleType, alignment, lineSpacing, spaceAbove, spaceBelow."
-    );
-  }
-
-  await docs.documents.batchUpdate({
-    documentId: data.documentId,
-    requestBody: {
-      requests: [{
-        updateParagraphStyle: {
-          range: {
-            startIndex: data.startIndex,
-            endIndex: data.endIndex
-          },
-          paragraphStyle,
-          fields: fields.join(',')
-        }
-      }]
-    }
-  });
-
-  return successResponse(
-    `Applied paragraph formatting to range ${data.startIndex}-${data.endIndex}`
-  );
-}
-
 export async function handleGetGoogleDocContent(
   docs: docs_v1.Docs,
   args: unknown
@@ -317,8 +185,13 @@ export async function handleGetGoogleDocContent(
   }
   const data = validation.data;
 
-  const document = await docs.documents.get({ documentId: data.documentId });
+  const document = await withTimeout(
+    docs.documents.get({ documentId: data.documentId }),
+    30000,
+    'Get document content'
+  );
 
+  const contentSegments: Array<{ startIndex: number; endIndex: number; text: string }> = [];
   let content = '';
   let currentIndex = 1;
 
@@ -329,8 +202,14 @@ export async function handleGetGoogleDocContent(
         for (const textElement of element.paragraph.elements) {
           if (textElement.textRun?.content) {
             const text = textElement.textRun.content;
+            const startIdx = currentIndex;
             content += text;
             currentIndex += text.length;
+            contentSegments.push({
+              startIndex: startIdx,
+              endIndex: currentIndex,
+              text: text
+            });
           }
         }
       }
@@ -351,9 +230,14 @@ export async function handleGetGoogleDocContent(
     lineStart = lineEnd + 1; // +1 for the newline character
   }
 
-  return successResponse(
-    formattedContent + `\nTotal length: ${content.length} characters`
-  );
+  const textResponse = formattedContent + `\nTotal length: ${content.length} characters`;
+
+  return structuredResponse(textResponse, {
+    documentId: data.documentId,
+    title: document.data.title,
+    content: contentSegments,
+    totalLength: content.length
+  });
 }
 
 export async function handleAppendToDoc(
@@ -368,12 +252,7 @@ export async function handleAppendToDoc(
 
   // Get document to find end index
   const document = await docs.documents.get({ documentId: data.documentId });
-
-  // Find the end index of the document content
-  // body.content[last].endIndex gives us the position after the last character
-  const bodyContent = document.data.body?.content || [];
-  const lastElement = bodyContent[bodyContent.length - 1];
-  const endIndex = lastElement?.endIndex || 1;
+  const endIndex = getDocumentEndIndex(document.data);
 
   // Insert at end index - 1 (before the final newline)
   const insertIndex = Math.max(1, endIndex - 1);
@@ -397,5 +276,264 @@ export async function handleAppendToDoc(
 
   return successResponse(
     `Appended ${data.text.length} characters to document "${document.data.title}"`
+  );
+}
+
+export async function handleInsertTextInDoc(
+  docs: docs_v1.Docs,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = InsertTextInDocSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get document to validate index and get title
+  const document = await docs.documents.get({ documentId: data.documentId });
+  const docLength = getDocumentEndIndex(document.data);
+
+  if (data.index >= docLength) {
+    return errorResponse(
+      `Index ${data.index} is beyond the document length (${docLength - 1} characters). ` +
+      `Use appendToDoc to add text at the end, or specify an index between 1 and ${docLength - 1}.`
+    );
+  }
+
+  await docs.documents.batchUpdate({
+    documentId: data.documentId,
+    requestBody: {
+      requests: [{
+        insertText: {
+          location: { index: data.index },
+          text: data.text
+        }
+      }]
+    }
+  });
+
+  log('Text inserted into document', { documentId: data.documentId, index: data.index, textLength: data.text.length });
+
+  return successResponse(
+    `Inserted ${data.text.length} characters at index ${data.index} in "${document.data.title}"`
+  );
+}
+
+export async function handleDeleteTextInDoc(
+  docs: docs_v1.Docs,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = DeleteTextInDocSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get document to validate indices and get title
+  const document = await docs.documents.get({ documentId: data.documentId });
+  const docLength = getDocumentEndIndex(document.data);
+
+  if (data.endIndex > docLength) {
+    return errorResponse(
+      `End index ${data.endIndex} is beyond the document length (${docLength - 1} characters). ` +
+      `Valid range is 1 to ${docLength - 1}.`
+    );
+  }
+
+  const charsToDelete = data.endIndex - data.startIndex;
+
+  await docs.documents.batchUpdate({
+    documentId: data.documentId,
+    requestBody: {
+      requests: [{
+        deleteContentRange: {
+          range: {
+            startIndex: data.startIndex,
+            endIndex: data.endIndex
+          }
+        }
+      }]
+    }
+  });
+
+  log('Text deleted from document', { documentId: data.documentId, startIndex: data.startIndex, endIndex: data.endIndex });
+
+  return successResponse(
+    `Deleted ${charsToDelete} characters (indices ${data.startIndex}-${data.endIndex}) from "${document.data.title}"`
+  );
+}
+
+export async function handleReplaceTextInDoc(
+  docs: docs_v1.Docs,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = ReplaceTextInDocSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get document title
+  const document = await docs.documents.get({ documentId: data.documentId });
+
+  const response = await docs.documents.batchUpdate({
+    documentId: data.documentId,
+    requestBody: {
+      requests: [{
+        replaceAllText: {
+          containsText: {
+            text: data.searchText,
+            matchCase: data.matchCase
+          },
+          replaceText: data.replaceText
+        }
+      }]
+    }
+  });
+
+  // Get the number of replacements made
+  const occurrencesChanged = response.data.replies?.[0]?.replaceAllText?.occurrencesChanged || 0;
+
+  log('Text replaced in document', { documentId: data.documentId, occurrences: occurrencesChanged });
+
+  if (occurrencesChanged === 0) {
+    return successResponse(
+      `No occurrences of "${data.searchText}" found in "${document.data.title}"`
+    );
+  }
+
+  return successResponse(
+    `Replaced ${occurrencesChanged} occurrence(s) of "${data.searchText}" with "${data.replaceText}" in "${document.data.title}"`
+  );
+}
+
+export async function handleFormatGoogleDocRange(
+  docs: docs_v1.Docs,
+  args: unknown
+): Promise<ToolResponse> {
+  const validation = FormatGoogleDocRangeSchema.safeParse(args);
+  if (!validation.success) {
+    return errorResponse(validation.error.errors[0].message);
+  }
+  const data = validation.data;
+
+  // Get document to determine range if not provided
+  const document = await docs.documents.get({ documentId: data.documentId });
+  const docEndIndex = getDocumentEndIndex(document.data);
+
+  // Default to entire document if no range specified
+  const startIndex = data.startIndex ?? 1;
+  const endIndex = data.endIndex ?? docEndIndex;
+
+  // Build requests array for batch update
+  const requests: docs_v1.Schema$Request[] = [];
+  const formatsApplied: string[] = [];
+
+  // Check for text formatting options
+  const textStyle: Record<string, unknown> = {};
+  const textFields: string[] = [];
+
+  if (data.bold !== undefined) {
+    textStyle.bold = data.bold;
+    textFields.push('bold');
+  }
+  if (data.italic !== undefined) {
+    textStyle.italic = data.italic;
+    textFields.push('italic');
+  }
+  if (data.underline !== undefined) {
+    textStyle.underline = data.underline;
+    textFields.push('underline');
+  }
+  if (data.strikethrough !== undefined) {
+    textStyle.strikethrough = data.strikethrough;
+    textFields.push('strikethrough');
+  }
+  if (data.fontSize !== undefined) {
+    textStyle.fontSize = { magnitude: data.fontSize, unit: 'PT' };
+    textFields.push('fontSize');
+  }
+  if (data.fontFamily !== undefined) {
+    textStyle.weightedFontFamily = { fontFamily: data.fontFamily };
+    textFields.push('weightedFontFamily');
+  }
+  if (data.foregroundColor) {
+    textStyle.foregroundColor = toDocsColorStyle(data.foregroundColor);
+    textFields.push('foregroundColor');
+  }
+
+  // Add text style request if any text options provided
+  if (textFields.length > 0) {
+    requests.push({
+      updateTextStyle: {
+        range: { startIndex, endIndex },
+        textStyle,
+        fields: textFields.join(',')
+      }
+    });
+    formatsApplied.push(...textFields);
+  }
+
+  // Check for paragraph formatting options
+  const paragraphStyle: Record<string, unknown> = {};
+  const paragraphFields: string[] = [];
+
+  if (data.namedStyleType !== undefined) {
+    paragraphStyle.namedStyleType = data.namedStyleType;
+    paragraphFields.push('namedStyleType');
+  }
+  if (data.alignment !== undefined) {
+    paragraphStyle.alignment = data.alignment;
+    paragraphFields.push('alignment');
+  }
+  if (data.lineSpacing !== undefined) {
+    paragraphStyle.lineSpacing = data.lineSpacing;
+    paragraphFields.push('lineSpacing');
+  }
+  if (data.spaceAbove !== undefined) {
+    paragraphStyle.spaceAbove = { magnitude: data.spaceAbove, unit: 'PT' };
+    paragraphFields.push('spaceAbove');
+  }
+  if (data.spaceBelow !== undefined) {
+    paragraphStyle.spaceBelow = { magnitude: data.spaceBelow, unit: 'PT' };
+    paragraphFields.push('spaceBelow');
+  }
+
+  // Add paragraph style request if any paragraph options provided
+  if (paragraphFields.length > 0) {
+    requests.push({
+      updateParagraphStyle: {
+        range: { startIndex, endIndex },
+        paragraphStyle,
+        fields: paragraphFields.join(',')
+      }
+    });
+    formatsApplied.push(...paragraphFields);
+  }
+
+  // Validate at least one formatting option was provided
+  if (requests.length === 0) {
+    return errorResponse(
+      "No formatting options specified. Provide at least one of: " +
+      "bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor, " +
+      "namedStyleType, alignment, lineSpacing, spaceAbove, spaceBelow."
+    );
+  }
+
+  // Execute batch update
+  await docs.documents.batchUpdate({
+    documentId: data.documentId,
+    requestBody: { requests }
+  });
+
+  log('Applied formatting to document range', {
+    documentId: data.documentId,
+    startIndex,
+    endIndex,
+    formatsApplied
+  });
+
+  return successResponse(
+    `Applied formatting to range ${startIndex}-${endIndex}: ${formatsApplied.join(', ')}`
   );
 }

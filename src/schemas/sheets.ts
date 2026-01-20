@@ -1,10 +1,19 @@
 import { z } from 'zod';
 
+export const ListSheetTabsSchema = z.object({
+  spreadsheetId: z.string().min(1, "Spreadsheet ID is required")
+});
+
+export type ListSheetTabsInput = z.infer<typeof ListSheetTabsSchema>;
+
 export const CreateGoogleSheetSchema = z.object({
   name: z.string().min(1, "Sheet name is required"),
   data: z.array(z.array(z.string())),
   parentFolderId: z.string().optional(),
+  parentPath: z.string().optional(),
   valueInputOption: z.enum(["RAW", "USER_ENTERED"]).optional()
+}).refine(data => !(data.parentFolderId && data.parentPath), {
+  message: "Provide either parentFolderId or parentPath, not both"
 });
 
 export const UpdateGoogleSheetSchema = z.object({
@@ -19,61 +28,46 @@ export const GetGoogleSheetContentSchema = z.object({
   range: z.string().min(1, "Range is required")
 });
 
+// Color schema reused across formatting options
+const ColorSchema = z.object({
+  red: z.number().min(0).max(1).optional(),
+  green: z.number().min(0).max(1).optional(),
+  blue: z.number().min(0).max(1).optional()
+});
+
 export const FormatGoogleSheetCellsSchema = z.object({
   spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
   range: z.string().min(1, "Range is required"),
-  backgroundColor: z.object({
-    red: z.number().min(0).max(1).optional(),
-    green: z.number().min(0).max(1).optional(),
-    blue: z.number().min(0).max(1).optional()
-  }).optional(),
+  // Cell formatting
+  backgroundColor: ColorSchema.optional(),
   horizontalAlignment: z.enum(["LEFT", "CENTER", "RIGHT"]).optional(),
   verticalAlignment: z.enum(["TOP", "MIDDLE", "BOTTOM"]).optional(),
-  wrapStrategy: z.enum(["OVERFLOW_CELL", "CLIP", "WRAP"]).optional()
-});
-
-export const FormatGoogleSheetTextSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-  range: z.string().min(1, "Range is required"),
+  wrapStrategy: z.enum(["OVERFLOW_CELL", "CLIP", "WRAP"]).optional(),
+  // Text formatting
   bold: z.boolean().optional(),
   italic: z.boolean().optional(),
   strikethrough: z.boolean().optional(),
   underline: z.boolean().optional(),
   fontSize: z.number().min(1).optional(),
   fontFamily: z.string().optional(),
-  foregroundColor: z.object({
-    red: z.number().min(0).max(1).optional(),
-    green: z.number().min(0).max(1).optional(),
-    blue: z.number().min(0).max(1).optional()
-  }).optional()
-});
-
-export const FormatGoogleSheetNumbersSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-  range: z.string().min(1, "Range is required"),
-  pattern: z.string().min(1, "Pattern is required"),
-  type: z.enum([
-    "NUMBER", "CURRENCY", "PERCENT",
-    "DATE", "TIME", "DATE_TIME", "SCIENTIFIC"
-  ]).optional()
-});
-
-export const SetGoogleSheetBordersSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-  range: z.string().min(1, "Range is required"),
-  style: z.enum(["SOLID", "DASHED", "DOTTED", "DOUBLE"]),
-  width: z.number().min(1).max(3).optional(),
-  color: z.object({
-    red: z.number().min(0).max(1).optional(),
-    green: z.number().min(0).max(1).optional(),
-    blue: z.number().min(0).max(1).optional()
+  foregroundColor: ColorSchema.optional(),
+  // Number formatting
+  numberFormat: z.object({
+    pattern: z.string(),
+    type: z.enum(["NUMBER", "CURRENCY", "PERCENT", "DATE", "TIME", "DATE_TIME", "SCIENTIFIC"]).optional()
   }).optional(),
-  top: z.boolean().optional(),
-  bottom: z.boolean().optional(),
-  left: z.boolean().optional(),
-  right: z.boolean().optional(),
-  innerHorizontal: z.boolean().optional(),
-  innerVertical: z.boolean().optional()
+  // Border formatting
+  borders: z.object({
+    style: z.enum(["SOLID", "DASHED", "DOTTED", "DOUBLE"]),
+    width: z.number().min(1).max(3).optional(),
+    color: ColorSchema.optional(),
+    top: z.boolean().optional(),
+    bottom: z.boolean().optional(),
+    left: z.boolean().optional(),
+    right: z.boolean().optional(),
+    innerHorizontal: z.boolean().optional(),
+    innerVertical: z.boolean().optional()
+  }).optional()
 });
 
 export const MergeGoogleSheetCellsSchema = z.object({
@@ -132,9 +126,6 @@ export type CreateGoogleSheetInput = z.infer<typeof CreateGoogleSheetSchema>;
 export type UpdateGoogleSheetInput = z.infer<typeof UpdateGoogleSheetSchema>;
 export type GetGoogleSheetContentInput = z.infer<typeof GetGoogleSheetContentSchema>;
 export type FormatGoogleSheetCellsInput = z.infer<typeof FormatGoogleSheetCellsSchema>;
-export type FormatGoogleSheetTextInput = z.infer<typeof FormatGoogleSheetTextSchema>;
-export type FormatGoogleSheetNumbersInput = z.infer<typeof FormatGoogleSheetNumbersSchema>;
-export type SetGoogleSheetBordersInput = z.infer<typeof SetGoogleSheetBordersSchema>;
 export type MergeGoogleSheetCellsInput = z.infer<typeof MergeGoogleSheetCellsSchema>;
 export type AddGoogleSheetConditionalFormatInput = z.infer<typeof AddGoogleSheetConditionalFormatSchema>;
 export type CreateSheetTabInput = z.infer<typeof CreateSheetTabSchema>;

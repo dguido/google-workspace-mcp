@@ -4,9 +4,6 @@ import {
   UpdateGoogleSheetSchema,
   GetGoogleSheetContentSchema,
   FormatGoogleSheetCellsSchema,
-  FormatGoogleSheetTextSchema,
-  FormatGoogleSheetNumbersSchema,
-  SetGoogleSheetBordersSchema,
   MergeGoogleSheetCellsSchema,
   AddGoogleSheetConditionalFormatSchema
 } from './sheets.js';
@@ -118,11 +115,9 @@ describe('FormatGoogleSheetCellsSchema', () => {
     });
     expect(result.success).toBe(false);
   });
-});
 
-describe('FormatGoogleSheetTextSchema', () => {
-  it('accepts valid text formatting', () => {
-    const result = FormatGoogleSheetTextSchema.safeParse({
+  it('accepts text formatting options', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
       bold: true,
@@ -133,7 +128,7 @@ describe('FormatGoogleSheetTextSchema', () => {
   });
 
   it('accepts foregroundColor', () => {
-    const result = FormatGoogleSheetTextSchema.safeParse({
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
       foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 }
@@ -142,80 +137,80 @@ describe('FormatGoogleSheetTextSchema', () => {
   });
 
   it('rejects fontSize less than 1', () => {
-    const result = FormatGoogleSheetTextSchema.safeParse({
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
       fontSize: 0
     });
     expect(result.success).toBe(false);
   });
-});
 
-describe('FormatGoogleSheetNumbersSchema', () => {
-  it('accepts valid input', () => {
-    const result = FormatGoogleSheetNumbersSchema.safeParse({
+  it('accepts number format options', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:A10',
-      pattern: '$#,##0.00'
+      numberFormat: { pattern: '$#,##0.00' }
     });
     expect(result.success).toBe(true);
   });
 
-  it('accepts optional type', () => {
-    const result = FormatGoogleSheetNumbersSchema.safeParse({
+  it('accepts number format with type', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      pattern: '0.00%',
-      type: 'PERCENT'
+      numberFormat: { pattern: '0.00%', type: 'PERCENT' }
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects empty pattern', () => {
-    const result = FormatGoogleSheetNumbersSchema.safeParse({
+  it('accepts border options', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2',
+      borders: { style: 'SOLID' }
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts all border options', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
+      spreadsheetId: 'sheet123',
+      range: 'A1:B2',
+      borders: {
+        style: 'DASHED',
+        width: 2,
+        color: { red: 0, green: 0, blue: 0 },
+        top: true,
+        bottom: true,
+        left: false,
+        right: false,
+        innerHorizontal: true,
+        innerVertical: true
+      }
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects border width outside range', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      pattern: ''
+      borders: { style: 'SOLID', width: 5 }
     });
     expect(result.success).toBe(false);
   });
-});
 
-describe('SetGoogleSheetBordersSchema', () => {
-  it('accepts valid border style', () => {
-    const result = SetGoogleSheetBordersSchema.safeParse({
+  it('accepts combined formatting options', () => {
+    const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      style: 'SOLID'
+      backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
+      bold: true,
+      horizontalAlignment: 'CENTER',
+      numberFormat: { pattern: '#,##0' },
+      borders: { style: 'SOLID' }
     });
     expect(result.success).toBe(true);
-  });
-
-  it('accepts all optional border options', () => {
-    const result = SetGoogleSheetBordersSchema.safeParse({
-      spreadsheetId: 'sheet123',
-      range: 'A1:B2',
-      style: 'DASHED',
-      width: 2,
-      color: { red: 0, green: 0, blue: 0 },
-      top: true,
-      bottom: true,
-      left: false,
-      right: false,
-      innerHorizontal: true,
-      innerVertical: true
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects width outside range', () => {
-    const result = SetGoogleSheetBordersSchema.safeParse({
-      spreadsheetId: 'sheet123',
-      range: 'A1',
-      style: 'SOLID',
-      width: 5
-    });
-    expect(result.success).toBe(false);
   });
 });
 

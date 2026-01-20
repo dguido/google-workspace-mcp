@@ -5,9 +5,6 @@ import {
   handleUpdateGoogleSheet,
   handleGetGoogleSheetContent,
   handleFormatGoogleSheetCells,
-  handleFormatGoogleSheetText,
-  handleFormatGoogleSheetNumbers,
-  handleSetGoogleSheetBorders,
   handleMergeGoogleSheetCells,
   handleAddGoogleSheetConditionalFormat,
   handleCreateSheetTab,
@@ -18,7 +15,13 @@ import {
 vi.mock('../utils/index.js', () => ({
   log: vi.fn(),
   successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true })
+  structuredResponse: (text: string, data: Record<string, unknown>) => ({
+    content: [{ type: 'text', text }],
+    structuredContent: data,
+    isError: false
+  }),
+  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
+  withTimeout: <T>(promise: Promise<T>) => promise
 }));
 
 vi.mock('../utils/sheetCache.js', () => ({
@@ -170,7 +173,7 @@ describe('handleFormatGoogleSheetCells', () => {
     } as never);
   });
 
-  it('formats cells successfully', async () => {
+  it('formats cells with background color', async () => {
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleFormatGoogleSheetCells(mockSheets, {
@@ -180,6 +183,72 @@ describe('handleFormatGoogleSheetCells', () => {
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Formatted cells');
+    expect(result.content[0].text).toContain('cell');
+  });
+
+  it('formats cells with text formatting', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'Sheet1!A1:B2',
+      bold: true,
+      italic: true,
+      fontSize: 14
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Formatted cells');
+    expect(result.content[0].text).toContain('text');
+  });
+
+  it('formats cells with number formatting', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'Sheet1!A1:A10',
+      numberFormat: { pattern: '$#,##0.00', type: 'CURRENCY' }
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Formatted cells');
+    expect(result.content[0].text).toContain('number');
+  });
+
+  it('formats cells with borders', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'Sheet1!A1:B2',
+      borders: { style: 'SOLID', width: 2 }
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Formatted cells');
+    expect(result.content[0].text).toContain('borders');
+  });
+
+  it('formats cells with multiple options combined', async () => {
+    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'Sheet1!A1:B2',
+      backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
+      bold: true,
+      horizontalAlignment: 'CENTER',
+      borders: { style: 'SOLID' }
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('Formatted cells');
+  });
+
+  it('returns error when no formatting options specified', async () => {
+    const result = await handleFormatGoogleSheetCells(mockSheets, {
+      spreadsheetId: 'sheet123',
+      range: 'Sheet1!A1:B2'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('No formatting options');
   });
 
   it('returns error when sheet not found', async () => {
@@ -194,85 +263,6 @@ describe('handleFormatGoogleSheetCells', () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
-  });
-});
-
-describe('handleFormatGoogleSheetText', () => {
-  let mockSheets: sheets_v4.Sheets;
-
-  beforeEach(() => {
-    mockSheets = createMockSheets();
-    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
-    } as never);
-  });
-
-  it('formats text successfully', async () => {
-    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleFormatGoogleSheetText(mockSheets, {
-      spreadsheetId: 'sheet123',
-      range: 'A1:B2',
-      bold: true,
-      fontSize: 14
-    });
-    expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain('Applied text formatting');
-  });
-});
-
-describe('handleFormatGoogleSheetNumbers', () => {
-  let mockSheets: sheets_v4.Sheets;
-
-  beforeEach(() => {
-    mockSheets = createMockSheets();
-    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
-    } as never);
-  });
-
-  it('applies number format successfully', async () => {
-    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleFormatGoogleSheetNumbers(mockSheets, {
-      spreadsheetId: 'sheet123',
-      range: 'A1:A10',
-      pattern: '$#,##0.00'
-    });
-    expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain('Applied number formatting');
-  });
-
-  it('returns error for empty pattern', async () => {
-    const result = await handleFormatGoogleSheetNumbers(mockSheets, {
-      spreadsheetId: 'sheet123',
-      range: 'A1',
-      pattern: ''
-    });
-    expect(result.isError).toBe(true);
-  });
-});
-
-describe('handleSetGoogleSheetBorders', () => {
-  let mockSheets: sheets_v4.Sheets;
-
-  beforeEach(() => {
-    mockSheets = createMockSheets();
-    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
-    } as never);
-  });
-
-  it('sets borders successfully', async () => {
-    vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
-
-    const result = await handleSetGoogleSheetBorders(mockSheets, {
-      spreadsheetId: 'sheet123',
-      range: 'A1:B2',
-      style: 'SOLID'
-    });
-    expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain('Set borders');
   });
 });
 
