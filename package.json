@@ -1,6 +1,6 @@
 {
     "name": "@dguido/google-drive-mcp",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Google Drive MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, and Slides through MCP clients e.g. Claude Desktop",
     "license": "MIT",
     "author": "Dan Guido <dan@trailofbits.com>",
