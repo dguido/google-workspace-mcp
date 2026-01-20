@@ -1,5 +1,5 @@
-# Use Node.js LTS as base image
-FROM node:22-slim
+# Use Node.js LTS as base image (pinned to SHA for reproducible builds)
+FROM node:22-slim@sha256:86e599964148a40e649d1f95028e18c2bb234c633ecaf954a290e58ec3af4bd4
 
 # Set working directory
 WORKDIR /app
