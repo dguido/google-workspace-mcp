@@ -27,16 +27,20 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Check npm version
-        run: npm --version
-
-      - name: Remove token auth from .npmrc (use OIDC instead)
+      - name: Upgrade npm for OIDC support
         run: |
-          # Remove the auth token line so npm uses OIDC trusted publishing
+          npm install -g npm@latest
+          npm --version
+
+      - name: Configure npm for OIDC (remove token auth)
+        run: |
+          # Remove token auth line from .npmrc so npm uses OIDC
           NPMRC="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           sed -i '/:_authToken/d' "$NPMRC"
-          echo "Contents of .npmrc ($NPMRC):"
+          echo "Contents of .npmrc:"
           cat "$NPMRC"
+          # Unset NODE_AUTH_TOKEN if set (empty string breaks OIDC)
+          unset NODE_AUTH_TOKEN || true
 
       - name: Install dependencies
         run: npm ci
@@ -49,12 +53,12 @@ jobs:
 
       - name: Publish (dry run)
         if: ${{ inputs.dry_run == true }}
-        run: npm publish --access public --provenance --dry-run
-        env:
-          NODE_AUTH_TOKEN: ''
+        run: |
+          unset NODE_AUTH_TOKEN
+          npm publish --access public --provenance --dry-run
 
       - name: Publish to npm
         if: ${{ inputs.dry_run != true }}
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ''
+        run: |
+          unset NODE_AUTH_TOKEN
+          npm publish --access public --provenance
