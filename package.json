@@ -61,7 +61,7 @@
         "zod": "^4.0.0"
     },
     "devDependencies": {
-        "oxfmt": "^0.7.0",
+        "oxfmt": "^0.24.0",
         "@types/node": "25.0.7",
         "@vitest/coverage-v8": "4.0.17",
         "esbuild": "0.27.2",
