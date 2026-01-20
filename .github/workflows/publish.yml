@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # Required for npm provenance
+      id-token: write  # Required for OIDC trusted publishing
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
@@ -27,10 +27,14 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Check npm version
+        run: npm --version
+
       - name: Remove token auth from .npmrc (use OIDC instead)
         run: |
           # Remove the auth token line so npm uses OIDC trusted publishing
           sed -i '/:_authToken/d' ~/.npmrc
+          echo "Contents of .npmrc:"
           cat ~/.npmrc
 
       - name: Install dependencies
@@ -46,6 +50,6 @@ jobs:
         if: ${{ inputs.dry_run == true }}
         run: npm publish --access public --dry-run
 
-      - name: Publish to npm with provenance
+      - name: Publish to npm
         if: ${{ inputs.dry_run != true }}
-        run: npm publish --access public --provenance
+        run: npm publish --access public
