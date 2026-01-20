@@ -19,7 +19,7 @@ const cache = new Map<string, CacheEntry>();
 
 export function getCachedSheetMetadata(
   spreadsheetId: string,
-  sheetName: string
+  sheetName: string,
 ): SheetMetadata | undefined {
   const entry = cache.get(spreadsheetId);
   if (!entry) return undefined;
@@ -35,7 +35,7 @@ export function getCachedSheetMetadata(
 
 export function setCachedSheetMetadata(
   spreadsheetId: string,
-  sheets: Array<{ title: string; sheetId: number }>
+  sheets: Array<{ title: string; sheetId: number }>,
 ): void {
   const sheetsMap = new Map<string, SheetMetadata>();
   for (const sheet of sheets) {

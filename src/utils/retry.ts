@@ -2,7 +2,7 @@
  * Retry utility with exponential backoff for Google API rate limiting
  */
 
-import { log } from './logging.js';
+import { log } from "./logging.js";
 
 export interface RetryOptions {
   /** Maximum number of retry attempts (default: 5) */
@@ -32,7 +32,7 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
   maxDelayMs: 60000,
   backoffMultiplier: 2,
   jitterFactor: 0.1,
-  operationName: 'API call',
+  operationName: "API call",
 };
 
 /**
@@ -50,11 +50,11 @@ const RETRYABLE_STATUS_CODES = [
  * Google API error reasons that indicate a retryable error
  */
 const RETRYABLE_REASONS = [
-  'rateLimitExceeded',
-  'userRateLimitExceeded',
-  'quotaExceeded',
-  'internalError',
-  'backendError',
+  "rateLimitExceeded",
+  "userRateLimitExceeded",
+  "quotaExceeded",
+  "internalError",
+  "backendError",
 ];
 
 /**
@@ -79,11 +79,11 @@ function isRetryableError(error: unknown): boolean {
   }
 
   // Check error message for rate limit indicators
-  const message = apiError.message?.toLowerCase() || '';
+  const message = apiError.message?.toLowerCase() || "";
   if (
-    message.includes('rate limit') ||
-    message.includes('quota') ||
-    message.includes('too many requests')
+    message.includes("rate limit") ||
+    message.includes("quota") ||
+    message.includes("too many requests")
   ) {
     return true;
   }
@@ -94,9 +94,13 @@ function isRetryableError(error: unknown): boolean {
 /**
  * Calculates the delay for the next retry attempt with exponential backoff and jitter
  */
-function calculateDelay(attempt: number, options: Required<RetryOptions>): number {
+function calculateDelay(
+  attempt: number,
+  options: Required<RetryOptions>,
+): number {
   // Exponential backoff: initialDelay * (multiplier ^ attempt)
-  const exponentialDelay = options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt);
+  const exponentialDelay =
+    options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt);
 
   // Cap at max delay
   const cappedDelay = Math.min(exponentialDelay, options.maxDelayMs);
@@ -133,7 +137,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withRetry<T>(
   operation: () => Promise<T>,
-  options: RetryOptions = {}
+  options: RetryOptions = {},
 ): Promise<T> {
   const config = { ...DEFAULT_OPTIONS, ...options };
   let lastError: unknown;
@@ -146,9 +150,12 @@ export async function withRetry<T>(
 
       // Check if we should retry
       if (attempt >= config.maxRetries) {
-        log(`${config.operationName} failed after ${config.maxRetries + 1} attempts`, {
-          error: (error as Error).message || String(error),
-        });
+        log(
+          `${config.operationName} failed after ${config.maxRetries + 1} attempts`,
+          {
+            error: (error as Error).message || String(error),
+          },
+        );
         throw error;
       }
 
@@ -190,7 +197,10 @@ export async function withRetry<T>(
  * ```
  */
 export function createRetryWrapper(defaultOptions: RetryOptions) {
-  return async function <T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  return async function <T>(
+    operation: () => Promise<T>,
+    options: RetryOptions = {},
+  ): Promise<T> {
     return withRetry(operation, { ...defaultOptions, ...options });
   };
 }
@@ -216,11 +226,19 @@ export async function withRateLimitedBatch<T, R>(
     batchDelayMs?: number;
     /** Operation name for logging */
     operationName?: string;
-  } = {}
-): Promise<Array<{ success: true; result: R } | { success: false; error: string }>> {
-  const { concurrency = 5, batchDelayMs = 100, operationName = 'batch operation' } = options;
+  } = {},
+): Promise<
+  Array<{ success: true; result: R } | { success: false; error: string }>
+> {
+  const {
+    concurrency = 5,
+    batchDelayMs = 100,
+    operationName = "batch operation",
+  } = options;
 
-  const results: Array<{ success: true; result: R } | { success: false; error: string }> = [];
+  const results: Array<
+    { success: true; result: R } | { success: false; error: string }
+  > = [];
 
   // Process in batches
   for (let i = 0; i < items.length; i += concurrency) {
@@ -234,7 +252,11 @@ export async function withRateLimitedBatch<T, R>(
 
     const batchResults = await Promise.all(
       batch.map(
-        async (item): Promise<{ success: true; result: R } | { success: false; error: string }> => {
+        async (
+          item,
+        ): Promise<
+          { success: true; result: R } | { success: false; error: string }
+        > => {
           try {
             const result = await withRetry(() => processor(item), {
               operationName,
@@ -247,8 +269,8 @@ export async function withRateLimitedBatch<T, R>(
               error: (error as Error).message || String(error),
             };
           }
-        }
-      )
+        },
+      ),
     );
 
     results.push(...batchResults);

@@ -21,6 +21,7 @@ export {
   handleStarFile,
   handleResolveFilePath,
   handleBatchDelete,
+  handleBatchRestore,
   handleBatchMove,
   handleBatchShare,
   handleRemovePermission,
@@ -28,7 +29,7 @@ export {
   handleRestoreFromTrash,
   handleEmptyTrash,
   handleGetFolderTree,
-} from './drive.js';
+} from "./drive.js";
 
 // Docs handlers
 export {
@@ -40,7 +41,7 @@ export {
   handleDeleteTextInDoc,
   handleReplaceTextInDoc,
   handleFormatGoogleDocRange,
-} from './docs.js';
+} from "./docs.js";
 
 // Sheets handlers
 export {
@@ -54,7 +55,7 @@ export {
   handleDeleteSheetTab,
   handleRenameSheetTab,
   handleListSheetTabs,
-} from './sheets.js';
+} from "./sheets.js";
 
 // Slides handlers
 export {
@@ -67,14 +68,14 @@ export {
   handleUpdateGoogleSlidesSpeakerNotes,
   handleFormatGoogleSlidesElement,
   handleListSlidePages,
-} from './slides.js';
+} from "./slides.js";
 
 // Unified handlers
 export {
   handleCreateFile,
   handleUpdateFile,
   handleGetFileContent,
-} from './unified.js';
+} from "./unified.js";
 
 // Helper utilities
 export {
@@ -87,5 +88,5 @@ export {
   resolveFolderId,
   checkFileExists,
   convertA1ToGridRange,
-} from './helpers.js';
-export type { HandlerContext } from './helpers.js';
+} from "./helpers.js";
+export type { HandlerContext } from "./helpers.js";

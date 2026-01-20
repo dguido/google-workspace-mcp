@@ -1,49 +1,51 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as fs from 'fs/promises';
-import { OAuth2Client, Credentials } from 'google-auth-library';
-import { TokenManager } from './tokenManager.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "fs/promises";
+import { OAuth2Client, Credentials } from "google-auth-library";
+import { TokenManager } from "./tokenManager.js";
 
 // Mock the fs module
-vi.mock('fs/promises');
+vi.mock("fs/promises");
 
 // Mock the utils module
-vi.mock('./utils.js', async () => {
-  const actual = await vi.importActual('./utils.js');
+vi.mock("./utils.js", async () => {
+  const actual = await vi.importActual("./utils.js");
   return {
     ...actual,
-    getSecureTokenPath: vi.fn(() => '/mock/path/.config/google-drive-mcp/tokens.json'),
-    getLegacyTokenPath: vi.fn(() => '/mock/path/.gcp-saved-tokens.json'),
-    getAdditionalLegacyPaths: vi.fn(() => ['/mock/path/google-tokens.json']),
+    getSecureTokenPath: vi.fn(
+      () => "/mock/path/.config/google-drive-mcp/tokens.json",
+    ),
+    getLegacyTokenPath: vi.fn(() => "/mock/path/.gcp-saved-tokens.json"),
+    getAdditionalLegacyPaths: vi.fn(() => ["/mock/path/google-tokens.json"]),
   };
 });
 
 // Mock the logging module
-vi.mock('../utils/logging.js', () => ({
+vi.mock("../utils/logging.js", () => ({
   log: vi.fn(),
 }));
 
-describe('auth/tokenManager', () => {
+describe("auth/tokenManager", () => {
   let oauth2Client: OAuth2Client;
   let tokenManager: TokenManager;
 
   const validTokens: Credentials = {
-    access_token: 'test-access-token',
-    refresh_token: 'test-refresh-token',
+    access_token: "test-access-token",
+    refresh_token: "test-refresh-token",
     expiry_date: Date.now() + 3600 * 1000, // 1 hour in the future
-    token_type: 'Bearer',
-    scope: 'https://www.googleapis.com/auth/drive',
+    token_type: "Bearer",
+    scope: "https://www.googleapis.com/auth/drive",
   };
 
   const expiredTokens: Credentials = {
-    access_token: 'expired-access-token',
-    refresh_token: 'test-refresh-token',
+    access_token: "expired-access-token",
+    refresh_token: "test-refresh-token",
     expiry_date: Date.now() - 1000, // Already expired
-    token_type: 'Bearer',
+    token_type: "Bearer",
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    oauth2Client = new OAuth2Client('test-client-id', 'test-client-secret');
+    oauth2Client = new OAuth2Client("test-client-id", "test-client-secret");
     tokenManager = new TokenManager(oauth2Client);
   });
 
@@ -51,16 +53,16 @@ describe('auth/tokenManager', () => {
     vi.restoreAllMocks();
   });
 
-  describe('getTokenPath', () => {
-    it('returns the configured token path', () => {
+  describe("getTokenPath", () => {
+    it("returns the configured token path", () => {
       const path = tokenManager.getTokenPath();
 
-      expect(path).toBe('/mock/path/.config/google-drive-mcp/tokens.json');
+      expect(path).toBe("/mock/path/.config/google-drive-mcp/tokens.json");
     });
   });
 
-  describe('loadSavedTokens', () => {
-    it('loads tokens from secure path when file exists', async () => {
+  describe("loadSavedTokens", () => {
+    it("loads tokens from secure path when file exists", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validTokens));
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
@@ -68,13 +70,13 @@ describe('auth/tokenManager', () => {
       const result = await tokenManager.loadSavedTokens();
 
       expect(result).toBe(true);
-      expect(oauth2Client.credentials.access_token).toBe('test-access-token');
-      expect(oauth2Client.credentials.refresh_token).toBe('test-refresh-token');
+      expect(oauth2Client.credentials.access_token).toBe("test-access-token");
+      expect(oauth2Client.credentials.refresh_token).toBe("test-refresh-token");
     });
 
-    it('returns false when token file does not exist', async () => {
-      const fileError = new Error('ENOENT') as NodeJS.ErrnoException;
-      fileError.code = 'ENOENT';
+    it("returns false when token file does not exist", async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
 
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockRejectedValue(fileError);
@@ -84,7 +86,7 @@ describe('auth/tokenManager', () => {
       expect(result).toBe(false);
     });
 
-    it('returns false for invalid token format', async () => {
+    it("returns false for invalid token format", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(null));
@@ -94,20 +96,20 @@ describe('auth/tokenManager', () => {
       expect(result).toBe(false);
     });
 
-    it('returns false for non-object token format', async () => {
+    it("returns false for non-object token format", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify('not-an-object'));
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify("not-an-object"));
 
       const result = await tokenManager.loadSavedTokens();
 
       expect(result).toBe(false);
     });
 
-    it('handles JSON parse errors gracefully', async () => {
+    it("handles JSON parse errors gracefully", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue('invalid json {{{');
+      vi.mocked(fs.readFile).mockResolvedValue("invalid json {{{");
       vi.mocked(fs.unlink).mockResolvedValue(undefined);
 
       const result = await tokenManager.loadSavedTokens();
@@ -116,10 +118,10 @@ describe('auth/tokenManager', () => {
     });
   });
 
-  describe('legacy token migration', () => {
-    it('migrates tokens from legacy path when current file does not exist', async () => {
-      const fileError = new Error('ENOENT') as NodeJS.ErrnoException;
-      fileError.code = 'ENOENT';
+  describe("legacy token migration", () => {
+    it("migrates tokens from legacy path when current file does not exist", async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
 
       // First call (checking current path) fails
       // Second call (checking legacy path) succeeds
@@ -137,9 +139,9 @@ describe('auth/tokenManager', () => {
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
-    it('skips invalid legacy token format', async () => {
-      const fileError = new Error('ENOENT') as NodeJS.ErrnoException;
-      fileError.code = 'ENOENT';
+    it("skips invalid legacy token format", async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
 
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access)
@@ -154,54 +156,61 @@ describe('auth/tokenManager', () => {
     });
   });
 
-  describe('saveTokens', () => {
-    it('saves tokens to secure path with proper permissions', async () => {
+  describe("saveTokens", () => {
+    it("saves tokens to secure path with proper permissions", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
       await tokenManager.saveTokens(validTokens);
 
       expect(fs.writeFile).toHaveBeenCalledWith(
-        '/mock/path/.config/google-drive-mcp/tokens.json',
+        "/mock/path/.config/google-drive-mcp/tokens.json",
         JSON.stringify(validTokens, null, 2),
-        { mode: 0o600 }
+        { mode: 0o600 },
       );
-      expect(oauth2Client.credentials.access_token).toBe('test-access-token');
+      expect(oauth2Client.credentials.access_token).toBe("test-access-token");
     });
 
-    it('creates token directory if it does not exist', async () => {
+    it("creates token directory if it does not exist", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
       await tokenManager.saveTokens(validTokens);
 
-      expect(fs.mkdir).toHaveBeenCalledWith('/mock/path/.config/google-drive-mcp', {
-        recursive: true,
-      });
+      expect(fs.mkdir).toHaveBeenCalledWith(
+        "/mock/path/.config/google-drive-mcp",
+        {
+          recursive: true,
+        },
+      );
     });
 
-    it('throws error when save fails', async () => {
+    it("throws error when save fails", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.writeFile).mockRejectedValue(new Error('Write failed'));
+      vi.mocked(fs.writeFile).mockRejectedValue(new Error("Write failed"));
 
-      await expect(tokenManager.saveTokens(validTokens)).rejects.toThrow('Write failed');
+      await expect(tokenManager.saveTokens(validTokens)).rejects.toThrow(
+        "Write failed",
+      );
     });
   });
 
-  describe('clearTokens', () => {
-    it('clears credentials and removes token file', async () => {
+  describe("clearTokens", () => {
+    it("clears credentials and removes token file", async () => {
       oauth2Client.setCredentials(validTokens);
       vi.mocked(fs.unlink).mockResolvedValue(undefined);
 
       await tokenManager.clearTokens();
 
       expect(oauth2Client.credentials).toEqual({});
-      expect(fs.unlink).toHaveBeenCalledWith('/mock/path/.config/google-drive-mcp/tokens.json');
+      expect(fs.unlink).toHaveBeenCalledWith(
+        "/mock/path/.config/google-drive-mcp/tokens.json",
+      );
     });
 
-    it('handles already deleted token file gracefully', async () => {
-      const fileError = new Error('ENOENT') as NodeJS.ErrnoException;
-      fileError.code = 'ENOENT';
+    it("handles already deleted token file gracefully", async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
 
       oauth2Client.setCredentials(validTokens);
       vi.mocked(fs.unlink).mockRejectedValue(fileError);
@@ -211,17 +220,17 @@ describe('auth/tokenManager', () => {
       expect(oauth2Client.credentials).toEqual({});
     });
 
-    it('does not throw for other unlink errors', async () => {
+    it("does not throw for other unlink errors", async () => {
       oauth2Client.setCredentials(validTokens);
-      vi.mocked(fs.unlink).mockRejectedValue(new Error('Permission denied'));
+      vi.mocked(fs.unlink).mockRejectedValue(new Error("Permission denied"));
 
       // Should not throw (best-effort)
       await expect(tokenManager.clearTokens()).resolves.toBeUndefined();
     });
   });
 
-  describe('refreshTokensIfNeeded', () => {
-    it('returns true when token is still valid', async () => {
+  describe("refreshTokensIfNeeded", () => {
+    it("returns true when token is still valid", async () => {
       oauth2Client.setCredentials(validTokens);
 
       const result = await tokenManager.refreshTokensIfNeeded();
@@ -229,7 +238,7 @@ describe('auth/tokenManager', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when no tokens are available', async () => {
+    it("returns false when no tokens are available", async () => {
       oauth2Client.setCredentials({});
 
       const result = await tokenManager.refreshTokensIfNeeded();
@@ -237,10 +246,10 @@ describe('auth/tokenManager', () => {
       expect(result).toBe(false);
     });
 
-    it('detects tokens nearing expiry (5 minute buffer)', async () => {
+    it("detects tokens nearing expiry (5 minute buffer)", async () => {
       const nearlyExpiredTokens: Credentials = {
-        access_token: 'nearly-expired-token',
-        refresh_token: 'test-refresh-token',
+        access_token: "nearly-expired-token",
+        refresh_token: "test-refresh-token",
         expiry_date: Date.now() + 4 * 60 * 1000, // 4 minutes from now (within 5 min buffer)
       };
 
@@ -248,10 +257,12 @@ describe('auth/tokenManager', () => {
       oauth2Client.refreshAccessToken = vi.fn().mockResolvedValue({
         credentials: {
           ...validTokens,
-          access_token: 'new-access-token',
+          access_token: "new-access-token",
         },
       });
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(nearlyExpiredTokens));
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify(nearlyExpiredTokens),
+      );
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
@@ -261,9 +272,11 @@ describe('auth/tokenManager', () => {
       expect(oauth2Client.refreshAccessToken).toHaveBeenCalled();
     });
 
-    it('handles refresh failure', async () => {
+    it("handles refresh failure", async () => {
       oauth2Client.setCredentials(expiredTokens);
-      oauth2Client.refreshAccessToken = vi.fn().mockRejectedValue(new Error('Refresh failed'));
+      oauth2Client.refreshAccessToken = vi
+        .fn()
+        .mockRejectedValue(new Error("Refresh failed"));
 
       const result = await tokenManager.refreshTokensIfNeeded();
 
@@ -271,8 +284,8 @@ describe('auth/tokenManager', () => {
     });
   });
 
-  describe('validateTokens', () => {
-    it('loads and validates saved tokens', async () => {
+  describe("validateTokens", () => {
+    it("loads and validates saved tokens", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validTokens));
@@ -282,9 +295,9 @@ describe('auth/tokenManager', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when no saved tokens exist', async () => {
-      const fileError = new Error('ENOENT') as NodeJS.ErrnoException;
-      fileError.code = 'ENOENT';
+    it("returns false when no saved tokens exist", async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
 
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockRejectedValue(fileError);
@@ -294,7 +307,7 @@ describe('auth/tokenManager', () => {
       expect(result).toBe(false);
     });
 
-    it('triggers refresh when tokens are expired', async () => {
+    it("triggers refresh when tokens are expired", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(expiredTokens));
@@ -303,7 +316,7 @@ describe('auth/tokenManager', () => {
       oauth2Client.refreshAccessToken = vi.fn().mockResolvedValue({
         credentials: {
           ...validTokens,
-          access_token: 'refreshed-token',
+          access_token: "refreshed-token",
         },
       });
 
@@ -314,16 +327,16 @@ describe('auth/tokenManager', () => {
     });
   });
 
-  describe('token refresh event listener', () => {
-    it('saves tokens when refresh event is triggered', async () => {
+  describe("token refresh event listener", () => {
+    it("saves tokens when refresh event is triggered", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validTokens));
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
       // Trigger the tokens event
-      oauth2Client.emit('tokens', {
-        access_token: 'new-access-token',
-        refresh_token: 'new-refresh-token',
+      oauth2Client.emit("tokens", {
+        access_token: "new-access-token",
+        refresh_token: "new-refresh-token",
       });
 
       // Give the async handler time to execute
@@ -332,10 +345,10 @@ describe('auth/tokenManager', () => {
       expect(fs.writeFile).toHaveBeenCalled();
     });
 
-    it('preserves existing refresh_token when not provided in new tokens', async () => {
+    it("preserves existing refresh_token when not provided in new tokens", async () => {
       const existingTokens = {
         ...validTokens,
-        refresh_token: 'existing-refresh-token',
+        refresh_token: "existing-refresh-token",
       };
 
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
@@ -343,8 +356,8 @@ describe('auth/tokenManager', () => {
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
       // Trigger the tokens event with no refresh_token
-      oauth2Client.emit('tokens', {
-        access_token: 'new-access-token',
+      oauth2Client.emit("tokens", {
+        access_token: "new-access-token",
         // No refresh_token
       });
 
@@ -355,7 +368,7 @@ describe('auth/tokenManager', () => {
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
       if (writeCall) {
         const writtenData = JSON.parse(writeCall[1] as string);
-        expect(writtenData.refresh_token).toBe('existing-refresh-token');
+        expect(writtenData.refresh_token).toBe("existing-refresh-token");
       }
     });
   });

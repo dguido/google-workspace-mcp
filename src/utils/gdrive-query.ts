@@ -11,7 +11,7 @@
  * Escapes backslashes and single quotes which have special meaning in queries.
  */
 export function escapeQueryString(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return text.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 /**
@@ -64,5 +64,5 @@ export function buildMimeTypeQuery(mimeType: string): string {
  * @returns Combined query string with " and " between conditions
  */
 export function combineQueries(...conditions: string[]): string {
-  return conditions.filter(Boolean).join(' and ');
+  return conditions.filter(Boolean).join(" and ");
 }

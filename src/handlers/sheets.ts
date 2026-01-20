@@ -1,12 +1,16 @@
-import type { drive_v3, sheets_v4 } from 'googleapis';
+import type { drive_v3, sheets_v4 } from "googleapis";
 import {
   successResponse,
   structuredResponse,
   errorResponse,
   withTimeout,
   validateArgs,
-} from '../utils/index.js';
-import type { ToolResponse } from '../utils/index.js';
+} from "../utils/index.js";
+import {
+  GOOGLE_MIME_TYPES,
+  getMimeTypeSuggestion,
+} from "../utils/mimeTypes.js";
+import type { ToolResponse } from "../utils/index.js";
 import {
   ListSheetTabsSchema,
   CreateGoogleSheetSchema,
@@ -18,22 +22,26 @@ import {
   CreateSheetTabSchema,
   DeleteSheetTabSchema,
   RenameSheetTabSchema,
-} from '../schemas/index.js';
-import { resolveOptionalFolderPath, checkFileExists, convertA1ToGridRange } from './helpers.js';
+} from "../schemas/index.js";
+import {
+  resolveOptionalFolderPath,
+  checkFileExists,
+  convertA1ToGridRange,
+} from "./helpers.js";
 import {
   getCachedSheetMetadata,
   setCachedSheetMetadata,
   clearSheetCache,
-} from '../utils/sheetCache.js';
-import { toSheetsColorStyle } from '../utils/colors.js';
+} from "../utils/sheetCache.js";
+import { toSheetsColorStyle } from "../utils/colors.js";
 
 async function getSheetInfo(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
-  range: string
+  range: string,
 ): Promise<{ sheetId: number; a1Range: string }> {
-  const sheetName = range.includes('!') ? range.split('!')[0] : 'Sheet1';
-  const a1Range = range.includes('!') ? range.split('!')[1] : range;
+  const sheetName = range.includes("!") ? range.split("!")[0] : "Sheet1";
+  const a1Range = range.includes("!") ? range.split("!")[1] : range;
 
   // Check cache first
   const cached = getCachedSheetMetadata(spreadsheetId, sheetName);
@@ -44,13 +52,15 @@ async function getSheetInfo(
   // Cache miss - fetch from API
   const rangeData = await sheets.spreadsheets.get({
     spreadsheetId,
-    fields: 'sheets(properties(sheetId,title))',
+    fields: "sheets(properties(sheetId,title))",
   });
 
   // Cache all sheets from this spreadsheet
   const sheetsData =
     rangeData.data.sheets
-      ?.filter((s) => s.properties?.title && s.properties?.sheetId !== undefined)
+      ?.filter(
+        (s) => s.properties?.title && s.properties?.sheetId !== undefined,
+      )
       .map((s) => ({
         title: s.properties!.title!,
         sheetId: s.properties!.sheetId!,
@@ -62,9 +72,9 @@ async function getSheetInfo(
 
   const sheet = sheetsData.find((s) => s.title === sheetName);
   if (!sheet) {
-    const availableSheets = sheetsData.map((s) => s.title).join(', ');
+    const availableSheets = sheetsData.map((s) => s.title).join(", ");
     throw new Error(
-      `Sheet "${sheetName}" not found. Available sheets: ${availableSheets || 'none'}`
+      `Sheet "${sheetName}" not found. Available sheets: ${availableSheets || "none"}`,
     );
   }
 
@@ -74,7 +84,7 @@ async function getSheetInfo(
 export async function handleCreateGoogleSheet(
   drive: drive_v3.Drive,
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(CreateGoogleSheetSchema, args);
   if (!validation.success) return validation.response;
@@ -83,15 +93,19 @@ export async function handleCreateGoogleSheet(
   const parentFolderId = await resolveOptionalFolderPath(
     drive,
     data.parentFolderId,
-    data.parentPath
+    data.parentPath,
   );
 
   // Check if spreadsheet already exists
-  const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
+  const existingFileId = await checkFileExists(
+    drive,
+    data.name,
+    parentFolderId,
+  );
   if (existingFileId) {
     return errorResponse(
       `A spreadsheet named "${data.name}" already exists in this location. ` +
-        `To update it, use updateGoogleSheet with spreadsheetId: ${existingFileId}`
+        `To update it, use updateGoogleSheet with spreadsheetId: ${existingFileId}`,
     );
   }
 
@@ -103,7 +117,7 @@ export async function handleCreateGoogleSheet(
         {
           properties: {
             sheetId: 0,
-            title: 'Sheet1',
+            title: "Sheet1",
             gridProperties: {
               rowCount: Math.max(data.data.length, 1000),
               columnCount: Math.max(data.data[0]?.length || 0, 26),
@@ -115,29 +129,29 @@ export async function handleCreateGoogleSheet(
   });
 
   await drive.files.update({
-    fileId: spreadsheet.data.spreadsheetId || '',
+    fileId: spreadsheet.data.spreadsheetId || "",
     addParents: parentFolderId,
-    removeParents: 'root',
-    fields: 'id, name, webViewLink',
+    removeParents: "root",
+    fields: "id, name, webViewLink",
     supportsAllDrives: true,
   });
 
   // Now update with data
   await sheets.spreadsheets.values.update({
     spreadsheetId: spreadsheet.data.spreadsheetId!,
-    range: 'Sheet1!A1',
-    valueInputOption: data.valueInputOption || 'RAW',
+    range: "Sheet1!A1",
+    valueInputOption: data.valueInputOption || "RAW",
     requestBody: { values: data.data },
   });
 
   return successResponse(
-    `Created Google Sheet: ${data.name}\nID: ${spreadsheet.data.spreadsheetId}`
+    `Created Google Sheet: ${data.name}\nID: ${spreadsheet.data.spreadsheetId}`,
   );
 }
 
 export async function handleUpdateGoogleSheet(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(UpdateGoogleSheetSchema, args);
   if (!validation.success) return validation.response;
@@ -146,7 +160,7 @@ export async function handleUpdateGoogleSheet(
   await sheets.spreadsheets.values.update({
     spreadsheetId: data.spreadsheetId,
     range: data.range,
-    valueInputOption: data.valueInputOption || 'RAW',
+    valueInputOption: data.valueInputOption || "RAW",
     requestBody: { values: data.data },
   });
 
@@ -154,39 +168,70 @@ export async function handleUpdateGoogleSheet(
 }
 
 export async function handleGetGoogleSheetContent(
+  drive: drive_v3.Drive,
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(GetGoogleSheetContentSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
+  // Check file type before calling Sheets API to provide helpful error messages
+  const metadata = await drive.files.get({
+    fileId: data.spreadsheetId,
+    fields: "mimeType,name",
+    supportsAllDrives: true,
+  });
+
+  const mimeType = metadata.data.mimeType;
+  if (mimeType !== GOOGLE_MIME_TYPES.SPREADSHEET) {
+    const fileName = metadata.data.name || data.spreadsheetId;
+    const suggestion = getMimeTypeSuggestion(mimeType);
+    return errorResponse(
+      `"${fileName}" is not a Google Sheet (type: ${mimeType}). ${suggestion}`,
+    );
+  }
+
+  // If no range specified, get the first sheet name and use it as range
+  let range = data.range;
+  if (!range) {
+    const spreadsheet = await sheets.spreadsheets.get({
+      spreadsheetId: data.spreadsheetId,
+      fields: "sheets(properties(title))",
+    });
+
+    const firstSheetName =
+      spreadsheet.data.sheets?.[0]?.properties?.title || "Sheet1";
+    range = firstSheetName;
+  }
+
   const response = await withTimeout(
     sheets.spreadsheets.values.get({
       spreadsheetId: data.spreadsheetId,
-      range: data.range,
+      range: range,
     }),
     30000,
-    'Get sheet content'
+    "Get sheet content",
   );
 
   const values = response.data.values || [];
-  let content = `Content for range ${data.range}:\n\n`;
+  let content = `Content for range ${range}:\n\n`;
 
   if (values.length === 0) {
-    content += '(empty range)';
+    content += "(empty range)";
   } else {
     values.forEach((row, rowIndex) => {
-      content += `Row ${rowIndex + 1}: ${row.join(', ')}\n`;
+      content += `Row ${rowIndex + 1}: ${row.join(", ")}\n`;
     });
   }
 
   const rowCount = values.length;
-  const columnCount = values.length > 0 ? Math.max(...values.map((row) => row.length)) : 0;
+  const columnCount =
+    values.length > 0 ? Math.max(...values.map((row) => row.length)) : 0;
 
   return structuredResponse(content, {
     spreadsheetId: data.spreadsheetId,
-    range: data.range,
+    range: range,
     values: values,
     rowCount: rowCount,
     columnCount: columnCount,
@@ -195,7 +240,7 @@ export async function handleGetGoogleSheetContent(
 
 export async function handleFormatGoogleSheetCells(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(FormatGoogleSheetCellsSchema, args);
   if (!validation.success) return validation.response;
@@ -218,22 +263,24 @@ export async function handleFormatGoogleSheetCells(
 
   // Background color
   if (data.backgroundColor) {
-    userEnteredFormat.backgroundColorStyle = toSheetsColorStyle(data.backgroundColor);
-    cellFields.push('userEnteredFormat.backgroundColorStyle');
+    userEnteredFormat.backgroundColorStyle = toSheetsColorStyle(
+      data.backgroundColor,
+    );
+    cellFields.push("userEnteredFormat.backgroundColorStyle");
   }
 
   // Alignment and wrap
   if (data.horizontalAlignment) {
     userEnteredFormat.horizontalAlignment = data.horizontalAlignment;
-    cellFields.push('userEnteredFormat.horizontalAlignment');
+    cellFields.push("userEnteredFormat.horizontalAlignment");
   }
   if (data.verticalAlignment) {
     userEnteredFormat.verticalAlignment = data.verticalAlignment;
-    cellFields.push('userEnteredFormat.verticalAlignment');
+    cellFields.push("userEnteredFormat.verticalAlignment");
   }
   if (data.wrapStrategy) {
     userEnteredFormat.wrapStrategy = data.wrapStrategy;
-    cellFields.push('userEnteredFormat.wrapStrategy');
+    cellFields.push("userEnteredFormat.wrapStrategy");
   }
 
   // Text formatting
@@ -242,37 +289,39 @@ export async function handleFormatGoogleSheetCells(
 
   if (data.bold !== undefined) {
     textFormat.bold = data.bold;
-    textFormatFields.push('bold');
+    textFormatFields.push("bold");
   }
   if (data.italic !== undefined) {
     textFormat.italic = data.italic;
-    textFormatFields.push('italic');
+    textFormatFields.push("italic");
   }
   if (data.strikethrough !== undefined) {
     textFormat.strikethrough = data.strikethrough;
-    textFormatFields.push('strikethrough');
+    textFormatFields.push("strikethrough");
   }
   if (data.underline !== undefined) {
     textFormat.underline = data.underline;
-    textFormatFields.push('underline');
+    textFormatFields.push("underline");
   }
   if (data.fontSize !== undefined) {
     textFormat.fontSize = data.fontSize;
-    textFormatFields.push('fontSize');
+    textFormatFields.push("fontSize");
   }
   if (data.fontFamily !== undefined) {
     textFormat.fontFamily = data.fontFamily;
-    textFormatFields.push('fontFamily');
+    textFormatFields.push("fontFamily");
   }
   if (data.foregroundColor) {
     textFormat.foregroundColorStyle = toSheetsColorStyle(data.foregroundColor);
-    textFormatFields.push('foregroundColorStyle');
+    textFormatFields.push("foregroundColorStyle");
   }
 
   if (textFormatFields.length > 0) {
     userEnteredFormat.textFormat = textFormat;
-    cellFields.push('userEnteredFormat.textFormat(' + textFormatFields.join(',') + ')');
-    appliedFormats.push('text');
+    cellFields.push(
+      "userEnteredFormat.textFormat(" + textFormatFields.join(",") + ")",
+    );
+    appliedFormats.push("text");
   }
 
   // Number formatting
@@ -281,8 +330,8 @@ export async function handleFormatGoogleSheetCells(
       pattern: data.numberFormat.pattern,
       ...(data.numberFormat.type && { type: data.numberFormat.type }),
     };
-    cellFields.push('userEnteredFormat.numberFormat');
-    appliedFormats.push('number');
+    cellFields.push("userEnteredFormat.numberFormat");
+    appliedFormats.push("number");
   }
 
   // Add repeatCell request if any cell formatting specified
@@ -291,11 +340,14 @@ export async function handleFormatGoogleSheetCells(
       repeatCell: {
         range: gridRange,
         cell: { userEnteredFormat },
-        fields: cellFields.join(','),
+        fields: cellFields.join(","),
       },
     });
-    if (!appliedFormats.includes('text') && !appliedFormats.includes('number')) {
-      appliedFormats.push('cell');
+    if (
+      !appliedFormats.includes("text") &&
+      !appliedFormats.includes("number")
+    ) {
+      appliedFormats.push("cell");
     }
   }
 
@@ -304,7 +356,9 @@ export async function handleFormatGoogleSheetCells(
     const border: sheets_v4.Schema$Border = {
       style: data.borders.style,
       width: data.borders.width || 1,
-      ...(data.borders.color && { colorStyle: toSheetsColorStyle(data.borders.color) }),
+      ...(data.borders.color && {
+        colorStyle: toSheetsColorStyle(data.borders.color),
+      }),
     };
 
     const updateBordersRequest: sheets_v4.Schema$UpdateBordersRequest = {
@@ -315,15 +369,16 @@ export async function handleFormatGoogleSheetCells(
     if (data.borders.bottom !== false) updateBordersRequest.bottom = border;
     if (data.borders.left !== false) updateBordersRequest.left = border;
     if (data.borders.right !== false) updateBordersRequest.right = border;
-    if (data.borders.innerHorizontal) updateBordersRequest.innerHorizontal = border;
+    if (data.borders.innerHorizontal)
+      updateBordersRequest.innerHorizontal = border;
     if (data.borders.innerVertical) updateBordersRequest.innerVertical = border;
 
     requests.push({ updateBorders: updateBordersRequest });
-    appliedFormats.push('borders');
+    appliedFormats.push("borders");
   }
 
   if (requests.length === 0) {
-    return errorResponse('No formatting options specified');
+    return errorResponse("No formatting options specified");
   }
 
   await sheets.spreadsheets.batchUpdate({
@@ -331,13 +386,15 @@ export async function handleFormatGoogleSheetCells(
     requestBody: { requests },
   });
 
-  const formatDesc = appliedFormats.join(', ');
-  return successResponse(`Formatted cells in range ${data.range} (${formatDesc})`);
+  const formatDesc = appliedFormats.join(", ");
+  return successResponse(
+    `Formatted cells in range ${data.range} (${formatDesc})`,
+  );
 }
 
 export async function handleMergeGoogleSheetCells(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(MergeGoogleSheetCellsSchema, args);
   if (!validation.success) return validation.response;
@@ -366,12 +423,14 @@ export async function handleMergeGoogleSheetCells(
     requestBody: { requests },
   });
 
-  return successResponse(`Merged cells in range ${data.range} with type ${data.mergeType}`);
+  return successResponse(
+    `Merged cells in range ${data.range} with type ${data.mergeType}`,
+  );
 }
 
 export async function handleAddGoogleSheetConditionalFormat(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(AddGoogleSheetConditionalFormatSchema, args);
   if (!validation.success) return validation.response;
@@ -394,7 +453,9 @@ export async function handleAddGoogleSheetConditionalFormat(
 
   const format: sheets_v4.Schema$CellFormat = {};
   if (data.format.backgroundColor) {
-    format.backgroundColorStyle = toSheetsColorStyle(data.format.backgroundColor);
+    format.backgroundColorStyle = toSheetsColorStyle(
+      data.format.backgroundColor,
+    );
   }
   if (data.format.textFormat) {
     format.textFormat = {};
@@ -402,7 +463,9 @@ export async function handleAddGoogleSheetConditionalFormat(
       format.textFormat.bold = data.format.textFormat.bold;
     }
     if (data.format.textFormat.foregroundColor) {
-      format.textFormat.foregroundColorStyle = toSheetsColorStyle(data.format.textFormat.foregroundColor);
+      format.textFormat.foregroundColorStyle = toSheetsColorStyle(
+        data.format.textFormat.foregroundColor,
+      );
     }
   }
 
@@ -436,7 +499,7 @@ export async function handleAddGoogleSheetConditionalFormat(
 async function getSheetIdByTitle(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
-  title: string
+  title: string,
 ): Promise<number | null> {
   // Check cache first
   const cached = getCachedSheetMetadata(spreadsheetId, title);
@@ -447,12 +510,14 @@ async function getSheetIdByTitle(
   // Fetch from API
   const response = await sheets.spreadsheets.get({
     spreadsheetId,
-    fields: 'sheets(properties(sheetId,title))',
+    fields: "sheets(properties(sheetId,title))",
   });
 
   const sheetsData =
     response.data.sheets
-      ?.filter((s) => s.properties?.title && s.properties?.sheetId !== undefined)
+      ?.filter(
+        (s) => s.properties?.title && s.properties?.sheetId !== undefined,
+      )
       .map((s) => ({
         title: s.properties!.title!,
         sheetId: s.properties!.sheetId!,
@@ -469,16 +534,22 @@ async function getSheetIdByTitle(
 
 export async function handleCreateSheetTab(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(CreateSheetTabSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Check if sheet name already exists
-  const existingSheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.title);
+  const existingSheetId = await getSheetIdByTitle(
+    sheets,
+    data.spreadsheetId,
+    data.title,
+  );
   if (existingSheetId !== null) {
-    return errorResponse(`A sheet tab named "${data.title}" already exists in this spreadsheet.`);
+    return errorResponse(
+      `A sheet tab named "${data.title}" already exists in this spreadsheet.`,
+    );
   }
 
   // Create the new sheet
@@ -501,29 +572,37 @@ export async function handleCreateSheetTab(
 
   const newSheetId = response.data.replies?.[0]?.addSheet?.properties?.sheetId;
 
-  return successResponse(`Created new sheet tab "${data.title}" (ID: ${newSheetId})`);
+  return successResponse(
+    `Created new sheet tab "${data.title}" (ID: ${newSheetId})`,
+  );
 }
 
 export async function handleDeleteSheetTab(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(DeleteSheetTabSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve sheet title to sheetId
-  const sheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.sheetTitle);
+  const sheetId = await getSheetIdByTitle(
+    sheets,
+    data.spreadsheetId,
+    data.sheetTitle,
+  );
   if (sheetId === null) {
     // Fetch available sheets for better error message
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: data.spreadsheetId });
+    const spreadsheet = await sheets.spreadsheets.get({
+      spreadsheetId: data.spreadsheetId,
+    });
     const availableSheets =
       spreadsheet.data.sheets
         ?.map((s) => s.properties?.title)
         .filter(Boolean)
-        .join(', ') || 'none';
+        .join(", ") || "none";
     return errorResponse(
-      `Sheet tab "${data.sheetTitle}" not found. Available sheets: ${availableSheets}`
+      `Sheet tab "${data.sheetTitle}" not found. Available sheets: ${availableSheets}`,
     );
   }
 
@@ -540,9 +619,12 @@ export async function handleDeleteSheetTab(
   } catch (error: unknown) {
     const err = error as { message?: string };
     // Check if it's the "cannot delete last sheet" error
-    if (err.message?.includes('last sheet') || err.message?.includes('at least one sheet')) {
+    if (
+      err.message?.includes("last sheet") ||
+      err.message?.includes("at least one sheet")
+    ) {
       return errorResponse(
-        `Cannot delete "${data.sheetTitle}" - a spreadsheet must have at least one sheet.`
+        `Cannot delete "${data.sheetTitle}" - a spreadsheet must have at least one sheet.`,
       );
     }
     throw error;
@@ -556,32 +638,42 @@ export async function handleDeleteSheetTab(
 
 export async function handleRenameSheetTab(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(RenameSheetTabSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve current title to sheetId
-  const sheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.currentTitle);
+  const sheetId = await getSheetIdByTitle(
+    sheets,
+    data.spreadsheetId,
+    data.currentTitle,
+  );
   if (sheetId === null) {
     // Fetch available sheets for better error message
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: data.spreadsheetId });
+    const spreadsheet = await sheets.spreadsheets.get({
+      spreadsheetId: data.spreadsheetId,
+    });
     const availableSheets =
       spreadsheet.data.sheets
         ?.map((s) => s.properties?.title)
         .filter(Boolean)
-        .join(', ') || 'none';
+        .join(", ") || "none";
     return errorResponse(
-      `Sheet tab "${data.currentTitle}" not found. Available sheets: ${availableSheets}`
+      `Sheet tab "${data.currentTitle}" not found. Available sheets: ${availableSheets}`,
     );
   }
 
   // Check if new title already exists
-  const existingSheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.newTitle);
+  const existingSheetId = await getSheetIdByTitle(
+    sheets,
+    data.spreadsheetId,
+    data.newTitle,
+  );
   if (existingSheetId !== null) {
     return errorResponse(
-      `A sheet tab named "${data.newTitle}" already exists in this spreadsheet.`
+      `A sheet tab named "${data.newTitle}" already exists in this spreadsheet.`,
     );
   }
 
@@ -592,7 +684,7 @@ export async function handleRenameSheetTab(
         sheetId,
         title: data.newTitle,
       },
-      fields: 'title',
+      fields: "title",
     },
   };
 
@@ -604,12 +696,14 @@ export async function handleRenameSheetTab(
   // Clear cache for this spreadsheet
   clearSheetCache(data.spreadsheetId);
 
-  return successResponse(`Renamed sheet tab "${data.currentTitle}" to "${data.newTitle}"`);
+  return successResponse(
+    `Renamed sheet tab "${data.currentTitle}" to "${data.newTitle}"`,
+  );
 }
 
 export async function handleListSheetTabs(
   sheets: sheets_v4.Sheets,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(ListSheetTabsSchema, args);
   if (!validation.success) return validation.response;
@@ -618,7 +712,7 @@ export async function handleListSheetTabs(
   const response = await sheets.spreadsheets.get({
     spreadsheetId: data.spreadsheetId,
     fields:
-      'spreadsheetId,sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))',
+      "spreadsheetId,sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))",
   });
 
   const tabs =
@@ -632,10 +726,13 @@ export async function handleListSheetTabs(
 
   const tabList = tabs
     .map((t) => `${t.index}: ${t.title} (${t.rowCount}x${t.columnCount})`)
-    .join('\n');
+    .join("\n");
 
-  return structuredResponse(`Spreadsheet has ${tabs.length} tab(s):\n${tabList}`, {
-    spreadsheetId: data.spreadsheetId,
-    tabs,
-  });
+  return structuredResponse(
+    `Spreadsheet has ${tabs.length} tab(s):\n${tabList}`,
+    {
+      spreadsheetId: data.spreadsheetId,
+      tabs,
+    },
+  );
 }

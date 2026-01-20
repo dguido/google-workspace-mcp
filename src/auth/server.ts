@@ -1,21 +1,21 @@
-import { OAuth2Client } from 'google-auth-library';
-import { TokenManager } from './tokenManager.js';
-import http from 'http';
-import os from 'os';
-import path from 'path';
-import { URL } from 'url';
-import open from 'open';
-import { loadCredentials } from './client.js';
-import { log } from '../utils/logging.js';
+import { OAuth2Client } from "google-auth-library";
+import { TokenManager } from "./tokenManager.js";
+import http from "http";
+import os from "os";
+import path from "path";
+import { URL } from "url";
+import open from "open";
+import { loadCredentials } from "./client.js";
+import { log } from "../utils/logging.js";
 
 // OAuth scopes for Google Drive, Docs, Sheets, and Slides
 const SCOPES = [
-  'https://www.googleapis.com/auth/drive',
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.readonly',
-  'https://www.googleapis.com/auth/documents',
-  'https://www.googleapis.com/auth/spreadsheets',
-  'https://www.googleapis.com/auth/presentations',
+  "https://www.googleapis.com/auth/drive",
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/documents",
+  "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/presentations",
 ];
 
 export class AuthServer {
@@ -34,32 +34,32 @@ export class AuthServer {
 
   private createServer(): http.Server {
     return http.createServer(async (req, res) => {
-      const url = new URL(req.url || '/', `http://localhost`);
+      const url = new URL(req.url || "/", `http://localhost`);
 
-      if (url.pathname === '/') {
+      if (url.pathname === "/") {
         // Handle root - show auth link
         const clientForUrl = this.flowOAuth2Client || this.baseOAuth2Client;
         const authUrl = clientForUrl.generateAuthUrl({
-          access_type: 'offline',
+          access_type: "offline",
           scope: SCOPES,
-          prompt: 'consent',
+          prompt: "consent",
         });
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.writeHead(200, { "Content-Type": "text/html" });
         res.end(
-          `<h1>Google Drive Authentication</h1><a href="${authUrl}">Authenticate with Google</a>`
+          `<h1>Google Drive Authentication</h1><a href="${authUrl}">Authenticate with Google</a>`,
         );
-      } else if (url.pathname === '/oauth2callback') {
+      } else if (url.pathname === "/oauth2callback") {
         // Handle OAuth callback
-        const code = url.searchParams.get('code');
+        const code = url.searchParams.get("code");
         if (!code) {
-          res.writeHead(400, { 'Content-Type': 'text/plain' });
-          res.end('Authorization code missing');
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end("Authorization code missing");
           return;
         }
         // IMPORTANT: Use the flowOAuth2Client to exchange the code
         if (!this.flowOAuth2Client) {
-          res.writeHead(500, { 'Content-Type': 'text/plain' });
-          res.end('Authentication flow not properly initiated.');
+          res.writeHead(500, { "Content-Type": "text/plain" });
+          res.end("Authentication flow not properly initiated.");
           return;
         }
         try {
@@ -72,7 +72,7 @@ export class AuthServer {
           const tokenPath = this.tokenManager.getTokenPath();
 
           // Detect if tokens are stored in a project directory (not ~/.config)
-          const homeConfig = path.join(os.homedir(), '.config');
+          const homeConfig = path.join(os.homedir(), ".config");
           const isProjectLevel = !tokenPath.startsWith(homeConfig);
           const credentialsDir = path.basename(path.dirname(tokenPath));
           const gitignoreWarning = isProjectLevel
@@ -81,10 +81,10 @@ export class AuthServer {
                         <p><strong>⚠️ Security:</strong> Add your credentials directory to .gitignore:</p>
                         <p><code>${credentialsDir}/</code></p>
                     </div>`
-            : '';
+            : "";
 
           // Send a more informative HTML response including the path
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, { "Content-Type": "text/html" });
           res.end(`
             <!DOCTYPE html>
             <html lang="en">
@@ -114,9 +114,10 @@ export class AuthServer {
           `);
         } catch (error: unknown) {
           this.authCompletedSuccessfully = false;
-          const message = error instanceof Error ? error.message : 'Unknown error';
+          const message =
+            error instanceof Error ? error.message : "Unknown error";
           // Send an HTML error response
-          res.writeHead(500, { 'Content-Type': 'text/html' });
+          res.writeHead(500, { "Content-Type": "text/html" });
           res.end(`
             <!DOCTYPE html>
             <html lang="en">
@@ -143,8 +144,8 @@ export class AuthServer {
           `);
         }
       } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found');
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
       }
     });
   }
@@ -168,11 +169,11 @@ export class AuthServer {
       this.flowOAuth2Client = new OAuth2Client(
         client_id,
         client_secret || undefined,
-        `http://localhost:${port}/oauth2callback`
+        `http://localhost:${port}/oauth2callback`,
       );
     } catch (error) {
       // Could not load credentials, cannot proceed with auth flow
-      log('Failed to load credentials for auth flow:', error);
+      log("Failed to load credentials for auth flow:", error);
       this.authCompletedSuccessfully = false;
       await this.stop(); // Stop the server we just started
       return false;
@@ -181,14 +182,14 @@ export class AuthServer {
     if (openBrowser) {
       // Generate Auth URL using the newly created flow client
       const authorizeUrl = this.flowOAuth2Client.generateAuthUrl({
-        access_type: 'offline',
+        access_type: "offline",
         scope: SCOPES,
-        prompt: 'consent',
+        prompt: "consent",
       });
 
-      console.error('\n🔐 AUTHENTICATION REQUIRED');
-      console.error('══════════════════════════════════════════');
-      console.error('\nOpening your browser to authenticate...');
+      console.error("\n🔐 AUTHENTICATION REQUIRED");
+      console.error("══════════════════════════════════════════");
+      console.error("\nOpening your browser to authenticate...");
       console.error(`If the browser doesn't open, visit:\n${authorizeUrl}\n`);
 
       await open(authorizeUrl);
@@ -205,11 +206,13 @@ export class AuthServer {
           const testServer = this.createServer();
           testServer.listen(port, () => {
             this.server = testServer; // Assign to class property *only* if successful
-            console.error(`Authentication server listening on http://localhost:${port}`);
+            console.error(
+              `Authentication server listening on http://localhost:${port}`,
+            );
             resolve();
           });
-          testServer.on('error', (err: NodeJS.ErrnoException) => {
-            if (err.code === 'EADDRINUSE') {
+          testServer.on("error", (err: NodeJS.ErrnoException) => {
+            if (err.code === "EADDRINUSE") {
               // Port is in use, close the test server and reject
               testServer.close(() => reject(err));
             } else {
@@ -222,20 +225,20 @@ export class AuthServer {
       } catch (error: unknown) {
         // Check if it's EADDRINUSE, otherwise rethrow or handle
         const nodeErr = error as NodeJS.ErrnoException;
-        if (nodeErr.code !== 'EADDRINUSE') {
+        if (nodeErr.code !== "EADDRINUSE") {
           // An unexpected error occurred during server start
-          log('Failed to start auth server:', error);
+          log("Failed to start auth server:", error);
           return null;
         }
         // EADDRINUSE occurred, loop continues
       }
     }
     console.error(
-      'No available ports for authentication server (tried ports',
+      "No available ports for authentication server (tried ports",
       this.portRange.start,
-      '-',
+      "-",
       this.portRange.end,
-      ')'
+      ")",
     );
     return null; // No port found
   }
@@ -243,7 +246,7 @@ export class AuthServer {
   public getRunningPort(): number | null {
     if (this.server) {
       const address = this.server.address();
-      if (typeof address === 'object' && address !== null) {
+      if (typeof address === "object" && address !== null) {
         return address.port;
       }
     }

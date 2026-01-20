@@ -19,7 +19,7 @@ export const DEFAULT_API_TIMEOUT_MS = 30000;
 export async function withTimeout<T>(
   promise: Promise<T>,
   ms: number = DEFAULT_API_TIMEOUT_MS,
-  operation: string = 'Operation'
+  operation: string = "Operation",
 ): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
 

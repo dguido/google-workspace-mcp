@@ -24,7 +24,11 @@ export interface RgbColorWithAlpha extends RgbColor {
 /**
  * Normalize RGB color values, defaulting undefined values to 0.
  */
-export function toRgbColor(color: RgbColor): { red: number; green: number; blue: number } {
+export function toRgbColor(color: RgbColor): {
+  red: number;
+  green: number;
+  blue: number;
+} {
   return {
     red: color.red || 0,
     green: color.green || 0,
@@ -74,9 +78,12 @@ export function toSlidesColorStyle(color: RgbColor): {
  * Convert to Google Slides solid fill format.
  * Used for shape and text box backgrounds.
  */
-export function toSlidesSolidFill(
-  color: RgbColorWithAlpha
-): { solidFill: { color: { rgbColor: { red: number; green: number; blue: number } }; alpha: number } } {
+export function toSlidesSolidFill(color: RgbColorWithAlpha): {
+  solidFill: {
+    color: { rgbColor: { red: number; green: number; blue: number } };
+    alpha: number;
+  };
+} {
   return {
     solidFill: {
       color: toSlidesColorStyle(color),

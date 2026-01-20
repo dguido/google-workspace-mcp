@@ -1,6 +1,6 @@
-import type { z } from 'zod';
-import { errorResponse } from './responses.js';
-import type { ToolResponse } from './responses.js';
+import type { z } from "zod";
+import { errorResponse } from "./responses.js";
+import type { ToolResponse } from "./responses.js";
 
 /**
  * Result type for validation helper.
@@ -19,12 +19,15 @@ export type ValidationResult<T> =
  * if (!validation.success) return validation.response;
  * const data = validation.data;
  */
-export function validateArgs<T>(schema: z.ZodSchema<T>, args: unknown): ValidationResult<T> {
+export function validateArgs<T>(
+  schema: z.ZodSchema<T>,
+  args: unknown,
+): ValidationResult<T> {
   const result = schema.safeParse(args);
   if (!result.success) {
     return {
       success: false,
-      response: errorResponse(result.error.errors[0].message),
+      response: errorResponse(result.error.issues[0].message),
     };
   }
   return { success: true, data: result.data };

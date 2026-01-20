@@ -1,13 +1,17 @@
-import { OAuth2Client, Credentials } from 'google-auth-library';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { getSecureTokenPath, getLegacyTokenPath, getAdditionalLegacyPaths } from './utils.js';
-import { GaxiosError } from 'gaxios';
-import { log } from '../utils/logging.js';
+import { OAuth2Client, Credentials } from "google-auth-library";
+import * as fs from "fs/promises";
+import * as path from "path";
+import {
+  getSecureTokenPath,
+  getLegacyTokenPath,
+  getAdditionalLegacyPaths,
+} from "./utils.js";
+import { GaxiosError } from "gaxios";
+import { log } from "../utils/logging.js";
 
 /** Type guard for NodeJS errors with a `code` property (e.g., ENOENT, EEXIST) */
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
+  return error instanceof Error && "code" in error;
 }
 
 export class TokenManager {
@@ -31,38 +35,48 @@ export class TokenManager {
       await fs.mkdir(dir, { recursive: true });
     } catch (error: unknown) {
       // Ignore errors if directory already exists, re-throw others
-      if (isNodeError(error) && error.code !== 'EEXIST') {
-        log('Failed to create token directory:', error);
+      if (isNodeError(error) && error.code !== "EEXIST") {
+        log("Failed to create token directory:", error);
         throw error;
       }
     }
   }
 
   private setupTokenRefresh(): void {
-    this.oauth2Client.on('tokens', async (newTokens) => {
+    this.oauth2Client.on("tokens", async (newTokens) => {
       try {
         await this.ensureTokenDirectoryExists();
-        const currentTokens = JSON.parse(await fs.readFile(this.tokenPath, 'utf-8'));
+        const currentTokens = JSON.parse(
+          await fs.readFile(this.tokenPath, "utf-8"),
+        );
         const updatedTokens = {
           ...currentTokens,
           ...newTokens,
           refresh_token: newTokens.refresh_token || currentTokens.refresh_token,
         };
-        await fs.writeFile(this.tokenPath, JSON.stringify(updatedTokens, null, 2), {
-          mode: 0o600,
-        });
-        log('Tokens updated and saved');
+        await fs.writeFile(
+          this.tokenPath,
+          JSON.stringify(updatedTokens, null, 2),
+          {
+            mode: 0o600,
+          },
+        );
+        log("Tokens updated and saved");
       } catch (error: unknown) {
         // Handle case where currentTokens might not exist yet
-        if (isNodeError(error) && error.code === 'ENOENT') {
+        if (isNodeError(error) && error.code === "ENOENT") {
           try {
-            await fs.writeFile(this.tokenPath, JSON.stringify(newTokens, null, 2), { mode: 0o600 });
-            log('New tokens saved');
+            await fs.writeFile(
+              this.tokenPath,
+              JSON.stringify(newTokens, null, 2),
+              { mode: 0o600 },
+            );
+            log("New tokens saved");
           } catch (writeError) {
-            log('Error saving initial tokens:', writeError);
+            log("Error saving initial tokens:", writeError);
           }
         } else {
-          log('Error saving updated tokens:', error);
+          log("Error saving updated tokens:", error);
         }
       }
     });
@@ -85,9 +99,9 @@ export class TokenManager {
         }
 
         // Read legacy tokens
-        const legacyTokens = JSON.parse(await fs.readFile(legacyPath, 'utf-8'));
+        const legacyTokens = JSON.parse(await fs.readFile(legacyPath, "utf-8"));
 
-        if (!legacyTokens || typeof legacyTokens !== 'object') {
+        if (!legacyTokens || typeof legacyTokens !== "object") {
           log(`Invalid legacy token format at ${legacyPath}, skipping`);
           continue;
         }
@@ -96,18 +110,24 @@ export class TokenManager {
         await this.ensureTokenDirectoryExists();
 
         // Copy to new location
-        await fs.writeFile(this.tokenPath, JSON.stringify(legacyTokens, null, 2), {
-          mode: 0o600,
-        });
+        await fs.writeFile(
+          this.tokenPath,
+          JSON.stringify(legacyTokens, null, 2),
+          {
+            mode: 0o600,
+          },
+        );
 
-        log(`Migrated tokens from legacy location: ${legacyPath} to: ${this.tokenPath}`);
+        log(
+          `Migrated tokens from legacy location: ${legacyPath} to: ${this.tokenPath}`,
+        );
 
         // Optionally remove legacy file after successful migration
         try {
           await fs.unlink(legacyPath);
-          log('Removed legacy token file');
+          log("Removed legacy token file");
         } catch (unlinkErr) {
-          log('Warning: Could not remove legacy token file:', unlinkErr);
+          log("Warning: Could not remove legacy token file:", unlinkErr);
         }
 
         return true;
@@ -134,38 +154,38 @@ export class TokenManager {
       if (!tokenExists) {
         const migrated = await this.migrateLegacyTokens();
         if (!migrated) {
-          log('No token file found at:', this.tokenPath);
+          log("No token file found at:", this.tokenPath);
           return false;
         }
       }
 
-      const tokens = JSON.parse(await fs.readFile(this.tokenPath, 'utf-8'));
+      const tokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8"));
 
-      if (!tokens || typeof tokens !== 'object') {
-        log('Invalid token format in file:', this.tokenPath);
+      if (!tokens || typeof tokens !== "object") {
+        log("Invalid token format in file:", this.tokenPath);
         return false;
       }
 
       this.oauth2Client.setCredentials(tokens);
-      log('Tokens loaded and set on OAuth2Client:', {
+      log("Tokens loaded and set on OAuth2Client:", {
         hasAccessToken: !!tokens.access_token,
         hasRefreshToken: !!tokens.refresh_token,
         tokenLength: tokens.access_token?.length,
         expiryDate: tokens.expiry_date,
         scope: tokens.scope,
       });
-      log('OAuth2Client after setCredentials:', {
+      log("OAuth2Client after setCredentials:", {
         hasCredentials: !!this.oauth2Client.credentials,
         credentialsAccessToken: !!this.oauth2Client.credentials?.access_token,
       });
       return true;
     } catch (error: unknown) {
-      log('Error loading tokens:', error);
+      log("Error loading tokens:", error);
       // Attempt to delete potentially corrupted token file
-      if (isNodeError(error) && error.code !== 'ENOENT') {
+      if (isNodeError(error) && error.code !== "ENOENT") {
         try {
           await fs.unlink(this.tokenPath);
-          log('Removed potentially corrupted token file');
+          log("Removed potentially corrupted token file");
         } catch {
           /* ignore */
         }
@@ -181,32 +201,32 @@ export class TokenManager {
       : !this.oauth2Client.credentials.access_token; // No token means we need one
 
     if (isExpired && this.oauth2Client.credentials.refresh_token) {
-      log('Auth token expired or nearing expiry, refreshing...');
+      log("Auth token expired or nearing expiry, refreshing...");
       try {
         const response = await this.oauth2Client.refreshAccessToken();
         const newTokens = response.credentials;
 
         if (!newTokens.access_token) {
-          throw new Error('Received invalid tokens during refresh');
+          throw new Error("Received invalid tokens during refresh");
         }
         // The 'tokens' event listener should handle saving
         this.oauth2Client.setCredentials(newTokens);
-        log('Token refreshed successfully');
+        log("Token refreshed successfully");
         return true;
       } catch (refreshError) {
         if (
           refreshError instanceof GaxiosError &&
-          refreshError.response?.data?.error === 'invalid_grant'
+          refreshError.response?.data?.error === "invalid_grant"
         ) {
           log(
-            'Error refreshing auth token: Invalid grant. Token likely expired or revoked. Please re-authenticate.'
+            "Error refreshing auth token: Invalid grant. Token likely expired or revoked. Please re-authenticate.",
           );
           // Optionally clear the potentially invalid tokens here
           await this.clearTokens();
           return false; // Indicate failure due to invalid grant
         } else {
           // Handle other refresh errors
-          log('Error refreshing auth token:', refreshError);
+          log("Error refreshing auth token:", refreshError);
           return false;
         }
       }
@@ -214,7 +234,7 @@ export class TokenManager {
       !this.oauth2Client.credentials.access_token &&
       !this.oauth2Client.credentials.refresh_token
     ) {
-      log('No access or refresh token available. Please re-authenticate.');
+      log("No access or refresh token available. Please re-authenticate.");
       return false;
     } else {
       // Token is valid or no refresh token available
@@ -223,13 +243,19 @@ export class TokenManager {
   }
 
   async validateTokens(): Promise<boolean> {
-    if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+    if (
+      !this.oauth2Client.credentials ||
+      !this.oauth2Client.credentials.access_token
+    ) {
       // Try loading first if no credentials set
       if (!(await this.loadSavedTokens())) {
         return false; // No saved tokens to load
       }
       // Check again after loading
-      if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+      if (
+        !this.oauth2Client.credentials ||
+        !this.oauth2Client.credentials.access_token
+      ) {
         return false; // Still no token after loading
       }
     }
@@ -239,11 +265,13 @@ export class TokenManager {
   async saveTokens(tokens: Credentials): Promise<void> {
     try {
       await this.ensureTokenDirectoryExists();
-      await fs.writeFile(this.tokenPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+      await fs.writeFile(this.tokenPath, JSON.stringify(tokens, null, 2), {
+        mode: 0o600,
+      });
       this.oauth2Client.setCredentials(tokens);
-      log('Tokens saved successfully to:', this.tokenPath);
+      log("Tokens saved successfully to:", this.tokenPath);
     } catch (error: unknown) {
-      log('Error saving tokens:', error);
+      log("Error saving tokens:", error);
       throw error;
     }
   }
@@ -252,13 +280,13 @@ export class TokenManager {
     try {
       this.oauth2Client.setCredentials({}); // Clear in memory
       await fs.unlink(this.tokenPath);
-      log('Tokens cleared successfully');
+      log("Tokens cleared successfully");
     } catch (error: unknown) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
+      if (isNodeError(error) && error.code === "ENOENT") {
         // File already gone, which is fine
-        log('Token file already deleted');
+        log("Token file already deleted");
       } else {
-        log('Error clearing tokens:', error);
+        log("Error clearing tokens:", error);
         // Don't re-throw, clearing is best-effort
       }
     }

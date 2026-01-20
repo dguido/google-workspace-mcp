@@ -22,13 +22,14 @@ export {
   StarFileSchema,
   ResolveFilePathSchema,
   BatchDeleteSchema,
+  BatchRestoreSchema,
   BatchMoveSchema,
   BatchShareSchema,
   RemovePermissionSchema,
   ListTrashSchema,
   RestoreFromTrashSchema,
   EmptyTrashSchema,
-} from './drive.js';
+} from "./drive.js";
 
 export type {
   GetFolderTreeInput,
@@ -53,13 +54,14 @@ export type {
   StarFileInput,
   ResolveFilePathInput,
   BatchDeleteInput,
+  BatchRestoreInput,
   BatchMoveInput,
   BatchShareInput,
   RemovePermissionInput,
   ListTrashInput,
   RestoreFromTrashInput,
   EmptyTrashInput,
-} from './drive.js';
+} from "./drive.js";
 
 // Docs schemas
 export {
@@ -71,7 +73,7 @@ export {
   DeleteTextInDocSchema,
   ReplaceTextInDocSchema,
   FormatGoogleDocRangeSchema,
-} from './docs.js';
+} from "./docs.js";
 
 export type {
   CreateGoogleDocInput,
@@ -82,7 +84,7 @@ export type {
   DeleteTextInDocInput,
   ReplaceTextInDocInput,
   FormatGoogleDocRangeInput,
-} from './docs.js';
+} from "./docs.js";
 
 // Sheets schemas
 export {
@@ -96,7 +98,7 @@ export {
   CreateSheetTabSchema,
   DeleteSheetTabSchema,
   RenameSheetTabSchema,
-} from './sheets.js';
+} from "./sheets.js";
 
 export type {
   ListSheetTabsInput,
@@ -109,7 +111,7 @@ export type {
   CreateSheetTabInput,
   DeleteSheetTabInput,
   RenameSheetTabInput,
-} from './sheets.js';
+} from "./sheets.js";
 
 // Slides schemas
 export {
@@ -122,7 +124,7 @@ export {
   GetGoogleSlidesSpeakerNotesSchema,
   UpdateGoogleSlidesSpeakerNotesSchema,
   FormatGoogleSlidesElementSchema,
-} from './slides.js';
+} from "./slides.js";
 
 export type {
   ListSlidePagesInput,
@@ -134,17 +136,17 @@ export type {
   GetGoogleSlidesSpeakerNotesInput,
   UpdateGoogleSlidesSpeakerNotesInput,
   FormatGoogleSlidesElementInput,
-} from './slides.js';
+} from "./slides.js";
 
 // Unified schemas
 export {
   CreateFileSchema,
   UpdateFileSchema,
   GetFileContentSchema,
-} from './unified.js';
+} from "./unified.js";
 
 export type {
   CreateFileInput,
   UpdateFileInput,
   GetFileContentInput,
-} from './unified.js';
+} from "./unified.js";

@@ -1,13 +1,13 @@
-import type { drive_v3 } from 'googleapis';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { log } from '../utils/index.js';
+import type { drive_v3 } from "googleapis";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { log } from "../utils/index.js";
 import {
   GOOGLE_MIME_TYPES,
   TEXT_MIME_TYPES as MIME_TEXT_TYPES,
   getExtension,
   getMimeTypeFromExtension,
-} from '../utils/mimeTypes.js';
-import { escapeQueryString, combineQueries } from '../utils/gdrive-query.js';
+} from "../utils/mimeTypes.js";
+import { escapeQueryString, combineQueries } from "../utils/gdrive-query.js";
 
 /**
  * Context passed to handlers for access to MCP features like progress and elicitation
@@ -41,8 +41,8 @@ export function getMimeTypeFromFilename(filename: string): string {
  */
 export function validateTextFileExtension(name: string): void {
   const ext = getExtensionFromFilename(name);
-  if (!['txt', 'md'].includes(ext)) {
-    throw new Error('File name must end with .txt or .md for text files.');
+  if (!["txt", "md"].includes(ext)) {
+    throw new Error("File name must end with .txt or .md for text files.");
   }
 }
 
@@ -50,18 +50,21 @@ export function validateTextFileExtension(name: string): void {
  * Resolve a slash-delimited path (e.g. "/some/folder") within Google Drive
  * into a folder ID. Creates folders if they don't exist.
  */
-export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promise<string> {
-  if (!pathStr || pathStr === '/') return 'root';
+export async function resolvePath(
+  drive: drive_v3.Drive,
+  pathStr: string,
+): Promise<string> {
+  if (!pathStr || pathStr === "/") return "root";
 
-  const parts = pathStr.replace(/^\/+|\/+$/g, '').split('/');
-  let currentFolderId: string = 'root';
+  const parts = pathStr.replace(/^\/+|\/+$/g, "").split("/");
+  let currentFolderId: string = "root";
 
   for (const part of parts) {
     if (!part) continue;
     const response = await drive.files.list({
       q: `'${currentFolderId}' in parents and name = '${part}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
-      fields: 'files(id)',
-      spaces: 'drive',
+      fields: "files(id)",
+      spaces: "drive",
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
     });
@@ -75,7 +78,7 @@ export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promi
       };
       const folder = await drive.files.create({
         requestBody: folderMetadata,
-        fields: 'id',
+        fields: "id",
         supportsAllDrives: true,
       });
 
@@ -100,11 +103,11 @@ export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promi
  */
 export async function resolveFolderId(
   drive: drive_v3.Drive,
-  input: string | undefined
+  input: string | undefined,
 ): Promise<string> {
-  if (!input) return 'root';
+  if (!input) return "root";
 
-  if (input.startsWith('/')) {
+  if (input.startsWith("/")) {
     // Input is a path
     return resolvePath(drive, input);
   } else {
@@ -121,14 +124,14 @@ export async function resolveFolderId(
 export async function resolveOptionalFolderPath(
   drive: drive_v3.Drive,
   folderId?: string,
-  folderPath?: string
+  folderPath?: string,
 ): Promise<string> {
   if (folderId && folderPath) {
-    throw new Error('Provide either folderId or folderPath, not both');
+    throw new Error("Provide either folderId or folderPath, not both");
   }
   if (folderId) return folderId;
   if (folderPath) return resolvePath(drive, folderPath);
-  return 'root';
+  return "root";
 }
 
 /**
@@ -138,37 +141,41 @@ export async function resolveOptionalFolderPath(
 export async function resolveFileIdFromPath(
   drive: drive_v3.Drive,
   fileId?: string,
-  filePath?: string
+  filePath?: string,
 ): Promise<string> {
   if (fileId && filePath) {
-    throw new Error('Provide either fileId or filePath, not both');
+    throw new Error("Provide either fileId or filePath, not both");
   }
   if (!fileId && !filePath) {
-    throw new Error('Either fileId or filePath must be provided');
+    throw new Error("Either fileId or filePath must be provided");
   }
   if (fileId) return fileId;
 
   // Parse path to get parent folder and filename
-  const normalizedPath = filePath!.replace(/^\/+|\/+$/g, '');
-  const parts = normalizedPath.split('/');
+  const normalizedPath = filePath!.replace(/^\/+|\/+$/g, "");
+  const parts = normalizedPath.split("/");
   const fileName = parts.pop();
 
   if (!fileName) {
-    throw new Error('Invalid file path: no filename specified');
+    throw new Error("Invalid file path: no filename specified");
   }
 
   // Resolve parent folder (don't create if missing)
-  let parentFolderId = 'root';
+  let parentFolderId = "root";
   if (parts.length > 0) {
-    const parentPath = '/' + parts.join('/');
+    const parentPath = "/" + parts.join("/");
     parentFolderId = await resolvePathWithoutCreate(drive, parentPath);
   }
 
   // Find the file in the parent folder
   const escapedName = escapeQueryString(fileName);
   const response = await drive.files.list({
-    q: combineQueries(`'${parentFolderId}' in parents`, `name = '${escapedName}'`, 'trashed = false'),
-    fields: 'files(id, name)',
+    q: combineQueries(
+      `'${parentFolderId}' in parents`,
+      `name = '${escapedName}'`,
+      "trashed = false",
+    ),
+    fields: "files(id, name)",
     pageSize: 1,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
@@ -184,19 +191,27 @@ export async function resolveFileIdFromPath(
 /**
  * Resolve a path without creating folders. Throws if any folder doesn't exist.
  */
-async function resolvePathWithoutCreate(drive: drive_v3.Drive, pathStr: string): Promise<string> {
-  if (!pathStr || pathStr === '/') return 'root';
+async function resolvePathWithoutCreate(
+  drive: drive_v3.Drive,
+  pathStr: string,
+): Promise<string> {
+  if (!pathStr || pathStr === "/") return "root";
 
-  const parts = pathStr.replace(/^\/+|\/+$/g, '').split('/');
-  let currentFolderId: string = 'root';
+  const parts = pathStr.replace(/^\/+|\/+$/g, "").split("/");
+  let currentFolderId: string = "root";
 
   for (const part of parts) {
     if (!part) continue;
     const escapedPart = escapeQueryString(part);
     const response = await drive.files.list({
-      q: combineQueries(`'${currentFolderId}' in parents`, `name = '${escapedPart}'`, `mimeType = '${FOLDER_MIME_TYPE}'`, 'trashed = false'),
-      fields: 'files(id)',
-      spaces: 'drive',
+      q: combineQueries(
+        `'${currentFolderId}' in parents`,
+        `name = '${escapedPart}'`,
+        `mimeType = '${FOLDER_MIME_TYPE}'`,
+        "trashed = false",
+      ),
+      fields: "files(id)",
+      spaces: "drive",
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
     });
@@ -218,15 +233,19 @@ async function resolvePathWithoutCreate(drive: drive_v3.Drive, pathStr: string):
 export async function checkFileExists(
   drive: drive_v3.Drive,
   name: string,
-  parentFolderId: string = 'root'
+  parentFolderId: string = "root",
 ): Promise<string | null> {
   try {
     const escapedName = escapeQueryString(name);
-    const query = combineQueries(`name = '${escapedName}'`, `'${parentFolderId}' in parents`, 'trashed = false');
+    const query = combineQueries(
+      `name = '${escapedName}'`,
+      `'${parentFolderId}' in parents`,
+      "trashed = false",
+    );
 
     const res = await drive.files.list({
       q: query,
-      fields: 'files(id, name, mimeType)',
+      fields: "files(id, name, mimeType)",
       pageSize: 1,
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
@@ -237,7 +256,7 @@ export async function checkFileExists(
     }
     return null;
   } catch (error) {
-    log('Error checking file existence:', error);
+    log("Error checking file existence:", error);
     return null;
   }
 }
@@ -247,7 +266,7 @@ export async function checkFileExists(
  */
 export function convertA1ToGridRange(
   a1Notation: string,
-  sheetId: number
+  sheetId: number,
 ): {
   sheetId: number;
   startColumnIndex?: number;
@@ -276,7 +295,7 @@ export function convertA1ToGridRange(
   const colToNum = (col: string): number => {
     let num = 0;
     for (let i = 0; i < col.length; i++) {
-      num = num * 26 + (col.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
+      num = num * 26 + (col.charCodeAt(i) - "A".charCodeAt(0) + 1);
     }
     return num - 1;
   };
@@ -363,10 +382,12 @@ export async function processBatchOperation<T>(
   ids: string[],
   operation: (id: string) => Promise<T>,
   context: HandlerContext | undefined,
-  options: BatchOperationOptions
+  options: BatchOperationOptions,
 ): Promise<BatchResult<T>> {
   // Dynamically import utils to avoid circular dependencies
-  const { processBatchWithProgress, withRateLimitedBatch } = await import('../utils/index.js');
+  const { processBatchWithProgress, withRateLimitedBatch } = await import(
+    "../utils/index.js"
+  );
 
   const concurrency = options.concurrency ?? 5;
 

@@ -1,13 +1,13 @@
-import * as path from 'path';
-import * as os from 'os';
-import { fileURLToPath } from 'url';
+import * as path from "path";
+import * as os from "os";
+import { fileURLToPath } from "url";
 
 // Helper to get the project root directory reliably
 function getProjectRoot(): string {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   // In build output (e.g., dist/auth/utils.js), __dirname is .../dist/auth
   // Go up TWO levels to get the project root
-  const projectRoot = path.join(__dirname, '..', '..');
+  const projectRoot = path.join(__dirname, "..", "..");
   return path.resolve(projectRoot);
 }
 
@@ -21,24 +21,25 @@ export function getSecureTokenPath(): string {
   }
 
   // Use XDG Base Directory spec or fallback to ~/.config
-  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  const configHome =
+    process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
 
-  const tokenDir = path.join(configHome, 'google-drive-mcp');
-  return path.join(tokenDir, 'tokens.json');
+  const tokenDir = path.join(configHome, "google-drive-mcp");
+  return path.join(tokenDir, "tokens.json");
 }
 
 // Returns the legacy token path for backward compatibility
 export function getLegacyTokenPath(): string {
   const projectRoot = getProjectRoot();
-  return path.join(projectRoot, '.gcp-saved-tokens.json');
+  return path.join(projectRoot, ".gcp-saved-tokens.json");
 }
 
 // Additional legacy paths to check
 export function getAdditionalLegacyPaths(): string[] {
   return [
     process.env.GOOGLE_TOKEN_PATH,
-    path.join(process.cwd(), 'google-tokens.json'),
-    path.join(process.cwd(), '.gcp-saved-tokens.json'),
+    path.join(process.cwd(), "google-tokens.json"),
+    path.join(process.cwd(), ".gcp-saved-tokens.json"),
   ].filter(Boolean) as string[];
 }
 
@@ -54,7 +55,7 @@ export function getKeysFilePath(): string {
 
   // Priority 2: Default file path
   const projectRoot = getProjectRoot();
-  const keysPath = path.join(projectRoot, 'gcp-oauth.keys.json');
+  const keysPath = path.join(projectRoot, "gcp-oauth.keys.json");
   return keysPath;
 }
 

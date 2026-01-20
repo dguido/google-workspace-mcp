@@ -1,6 +1,6 @@
 {
     "name": "@dguido/google-drive-mcp",
-    "version": "1.6.0",
+    "version": "1.0.0",
     "description": "Google Drive MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, and Slides through MCP clients e.g. Claude Desktop",
     "license": "MIT",
     "author": "Dan Guido <dan@trailofbits.com>",
@@ -27,6 +27,9 @@
         "document-automation"
     ],
     "type": "module",
+    "engines": {
+        "node": ">=22.0.0"
+    },
     "bin": {
         "google-drive-mcp": "./dist/index.js"
     },
@@ -46,29 +49,24 @@
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "lint": "oxlint .",
-        "format": "biome format --write .",
-        "format:check": "biome format .",
+        "format": "oxfmt .",
+        "format:check": "oxfmt --check .",
         "check": "npm run typecheck && npm run lint && npm run format:check"
     },
     "dependencies": {
-        "@google-cloud/local-auth": "3.0.1",
         "@modelcontextprotocol/sdk": "1.25.2",
         "google-auth-library": "10.5.0",
         "googleapis": "170.1.0",
         "open": "11.0.0",
-        "punycode": "2.3.1",
-        "uuid": "13.0.0",
-        "zod": "3.25.76"
+        "zod": "^4.0.0"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.3.11",
+        "oxfmt": "^0.7.0",
         "@types/node": "22.19.7",
-        "@types/uuid": "10.0.0",
-        "@vitest/coverage-v8": "^4.0.17",
+        "@vitest/coverage-v8": "4.0.17",
         "esbuild": "0.27.2",
         "oxlint": "1.39.0",
-        "shx": "0.4.0",
         "typescript": "5.9.3",
-        "vitest": "^4.0.17"
+        "vitest": "4.0.17"
     }
 }

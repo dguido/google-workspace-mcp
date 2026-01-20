@@ -1,5 +1,5 @@
-import { google, docs_v1, sheets_v4, slides_v1 } from 'googleapis';
-import type { OAuth2Client } from 'google-auth-library';
+import { google, docs_v1, sheets_v4, slides_v1 } from "googleapis";
+import type { OAuth2Client } from "google-auth-library";
 
 // Cached service instances
 let docsService: docs_v1.Docs | null = null;
@@ -33,7 +33,7 @@ function checkAuthClient(authClient: OAuth2Client): void {
 export function getDocsService(authClient: OAuth2Client): docs_v1.Docs {
   checkAuthClient(authClient);
   if (!docsService) {
-    docsService = google.docs({ version: 'v1', auth: authClient });
+    docsService = google.docs({ version: "v1", auth: authClient });
   }
   return docsService;
 }
@@ -44,7 +44,7 @@ export function getDocsService(authClient: OAuth2Client): docs_v1.Docs {
 export function getSheetsService(authClient: OAuth2Client): sheets_v4.Sheets {
   checkAuthClient(authClient);
   if (!sheetsService) {
-    sheetsService = google.sheets({ version: 'v4', auth: authClient });
+    sheetsService = google.sheets({ version: "v4", auth: authClient });
   }
   return sheetsService;
 }
@@ -55,7 +55,7 @@ export function getSheetsService(authClient: OAuth2Client): sheets_v4.Sheets {
 export function getSlidesService(authClient: OAuth2Client): slides_v1.Slides {
   checkAuthClient(authClient);
   if (!slidesService) {
-    slidesService = google.slides({ version: 'v1', auth: authClient });
+    slidesService = google.slides({ version: "v1", auth: authClient });
   }
   return slidesService;
 }

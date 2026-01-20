@@ -5,7 +5,7 @@
 /**
  * Unit labels for byte formatting.
  */
-const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
 
 /**
  * Format bytes into human-readable string.
@@ -18,9 +18,9 @@ const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
  */
 export function formatBytes(
   bytes: string | number | null | undefined,
-  options: { precision?: number; nullValue?: string } = {}
+  options: { precision?: number; nullValue?: string } = {},
 ): string {
-  const { precision = 2, nullValue = 'N/A' } = options;
+  const { precision = 2, nullValue = "N/A" } = options;
 
   // Handle null/undefined
   if (bytes === null || bytes === undefined) {
@@ -28,7 +28,7 @@ export function formatBytes(
   }
 
   // Parse to number
-  const num = typeof bytes === 'string' ? parseInt(bytes, 10) : bytes;
+  const num = typeof bytes === "string" ? parseInt(bytes, 10) : bytes;
 
   // Handle NaN or invalid
   if (isNaN(num)) {
@@ -37,7 +37,7 @@ export function formatBytes(
 
   // Handle zero
   if (num === 0) {
-    return '0 B';
+    return "0 B";
   }
 
   // Find appropriate unit
@@ -69,7 +69,7 @@ export function formatBytes(
  */
 export function formatBytesCompact(
   bytes: string | number | null | undefined,
-  nullValue = 'N/A'
+  nullValue = "N/A",
 ): string {
   return formatBytes(bytes, { precision: 1, nullValue });
 }

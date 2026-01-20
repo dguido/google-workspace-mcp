@@ -1,4 +1,4 @@
-import type { drive_v3, docs_v1 } from 'googleapis';
+import type { drive_v3, docs_v1 } from "googleapis";
 import {
   log,
   successResponse,
@@ -6,8 +6,12 @@ import {
   errorResponse,
   withTimeout,
   validateArgs,
-} from '../utils/index.js';
-import type { ToolResponse } from '../utils/index.js';
+} from "../utils/index.js";
+import {
+  GOOGLE_MIME_TYPES,
+  getMimeTypeSuggestion,
+} from "../utils/mimeTypes.js";
+import type { ToolResponse } from "../utils/index.js";
 import {
   CreateGoogleDocSchema,
   UpdateGoogleDocSchema,
@@ -17,9 +21,9 @@ import {
   DeleteTextInDocSchema,
   ReplaceTextInDocSchema,
   FormatGoogleDocRangeSchema,
-} from '../schemas/index.js';
-import { resolveOptionalFolderPath, checkFileExists } from './helpers.js';
-import { toDocsColorStyle } from '../utils/colors.js';
+} from "../schemas/index.js";
+import { resolveOptionalFolderPath, checkFileExists } from "./helpers.js";
+import { toDocsColorStyle } from "../utils/colors.js";
 
 /**
  * Get the end index of a Google Doc's content.
@@ -34,7 +38,7 @@ function getDocumentEndIndex(document: docs_v1.Schema$Document): number {
 export async function handleCreateGoogleDoc(
   drive: drive_v3.Drive,
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(CreateGoogleDocSchema, args);
   if (!validation.success) return validation.response;
@@ -43,19 +47,23 @@ export async function handleCreateGoogleDoc(
   const parentFolderId = await resolveOptionalFolderPath(
     drive,
     data.parentFolderId,
-    data.parentPath
+    data.parentPath,
   );
 
   // Check if document already exists
-  const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
+  const existingFileId = await checkFileExists(
+    drive,
+    data.name,
+    parentFolderId,
+  );
   if (existingFileId) {
     return errorResponse(
       `A document named "${data.name}" already exists in this location. ` +
-        `To update it, use updateGoogleDoc with documentId: ${existingFileId}`
+        `To update it, use updateGoogleDoc with documentId: ${existingFileId}`,
     );
   }
 
-  log('Creating Google Doc', { parentFolderId });
+  log("Creating Google Doc", { parentFolderId });
 
   // Create empty doc
   let docResponse;
@@ -63,10 +71,10 @@ export async function handleCreateGoogleDoc(
     docResponse = await drive.files.create({
       requestBody: {
         name: data.name,
-        mimeType: 'application/vnd.google-apps.document',
+        mimeType: "application/vnd.google-apps.document",
         parents: [parentFolderId],
       },
-      fields: 'id, name, webViewLink',
+      fields: "id, name, webViewLink",
       supportsAllDrives: true,
     });
   } catch (createError: unknown) {
@@ -76,7 +84,7 @@ export async function handleCreateGoogleDoc(
       errors?: unknown;
       status?: number;
     };
-    log('Drive files.create error details:', {
+    log("Drive files.create error details:", {
       message: err.message,
       code: err.code,
       errors: err.errors,
@@ -101,9 +109,9 @@ export async function handleCreateGoogleDoc(
               endIndex: data.content.length + 1,
             },
             paragraphStyle: {
-              namedStyleType: 'NORMAL_TEXT',
+              namedStyleType: "NORMAL_TEXT",
             },
-            fields: 'namedStyleType',
+            fields: "namedStyleType",
           },
         },
       ],
@@ -111,13 +119,13 @@ export async function handleCreateGoogleDoc(
   });
 
   return successResponse(
-    `Created Google Doc: ${doc.name}\nID: ${doc.id}\nLink: ${doc.webViewLink}`
+    `Created Google Doc: ${doc.name}\nID: ${doc.id}\nLink: ${doc.webViewLink}`,
   );
 }
 
 export async function handleUpdateGoogleDoc(
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(UpdateGoogleDocSchema, args);
   if (!validation.success) return validation.response;
@@ -163,9 +171,9 @@ export async function handleUpdateGoogleDoc(
               endIndex: data.content.length + 1,
             },
             paragraphStyle: {
-              namedStyleType: 'NORMAL_TEXT',
+              namedStyleType: "NORMAL_TEXT",
             },
-            fields: 'namedStyleType',
+            fields: "namedStyleType",
           },
         },
       ],
@@ -176,21 +184,42 @@ export async function handleUpdateGoogleDoc(
 }
 
 export async function handleGetGoogleDocContent(
+  drive: drive_v3.Drive,
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(GetGoogleDocContentSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
+  // Check file type before calling Docs API to provide helpful error messages
+  const metadata = await drive.files.get({
+    fileId: data.documentId,
+    fields: "mimeType,name",
+    supportsAllDrives: true,
+  });
+
+  const mimeType = metadata.data.mimeType;
+  if (mimeType !== GOOGLE_MIME_TYPES.DOCUMENT) {
+    const fileName = metadata.data.name || data.documentId;
+    const suggestion = getMimeTypeSuggestion(mimeType);
+    return errorResponse(
+      `"${fileName}" is not a Google Doc (type: ${mimeType}). ${suggestion}`,
+    );
+  }
+
   const document = await withTimeout(
     docs.documents.get({ documentId: data.documentId }),
     30000,
-    'Get document content'
+    "Get document content",
   );
 
-  const contentSegments: Array<{ startIndex: number; endIndex: number; text: string }> = [];
-  let content = '';
+  const contentSegments: Array<{
+    startIndex: number;
+    endIndex: number;
+    text: string;
+  }> = [];
+  let content = "";
   let currentIndex = 1;
 
   // Extract text content with indices
@@ -215,9 +244,9 @@ export async function handleGetGoogleDocContent(
   }
 
   // Format the response to show text with indices
-  let formattedContent = 'Document content with indices:\n\n';
+  let formattedContent = "Document content with indices:\n\n";
   let lineStart = 1;
-  const lines = content.split('\n');
+  const lines = content.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -228,7 +257,8 @@ export async function handleGetGoogleDocContent(
     lineStart = lineEnd + 1; // +1 for the newline character
   }
 
-  const textResponse = formattedContent + `\nTotal length: ${content.length} characters`;
+  const textResponse =
+    formattedContent + `\nTotal length: ${content.length} characters`;
 
   return structuredResponse(textResponse, {
     documentId: data.documentId,
@@ -238,7 +268,10 @@ export async function handleGetGoogleDocContent(
   });
 }
 
-export async function handleAppendToDoc(docs: docs_v1.Docs, args: unknown): Promise<ToolResponse> {
+export async function handleAppendToDoc(
+  docs: docs_v1.Docs,
+  args: unknown,
+): Promise<ToolResponse> {
   const validation = validateArgs(AppendToDocSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
@@ -267,16 +300,19 @@ export async function handleAppendToDoc(docs: docs_v1.Docs, args: unknown): Prom
     },
   });
 
-  log('Text appended to document', { documentId: data.documentId, textLength: data.text.length });
+  log("Text appended to document", {
+    documentId: data.documentId,
+    textLength: data.text.length,
+  });
 
   return successResponse(
-    `Appended ${data.text.length} characters to document "${document.data.title}"`
+    `Appended ${data.text.length} characters to document "${document.data.title}"`,
   );
 }
 
 export async function handleInsertTextInDoc(
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(InsertTextInDocSchema, args);
   if (!validation.success) return validation.response;
@@ -289,7 +325,7 @@ export async function handleInsertTextInDoc(
   if (data.index >= docLength) {
     return errorResponse(
       `Index ${data.index} is beyond the document length (${docLength - 1} characters). ` +
-        `Use appendToDoc to add text at the end, or specify an index between 1 and ${docLength - 1}.`
+        `Use appendToDoc to add text at the end, or specify an index between 1 and ${docLength - 1}.`,
     );
   }
 
@@ -307,20 +343,20 @@ export async function handleInsertTextInDoc(
     },
   });
 
-  log('Text inserted into document', {
+  log("Text inserted into document", {
     documentId: data.documentId,
     index: data.index,
     textLength: data.text.length,
   });
 
   return successResponse(
-    `Inserted ${data.text.length} characters at index ${data.index} in "${document.data.title}"`
+    `Inserted ${data.text.length} characters at index ${data.index} in "${document.data.title}"`,
   );
 }
 
 export async function handleDeleteTextInDoc(
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(DeleteTextInDocSchema, args);
   if (!validation.success) return validation.response;
@@ -333,7 +369,7 @@ export async function handleDeleteTextInDoc(
   if (data.endIndex > docLength) {
     return errorResponse(
       `End index ${data.endIndex} is beyond the document length (${docLength - 1} characters). ` +
-        `Valid range is 1 to ${docLength - 1}.`
+        `Valid range is 1 to ${docLength - 1}.`,
     );
   }
 
@@ -355,20 +391,20 @@ export async function handleDeleteTextInDoc(
     },
   });
 
-  log('Text deleted from document', {
+  log("Text deleted from document", {
     documentId: data.documentId,
     startIndex: data.startIndex,
     endIndex: data.endIndex,
   });
 
   return successResponse(
-    `Deleted ${charsToDelete} characters (indices ${data.startIndex}-${data.endIndex}) from "${document.data.title}"`
+    `Deleted ${charsToDelete} characters (indices ${data.startIndex}-${data.endIndex}) from "${document.data.title}"`,
   );
 }
 
 export async function handleReplaceTextInDoc(
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(ReplaceTextInDocSchema, args);
   if (!validation.success) return validation.response;
@@ -395,27 +431,28 @@ export async function handleReplaceTextInDoc(
   });
 
   // Get the number of replacements made
-  const occurrencesChanged = response.data.replies?.[0]?.replaceAllText?.occurrencesChanged || 0;
+  const occurrencesChanged =
+    response.data.replies?.[0]?.replaceAllText?.occurrencesChanged || 0;
 
-  log('Text replaced in document', {
+  log("Text replaced in document", {
     documentId: data.documentId,
     occurrences: occurrencesChanged,
   });
 
   if (occurrencesChanged === 0) {
     return successResponse(
-      `No occurrences of "${data.searchText}" found in "${document.data.title}"`
+      `No occurrences of "${data.searchText}" found in "${document.data.title}"`,
     );
   }
 
   return successResponse(
-    `Replaced ${occurrencesChanged} occurrence(s) of "${data.searchText}" with "${data.replaceText}" in "${document.data.title}"`
+    `Replaced ${occurrencesChanged} occurrence(s) of "${data.searchText}" with "${data.replaceText}" in "${document.data.title}"`,
   );
 }
 
 export async function handleFormatGoogleDocRange(
   docs: docs_v1.Docs,
-  args: unknown
+  args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(FormatGoogleDocRangeSchema, args);
   if (!validation.success) return validation.response;
@@ -439,31 +476,31 @@ export async function handleFormatGoogleDocRange(
 
   if (data.bold !== undefined) {
     textStyle.bold = data.bold;
-    textFields.push('bold');
+    textFields.push("bold");
   }
   if (data.italic !== undefined) {
     textStyle.italic = data.italic;
-    textFields.push('italic');
+    textFields.push("italic");
   }
   if (data.underline !== undefined) {
     textStyle.underline = data.underline;
-    textFields.push('underline');
+    textFields.push("underline");
   }
   if (data.strikethrough !== undefined) {
     textStyle.strikethrough = data.strikethrough;
-    textFields.push('strikethrough');
+    textFields.push("strikethrough");
   }
   if (data.fontSize !== undefined) {
-    textStyle.fontSize = { magnitude: data.fontSize, unit: 'PT' };
-    textFields.push('fontSize');
+    textStyle.fontSize = { magnitude: data.fontSize, unit: "PT" };
+    textFields.push("fontSize");
   }
   if (data.fontFamily !== undefined) {
     textStyle.weightedFontFamily = { fontFamily: data.fontFamily };
-    textFields.push('weightedFontFamily');
+    textFields.push("weightedFontFamily");
   }
   if (data.foregroundColor) {
     textStyle.foregroundColor = toDocsColorStyle(data.foregroundColor);
-    textFields.push('foregroundColor');
+    textFields.push("foregroundColor");
   }
 
   // Add text style request if any text options provided
@@ -472,7 +509,7 @@ export async function handleFormatGoogleDocRange(
       updateTextStyle: {
         range: { startIndex, endIndex },
         textStyle,
-        fields: textFields.join(','),
+        fields: textFields.join(","),
       },
     });
     formatsApplied.push(...textFields);
@@ -484,23 +521,23 @@ export async function handleFormatGoogleDocRange(
 
   if (data.namedStyleType !== undefined) {
     paragraphStyle.namedStyleType = data.namedStyleType;
-    paragraphFields.push('namedStyleType');
+    paragraphFields.push("namedStyleType");
   }
   if (data.alignment !== undefined) {
     paragraphStyle.alignment = data.alignment;
-    paragraphFields.push('alignment');
+    paragraphFields.push("alignment");
   }
   if (data.lineSpacing !== undefined) {
     paragraphStyle.lineSpacing = data.lineSpacing;
-    paragraphFields.push('lineSpacing');
+    paragraphFields.push("lineSpacing");
   }
   if (data.spaceAbove !== undefined) {
-    paragraphStyle.spaceAbove = { magnitude: data.spaceAbove, unit: 'PT' };
-    paragraphFields.push('spaceAbove');
+    paragraphStyle.spaceAbove = { magnitude: data.spaceAbove, unit: "PT" };
+    paragraphFields.push("spaceAbove");
   }
   if (data.spaceBelow !== undefined) {
-    paragraphStyle.spaceBelow = { magnitude: data.spaceBelow, unit: 'PT' };
-    paragraphFields.push('spaceBelow');
+    paragraphStyle.spaceBelow = { magnitude: data.spaceBelow, unit: "PT" };
+    paragraphFields.push("spaceBelow");
   }
 
   // Add paragraph style request if any paragraph options provided
@@ -509,7 +546,7 @@ export async function handleFormatGoogleDocRange(
       updateParagraphStyle: {
         range: { startIndex, endIndex },
         paragraphStyle,
-        fields: paragraphFields.join(','),
+        fields: paragraphFields.join(","),
       },
     });
     formatsApplied.push(...paragraphFields);
@@ -518,9 +555,9 @@ export async function handleFormatGoogleDocRange(
   // Validate at least one formatting option was provided
   if (requests.length === 0) {
     return errorResponse(
-      'No formatting options specified. Provide at least one of: ' +
-        'bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor, ' +
-        'namedStyleType, alignment, lineSpacing, spaceAbove, spaceBelow.'
+      "No formatting options specified. Provide at least one of: " +
+        "bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor, " +
+        "namedStyleType, alignment, lineSpacing, spaceAbove, spaceBelow.",
     );
   }
 
@@ -530,7 +567,7 @@ export async function handleFormatGoogleDocRange(
     requestBody: { requests },
   });
 
-  log('Applied formatting to document range', {
+  log("Applied formatting to document range", {
     documentId: data.documentId,
     startIndex,
     endIndex,
@@ -538,6 +575,6 @@ export async function handleFormatGoogleDocRange(
   });
 
   return successResponse(
-    `Applied formatting to range ${startIndex}-${endIndex}: ${formatsApplied.join(', ')}`
+    `Applied formatting to range ${startIndex}-${endIndex}: ${formatsApplied.join(", ")}`,
   );
 }

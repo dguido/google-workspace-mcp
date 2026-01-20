@@ -9,8 +9,8 @@
  * 2. The server to send notifications/progress with that token
  */
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { log } from './logging.js';
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { log } from "./logging.js";
 
 export interface ProgressReporter {
   /**
@@ -46,12 +46,15 @@ export interface ProgressReporter {
  */
 export function createProgressReporter(
   server: Server,
-  progressToken?: string | number
+  progressToken?: string | number,
 ): ProgressReporter {
   // Access the notification method on the server
   // The Server class has a notification method inherited from Protocol
   const serverAny = server as unknown as {
-    notification(notification: { method: string; params: unknown }): Promise<void>;
+    notification(notification: {
+      method: string;
+      params: unknown;
+    }): Promise<void>;
   };
 
   const canReport = !!progressToken;
@@ -61,14 +64,18 @@ export function createProgressReporter(
       return canReport;
     },
 
-    async report(progress: number, total?: number, message?: string): Promise<void> {
+    async report(
+      progress: number,
+      total?: number,
+      message?: string,
+    ): Promise<void> {
       if (!canReport) {
         return;
       }
 
       try {
         await serverAny.notification({
-          method: 'notifications/progress',
+          method: "notifications/progress",
           params: {
             progressToken,
             progress,
@@ -78,7 +85,7 @@ export function createProgressReporter(
         });
       } catch (error) {
         // Log but don't fail the operation if progress notification fails
-        log('Failed to send progress notification', {
+        log("Failed to send progress notification", {
           error: (error as Error).message,
           progress,
           total,
@@ -127,20 +134,25 @@ export interface BatchWithProgressOptions<T, R> {
  * ```
  */
 export async function processBatchWithProgress<T, R>(
-  options: BatchWithProgressOptions<T, R>
-): Promise<Array<{ success: true; result: R } | { success: false; error: string; item: T }>> {
+  options: BatchWithProgressOptions<T, R>,
+): Promise<
+  Array<
+    { success: true; result: R } | { success: false; error: string; item: T }
+  >
+> {
   const {
     server,
     progressToken,
     items,
     processor,
     concurrency = 5,
-    operationName = 'Processing',
+    operationName = "Processing",
   } = options;
 
   const reporter = createProgressReporter(server, progressToken);
-  const results: Array<{ success: true; result: R } | { success: false; error: string; item: T }> =
-    [];
+  const results: Array<
+    { success: true; result: R } | { success: false; error: string; item: T }
+  > = [];
   let completed = 0;
 
   // Report initial progress
@@ -156,8 +168,11 @@ export async function processBatchWithProgress<T, R>(
       batch.map(
         async (
           item,
-          batchIndex
-        ): Promise<{ success: true; result: R } | { success: false; error: string; item: T }> => {
+          batchIndex,
+        ): Promise<
+          | { success: true; result: R }
+          | { success: false; error: string; item: T }
+        > => {
           const index = i + batchIndex;
           try {
             const result = await processor(item, index);
@@ -169,8 +184,8 @@ export async function processBatchWithProgress<T, R>(
               item,
             };
           }
-        }
-      )
+        },
+      ),
     );
 
     results.push(...batchResults);
@@ -181,7 +196,7 @@ export async function processBatchWithProgress<T, R>(
       await reporter.report(
         completed,
         items.length,
-        `${operationName}: ${completed}/${items.length} complete`
+        `${operationName}: ${completed}/${items.length} complete`,
       );
     }
   }
@@ -193,7 +208,7 @@ export async function processBatchWithProgress<T, R>(
     await reporter.report(
       items.length,
       items.length,
-      `${operationName} complete: ${successCount} succeeded, ${failCount} failed`
+      `${operationName} complete: ${successCount} succeeded, ${failCount} failed`,
     );
   }
 
@@ -229,9 +244,15 @@ export async function withProgressReporting<T>(
   server: Server,
   progressToken: string | number | undefined,
   operation: (
-    report: (progress: number, total?: number, message?: string) => Promise<void>
-  ) => Promise<T>
+    report: (
+      progress: number,
+      total?: number,
+      message?: string,
+    ) => Promise<void>,
+  ) => Promise<T>,
 ): Promise<T> {
   const reporter = createProgressReporter(server, progressToken);
-  return operation((progress, total, message) => reporter.report(progress, total, message));
+  return operation((progress, total, message) =>
+    reporter.report(progress, total, message),
+  );
 }
