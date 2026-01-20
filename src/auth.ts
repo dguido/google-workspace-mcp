@@ -23,11 +23,6 @@ export async function authenticate(): Promise<OAuth2Client> {
   // Try to validate existing tokens
   if (await tokenManager.validateTokens()) {
     log("Authentication successful - using existing tokens");
-    log("OAuth2Client credentials:", {
-      hasAccessToken: !!oauth2Client.credentials?.access_token,
-      hasRefreshToken: !!oauth2Client.credentials?.refresh_token,
-      expiryDate: oauth2Client.credentials?.expiry_date,
-    });
     return oauth2Client;
   }
 

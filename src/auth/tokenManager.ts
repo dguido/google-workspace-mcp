@@ -167,17 +167,7 @@ export class TokenManager {
       }
 
       this.oauth2Client.setCredentials(tokens);
-      log("Tokens loaded and set on OAuth2Client:", {
-        hasAccessToken: !!tokens.access_token,
-        hasRefreshToken: !!tokens.refresh_token,
-        tokenLength: tokens.access_token?.length,
-        expiryDate: tokens.expiry_date,
-        scope: tokens.scope,
-      });
-      log("OAuth2Client after setCredentials:", {
-        hasCredentials: !!this.oauth2Client.credentials,
-        credentialsAccessToken: !!this.oauth2Client.credentials?.access_token,
-      });
+      log("Tokens loaded successfully");
       return true;
     } catch (error: unknown) {
       log("Error loading tokens:", error);
