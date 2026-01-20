@@ -3,10 +3,7 @@
     "version": "1.6.0",
     "description": "Google Drive MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, and Slides through MCP clients e.g. Claude Desktop",
     "license": "MIT",
-    "author": "Piotr Agier <piotr.agier@gmail.com>",
-    "contributors": [
-        "Dan Guido <dan@trailofbits.com>"
-    ],
+    "author": "Dan Guido <dan@trailofbits.com>",
     "homepage": "https://github.com/dguido/google-drive-mcp",
     "bugs": "https://github.com/dguido/google-drive-mcp/issues",
     "repository": {
@@ -48,13 +45,14 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
-        "lint": "tsc --noEmit"
+        "lint": "oxlint .",
+        "format": "biome format --write .",
+        "format:check": "biome format .",
+        "check": "npm run typecheck && npm run lint && npm run format:check"
     },
     "dependencies": {
         "@google-cloud/local-auth": "3.0.1",
         "@modelcontextprotocol/sdk": "1.25.2",
-        "@types/express": "5.0.6",
-        "express": "5.2.1",
         "google-auth-library": "10.5.0",
         "googleapis": "170.1.0",
         "open": "11.0.0",
@@ -63,10 +61,12 @@
         "zod": "3.25.76"
     },
     "devDependencies": {
+        "@biomejs/biome": "2.3.11",
         "@types/node": "22.19.7",
         "@types/uuid": "10.0.0",
         "@vitest/coverage-v8": "^4.0.17",
-        "esbuild": "0.25.12",
+        "esbuild": "0.27.2",
+        "oxlint": "1.39.0",
         "shx": "0.4.0",
         "typescript": "5.9.3",
         "vitest": "^4.0.17"

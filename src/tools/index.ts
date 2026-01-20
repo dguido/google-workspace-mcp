@@ -4,5 +4,5 @@ export {
   docsTools,
   sheetsTools,
   slidesTools,
-  getAllTools
+  getAllTools,
 } from './definitions.js';

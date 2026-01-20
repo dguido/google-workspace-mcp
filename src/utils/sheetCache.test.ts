@@ -3,7 +3,7 @@ import {
   getCachedSheetMetadata,
   setCachedSheetMetadata,
   clearSheetCache,
-  getSheetCacheStats
+  getSheetCacheStats,
 } from './sheetCache.js';
 
 describe('sheetCache', () => {
@@ -15,7 +15,7 @@ describe('sheetCache', () => {
     it('stores and retrieves sheet metadata', () => {
       setCachedSheetMetadata('spreadsheet1', [
         { title: 'Sheet1', sheetId: 0 },
-        { title: 'Data', sheetId: 123 }
+        { title: 'Data', sheetId: 123 },
       ]);
 
       const sheet1 = getCachedSheetMetadata('spreadsheet1', 'Sheet1');
@@ -31,9 +31,7 @@ describe('sheetCache', () => {
     });
 
     it('returns undefined for unknown sheet name', () => {
-      setCachedSheetMetadata('spreadsheet1', [
-        { title: 'Sheet1', sheetId: 0 }
-      ]);
+      setCachedSheetMetadata('spreadsheet1', [{ title: 'Sheet1', sheetId: 0 }]);
 
       const result = getCachedSheetMetadata('spreadsheet1', 'NonExistent');
       expect(result).toBeUndefined();
@@ -42,9 +40,7 @@ describe('sheetCache', () => {
     it('expires after TTL', () => {
       vi.useFakeTimers();
 
-      setCachedSheetMetadata('spreadsheet1', [
-        { title: 'Sheet1', sheetId: 0 }
-      ]);
+      setCachedSheetMetadata('spreadsheet1', [{ title: 'Sheet1', sheetId: 0 }]);
 
       // Before TTL - should return cached value
       expect(getCachedSheetMetadata('spreadsheet1', 'Sheet1')).toBeDefined();

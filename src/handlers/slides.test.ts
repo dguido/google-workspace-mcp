@@ -8,27 +8,24 @@ import {
   handleCreateGoogleSlidesShape,
   handleGetGoogleSlidesSpeakerNotes,
   handleUpdateGoogleSlidesSpeakerNotes,
-  handleFormatGoogleSlidesElement
+  handleFormatGoogleSlidesElement,
 } from './slides.js';
 
-vi.mock('../utils/index.js', () => ({
-  log: vi.fn(),
-  successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  structuredResponse: (text: string, data: Record<string, unknown>) => ({
-    content: [{ type: 'text', text }],
-    structuredContent: data,
-    isError: false
-  }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
-  withTimeout: <T>(promise: Promise<T>) => promise
-}));
+vi.mock('../utils/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/index.js')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    withTimeout: <T>(promise: Promise<T>) => promise,
+  };
+});
 
 function createMockDrive(): drive_v3.Drive {
   return {
     files: {
       list: vi.fn(),
-      update: vi.fn()
-    }
+      update: vi.fn(),
+    },
   } as unknown as drive_v3.Drive;
 }
 
@@ -39,9 +36,9 @@ function createMockSlides(): slides_v1.Slides {
       get: vi.fn(),
       batchUpdate: vi.fn(),
       pages: {
-        get: vi.fn()
-      }
-    }
+        get: vi.fn(),
+      },
+    },
   } as unknown as slides_v1.Slides;
 }
 
@@ -57,7 +54,7 @@ describe('handleCreateGoogleSlides', () => {
 
   it('creates presentation successfully', async () => {
     vi.mocked(mockSlides.presentations.create).mockResolvedValue({
-      data: { presentationId: 'pres123' }
+      data: { presentationId: 'pres123' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
@@ -69,16 +66,16 @@ describe('handleCreateGoogleSlides', () => {
             objectId: 'slide1',
             pageElements: [
               { objectId: 'title1', shape: { placeholder: { type: 'TITLE' } } },
-              { objectId: 'body1', shape: { placeholder: { type: 'BODY' } } }
-            ]
-          }
-        ]
-      }
+              { objectId: 'body1', shape: { placeholder: { type: 'BODY' } } },
+            ],
+          },
+        ],
+      },
     } as never);
 
     const result = await handleCreateGoogleSlides(mockDrive, mockSlides, {
       name: 'Test Presentation',
-      slides: [{ title: 'Slide 1', content: 'Content 1' }]
+      slides: [{ title: 'Slide 1', content: 'Content 1' }],
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created Google Slides');
@@ -86,12 +83,12 @@ describe('handleCreateGoogleSlides', () => {
 
   it('returns error when presentation already exists', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleCreateGoogleSlides(mockDrive, mockSlides, {
       name: 'Existing Presentation',
-      slides: [{ title: 'Slide', content: 'Content' }]
+      slides: [{ title: 'Slide', content: 'Content' }],
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -100,7 +97,7 @@ describe('handleCreateGoogleSlides', () => {
   it('returns error for empty slides array', async () => {
     const result = await handleCreateGoogleSlides(mockDrive, mockSlides, {
       name: 'Test',
-      slides: []
+      slides: [],
     });
     expect(result.isError).toBe(true);
   });
@@ -116,20 +113,22 @@ describe('handleUpdateGoogleSlides', () => {
   it('updates presentation successfully', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
       data: {
-        slides: [{
-          objectId: 'slide1',
-          pageElements: [
-            { objectId: 'title1', shape: { placeholder: { type: 'TITLE' }, text: {} } },
-            { objectId: 'body1', shape: { placeholder: { type: 'BODY' }, text: {} } }
-          ]
-        }]
-      }
+        slides: [
+          {
+            objectId: 'slide1',
+            pageElements: [
+              { objectId: 'title1', shape: { placeholder: { type: 'TITLE' }, text: {} } },
+              { objectId: 'body1', shape: { placeholder: { type: 'BODY' }, text: {} } },
+            ],
+          },
+        ],
+      },
     } as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleUpdateGoogleSlides(mockSlides, {
       presentationId: 'pres123',
-      slides: [{ title: 'Updated Title', content: 'Updated Content' }]
+      slides: [{ title: 'Updated Title', content: 'Updated Content' }],
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Updated Google Slides');
@@ -137,12 +136,12 @@ describe('handleUpdateGoogleSlides', () => {
 
   it('returns error for empty presentation', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
-      data: { slides: undefined }
+      data: { slides: undefined },
     } as never);
 
     const result = await handleUpdateGoogleSlides(mockSlides, {
       presentationId: 'pres123',
-      slides: [{ title: 'Title', content: 'Content' }]
+      slides: [{ title: 'Title', content: 'Content' }],
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('No slides found');
@@ -151,7 +150,7 @@ describe('handleUpdateGoogleSlides', () => {
   it('returns error for empty slides array', async () => {
     const result = await handleUpdateGoogleSlides(mockSlides, {
       presentationId: 'pres123',
-      slides: []
+      slides: [],
     });
     expect(result.isError).toBe(true);
   });
@@ -167,22 +166,26 @@ describe('handleGetGoogleSlidesContent', () => {
   it('returns content successfully', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
       data: {
-        slides: [{
-          objectId: 'slide1',
-          pageElements: [{
-            objectId: 'text1',
-            shape: {
-              text: {
-                textElements: [{ textRun: { content: 'Hello World' } }]
-              }
-            }
-          }]
-        }]
-      }
+        slides: [
+          {
+            objectId: 'slide1',
+            pageElements: [
+              {
+                objectId: 'text1',
+                shape: {
+                  text: {
+                    textElements: [{ textRun: { content: 'Hello World' } }],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
     } as never);
 
     const result = await handleGetGoogleSlidesContent(mockSlides, {
-      presentationId: 'pres123'
+      presentationId: 'pres123',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Hello World');
@@ -190,11 +193,11 @@ describe('handleGetGoogleSlidesContent', () => {
 
   it('returns error for empty presentation', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
-      data: { slides: undefined }
+      data: { slides: undefined },
     } as never);
 
     const result = await handleGetGoogleSlidesContent(mockSlides, {
-      presentationId: 'pres123'
+      presentationId: 'pres123',
     });
     expect(result.isError).toBe(true);
   });
@@ -217,7 +220,7 @@ describe('handleCreateGoogleSlidesTextBox', () => {
       x: 100,
       y: 100,
       width: 200,
-      height: 50
+      height: 50,
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created text box');
@@ -231,7 +234,7 @@ describe('handleCreateGoogleSlidesTextBox', () => {
       x: 0,
       y: 0,
       width: 100,
-      height: 50
+      height: 50,
     });
     expect(result.isError).toBe(true);
   });
@@ -254,7 +257,7 @@ describe('handleCreateGoogleSlidesShape', () => {
       x: 100,
       y: 100,
       width: 200,
-      height: 100
+      height: 100,
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created');
@@ -272,27 +275,31 @@ describe('handleGetGoogleSlidesSpeakerNotes', () => {
   it('returns speaker notes successfully', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
       data: {
-        slides: [{
-          slideProperties: {
-            notesPage: {
-              notesProperties: { speakerNotesObjectId: 'notes1' },
-              pageElements: [{
-                objectId: 'notes1',
-                shape: {
-                  text: {
-                    textElements: [{ textRun: { content: 'Speaker notes here' } }]
-                  }
-                }
-              }]
-            }
-          }
-        }]
-      }
+        slides: [
+          {
+            slideProperties: {
+              notesPage: {
+                notesProperties: { speakerNotesObjectId: 'notes1' },
+                pageElements: [
+                  {
+                    objectId: 'notes1',
+                    shape: {
+                      text: {
+                        textElements: [{ textRun: { content: 'Speaker notes here' } }],
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
     } as never);
 
     const result = await handleGetGoogleSlidesSpeakerNotes(mockSlides, {
       presentationId: 'pres123',
-      slideIndex: 0
+      slideIndex: 0,
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Speaker notes here');
@@ -300,12 +307,12 @@ describe('handleGetGoogleSlidesSpeakerNotes', () => {
 
   it('returns error for invalid slide index', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
-      data: { slides: [{}] }
+      data: { slides: [{}] },
     } as never);
 
     const result = await handleGetGoogleSlidesSpeakerNotes(mockSlides, {
       presentationId: 'pres123',
-      slideIndex: 5
+      slideIndex: 5,
     });
     expect(result.isError).toBe(true);
   });
@@ -321,21 +328,23 @@ describe('handleUpdateGoogleSlidesSpeakerNotes', () => {
   it('updates speaker notes successfully', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
       data: {
-        slides: [{
-          slideProperties: {
-            notesPage: {
-              notesProperties: { speakerNotesObjectId: 'notes1' }
-            }
-          }
-        }]
-      }
+        slides: [
+          {
+            slideProperties: {
+              notesPage: {
+                notesProperties: { speakerNotesObjectId: 'notes1' },
+              },
+            },
+          },
+        ],
+      },
     } as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
       presentationId: 'pres123',
       slideIndex: 0,
-      notes: 'New speaker notes'
+      notes: 'New speaker notes',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Successfully updated');
@@ -344,16 +353,18 @@ describe('handleUpdateGoogleSlidesSpeakerNotes', () => {
   it('returns error when no speaker notes object', async () => {
     vi.mocked(mockSlides.presentations.get).mockResolvedValue({
       data: {
-        slides: [{
-          slideProperties: {}
-        }]
-      }
+        slides: [
+          {
+            slideProperties: {},
+          },
+        ],
+      },
     } as never);
 
     const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
       presentationId: 'pres123',
       slideIndex: 0,
-      notes: 'Notes'
+      notes: 'Notes',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('does not have a speaker notes');
@@ -377,7 +388,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         objectId: 'obj123',
         bold: true,
         italic: true,
-        fontSize: 14
+        fontSize: 14,
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('Applied formatting');
@@ -392,7 +403,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         targetType: 'text',
         objectId: 'obj123',
         alignment: 'CENTER',
-        lineSpacing: 1.5
+        lineSpacing: 1.5,
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('alignment');
@@ -408,7 +419,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         objectId: 'obj123',
         bold: true,
         alignment: 'CENTER',
-        bulletStyle: 'DISC'
+        bulletStyle: 'DISC',
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('text style');
@@ -425,7 +436,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         objectId: 'obj123',
         startIndex: 0,
         endIndex: 10,
-        bold: true
+        bold: true,
       });
       expect(result.isError).toBe(false);
     });
@@ -437,7 +448,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         presentationId: 'pres123',
         targetType: 'text',
         objectId: 'obj123',
-        bulletStyle: 'NUMBERED'
+        bulletStyle: 'NUMBERED',
       });
       expect(result.isError).toBe(false);
     });
@@ -449,7 +460,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         presentationId: 'pres123',
         targetType: 'text',
         objectId: 'obj123',
-        bulletStyle: 'NONE'
+        bulletStyle: 'NONE',
       });
       expect(result.isError).toBe(false);
     });
@@ -463,7 +474,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         presentationId: 'pres123',
         targetType: 'shape',
         objectId: 'shape123',
-        backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 }
+        backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('background color');
@@ -478,7 +489,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         objectId: 'shape123',
         outlineColor: { red: 0, green: 0, blue: 0 },
         outlineWeight: 2,
-        outlineDashStyle: 'DASH'
+        outlineDashStyle: 'DASH',
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('outline color');
@@ -496,7 +507,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         backgroundColor: { red: 1, green: 1, blue: 1 },
         outlineColor: { red: 0, green: 0, blue: 0 },
         outlineWeight: 1,
-        outlineDashStyle: 'SOLID'
+        outlineDashStyle: 'SOLID',
       });
       expect(result.isError).toBe(false);
     });
@@ -510,7 +521,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         presentationId: 'pres123',
         targetType: 'slide',
         pageObjectIds: ['slide1', 'slide2'],
-        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 }
+        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('slide background');
@@ -524,7 +535,7 @@ describe('handleFormatGoogleSlidesElement', () => {
         presentationId: 'pres123',
         targetType: 'slide',
         pageObjectIds: ['slide1'],
-        slideBackgroundColor: { red: 1, green: 1, blue: 1 }
+        slideBackgroundColor: { red: 1, green: 1, blue: 1 },
       });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('1 slide(s)');
@@ -536,7 +547,7 @@ describe('handleFormatGoogleSlidesElement', () => {
       const result = await handleFormatGoogleSlidesElement(mockSlides, {
         presentationId: 'pres123',
         targetType: 'text',
-        objectId: 'obj123'
+        objectId: 'obj123',
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('No formatting options');
@@ -546,7 +557,7 @@ describe('handleFormatGoogleSlidesElement', () => {
       const result = await handleFormatGoogleSlidesElement(mockSlides, {
         presentationId: 'pres123',
         targetType: 'shape',
-        objectId: 'shape123'
+        objectId: 'shape123',
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('No formatting options');
@@ -556,7 +567,7 @@ describe('handleFormatGoogleSlidesElement', () => {
       const result = await handleFormatGoogleSlidesElement(mockSlides, {
         presentationId: 'pres123',
         targetType: 'slide',
-        pageObjectIds: ['slide1']
+        pageObjectIds: ['slide1'],
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('No formatting options');
@@ -566,7 +577,7 @@ describe('handleFormatGoogleSlidesElement', () => {
       const result = await handleFormatGoogleSlidesElement(mockSlides, {
         presentationId: 'pres123',
         targetType: 'text',
-        bold: true
+        bold: true,
       });
       expect(result.isError).toBe(true);
     });
@@ -575,7 +586,7 @@ describe('handleFormatGoogleSlidesElement', () => {
       const result = await handleFormatGoogleSlidesElement(mockSlides, {
         presentationId: 'pres123',
         targetType: 'slide',
-        slideBackgroundColor: { red: 1 }
+        slideBackgroundColor: { red: 1 },
       });
       expect(result.isError).toBe(true);
     });

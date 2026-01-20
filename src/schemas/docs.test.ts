@@ -3,7 +3,7 @@ import {
   CreateGoogleDocSchema,
   UpdateGoogleDocSchema,
   GetGoogleDocContentSchema,
-  FormatGoogleDocRangeSchema
+  FormatGoogleDocRangeSchema,
 } from './docs.js';
 
 describe('CreateGoogleDocSchema', () => {
@@ -16,7 +16,7 @@ describe('CreateGoogleDocSchema', () => {
     const result = CreateGoogleDocSchema.safeParse({
       name: 'My Doc',
       content: 'Hello',
-      parentFolderId: 'folder123'
+      parentFolderId: 'folder123',
     });
     expect(result.success).toBe(true);
   });
@@ -29,7 +29,10 @@ describe('CreateGoogleDocSchema', () => {
 
 describe('UpdateGoogleDocSchema', () => {
   it('accepts valid input', () => {
-    const result = UpdateGoogleDocSchema.safeParse({ documentId: 'doc123', content: 'New content' });
+    const result = UpdateGoogleDocSchema.safeParse({
+      documentId: 'doc123',
+      content: 'New content',
+    });
     expect(result.success).toBe(true);
   });
 
@@ -57,7 +60,7 @@ describe('FormatGoogleDocRangeSchema', () => {
       documentId: 'doc123',
       startIndex: 1,
       endIndex: 10,
-      bold: true
+      bold: true,
     });
     expect(result.success).toBe(true);
   });
@@ -66,7 +69,7 @@ describe('FormatGoogleDocRangeSchema', () => {
     const result = FormatGoogleDocRangeSchema.safeParse({
       documentId: 'doc123',
       bold: true,
-      italic: true
+      italic: true,
     });
     expect(result.success).toBe(true);
   });
@@ -82,7 +85,7 @@ describe('FormatGoogleDocRangeSchema', () => {
       strikethrough: true,
       fontSize: 14,
       fontFamily: 'Arial',
-      foregroundColor: { red: 1, green: 0, blue: 0 }
+      foregroundColor: { red: 1, green: 0, blue: 0 },
     });
     expect(result.success).toBe(true);
   });
@@ -96,7 +99,7 @@ describe('FormatGoogleDocRangeSchema', () => {
       alignment: 'CENTER',
       lineSpacing: 150,
       spaceAbove: 12,
-      spaceBelow: 12
+      spaceBelow: 12,
     });
     expect(result.success).toBe(true);
   });
@@ -109,7 +112,7 @@ describe('FormatGoogleDocRangeSchema', () => {
       bold: true,
       fontSize: 18,
       alignment: 'CENTER',
-      namedStyleType: 'HEADING_1'
+      namedStyleType: 'HEADING_1',
     });
     expect(result.success).toBe(true);
   });
@@ -117,7 +120,7 @@ describe('FormatGoogleDocRangeSchema', () => {
   it('rejects empty documentId', () => {
     const result = FormatGoogleDocRangeSchema.safeParse({
       documentId: '',
-      bold: true
+      bold: true,
     });
     expect(result.success).toBe(false);
   });
@@ -127,7 +130,7 @@ describe('FormatGoogleDocRangeSchema', () => {
       documentId: 'doc123',
       startIndex: 0,
       endIndex: 10,
-      bold: true
+      bold: true,
     });
     expect(result.success).toBe(false);
   });
@@ -135,7 +138,7 @@ describe('FormatGoogleDocRangeSchema', () => {
   it('rejects color values outside 0-1 range', () => {
     const result = FormatGoogleDocRangeSchema.safeParse({
       documentId: 'doc123',
-      foregroundColor: { red: 2 }
+      foregroundColor: { red: 2 },
     });
     expect(result.success).toBe(false);
   });
@@ -143,7 +146,7 @@ describe('FormatGoogleDocRangeSchema', () => {
   it('rejects invalid alignment', () => {
     const result = FormatGoogleDocRangeSchema.safeParse({
       documentId: 'doc123',
-      alignment: 'INVALID'
+      alignment: 'INVALID',
     });
     expect(result.success).toBe(false);
   });
@@ -151,7 +154,7 @@ describe('FormatGoogleDocRangeSchema', () => {
   it('rejects invalid namedStyleType', () => {
     const result = FormatGoogleDocRangeSchema.safeParse({
       documentId: 'doc123',
-      namedStyleType: 'INVALID'
+      namedStyleType: 'INVALID',
     });
     expect(result.success).toBe(false);
   });

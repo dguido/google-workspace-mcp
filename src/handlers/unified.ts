@@ -1,35 +1,15 @@
 import type { drive_v3, docs_v1, sheets_v4, slides_v1 } from 'googleapis';
-import { successResponse, structuredResponse, errorResponse } from '../utils/index.js';
+import { structuredResponse, errorResponse, validateArgs } from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
+import { CreateFileSchema, UpdateFileSchema, GetFileContentSchema } from '../schemas/unified.js';
+import { resolveOptionalFolderPath, resolveFileIdFromPath } from './helpers.js';
 import {
-  CreateFileSchema,
-  UpdateFileSchema,
-  GetFileContentSchema
-} from '../schemas/unified.js';
-import { resolveOptionalFolderPath, resolveFileIdFromPath, FOLDER_MIME_TYPE } from './helpers.js';
-
-// MIME type constants
-const GOOGLE_DOC_MIME = 'application/vnd.google-apps.document';
-const GOOGLE_SHEET_MIME = 'application/vnd.google-apps.spreadsheet';
-const GOOGLE_SLIDES_MIME = 'application/vnd.google-apps.presentation';
-const TEXT_PLAIN_MIME = 'text/plain';
-const TEXT_MARKDOWN_MIME = 'text/markdown';
-
-// Extension to type mapping
-const EXTENSION_TYPE_MAP: Record<string, 'doc' | 'sheet' | 'slides' | 'text'> = {
-  'docx': 'doc',
-  'doc': 'doc',
-  'gdoc': 'doc',
-  'xlsx': 'sheet',
-  'xls': 'sheet',
-  'csv': 'sheet',
-  'gsheet': 'sheet',
-  'pptx': 'slides',
-  'ppt': 'slides',
-  'gslides': 'slides',
-  'txt': 'text',
-  'md': 'text'
-};
+  GOOGLE_MIME_TYPES,
+  TEXT_MIME_TYPES,
+  EXTENSION_TO_TYPE,
+  type FileType,
+  getExtension,
+} from '../utils/mimeTypes.js';
 
 /**
  * Infer file type from name extension or content structure
@@ -37,15 +17,15 @@ const EXTENSION_TYPE_MAP: Record<string, 'doc' | 'sheet' | 'slides' | 'text'> = 
 function inferFileType(
   name: string,
   content: unknown,
-  explicitType?: 'doc' | 'sheet' | 'slides' | 'text'
-): 'doc' | 'sheet' | 'slides' | 'text' {
+  explicitType?: FileType
+): FileType {
   // Explicit type takes precedence
   if (explicitType) return explicitType;
 
   // Check extension
-  const ext = name.split('.').pop()?.toLowerCase();
-  if (ext && EXTENSION_TYPE_MAP[ext]) {
-    return EXTENSION_TYPE_MAP[ext];
+  const ext = getExtension(name);
+  if (EXTENSION_TO_TYPE[ext]) {
+    return EXTENSION_TO_TYPE[ext];
   }
 
   // Infer from content structure
@@ -55,8 +35,12 @@ function inferFileType(
       return 'sheet';
     }
     // Check if it's slides array
-    if (content.length > 0 && typeof content[0] === 'object' &&
-        'title' in content[0] && 'content' in content[0]) {
+    if (
+      content.length > 0 &&
+      typeof content[0] === 'object' &&
+      'title' in content[0] &&
+      'content' in content[0]
+    ) {
       return 'slides';
     }
   }
@@ -68,16 +52,16 @@ function inferFileType(
 /**
  * Get file type from MIME type
  */
-function getTypeFromMime(mimeType: string): 'doc' | 'sheet' | 'slides' | 'text' | 'binary' {
+function getTypeFromMime(mimeType: string): FileType | 'binary' {
   switch (mimeType) {
-    case GOOGLE_DOC_MIME:
+    case GOOGLE_MIME_TYPES.DOCUMENT:
       return 'doc';
-    case GOOGLE_SHEET_MIME:
+    case GOOGLE_MIME_TYPES.SPREADSHEET:
       return 'sheet';
-    case GOOGLE_SLIDES_MIME:
+    case GOOGLE_MIME_TYPES.PRESENTATION:
       return 'slides';
-    case TEXT_PLAIN_MIME:
-    case TEXT_MARKDOWN_MIME:
+    case TEXT_MIME_TYPES.PLAIN:
+    case TEXT_MIME_TYPES.MARKDOWN:
       return 'text';
     default:
       if (mimeType.startsWith('text/')) return 'text';
@@ -95,10 +79,8 @@ export async function handleCreateFile(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = CreateFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(CreateFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve parent folder
@@ -113,16 +95,17 @@ export async function handleCreateFile(
 
   switch (fileType) {
     case 'doc': {
-      const content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+      const content =
+        typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
 
       // Create Google Doc
       const doc = await drive.files.create({
         requestBody: {
           name: data.name,
-          mimeType: GOOGLE_DOC_MIME,
-          parents: [parentFolderId]
+          mimeType: GOOGLE_MIME_TYPES.DOCUMENT,
+          parents: [parentFolderId],
         },
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       // Insert content
@@ -136,24 +119,21 @@ export async function handleCreateFile(
                 updateParagraphStyle: {
                   range: { startIndex: 1, endIndex: content.length + 1 },
                   paragraphStyle: { namedStyleType: 'NORMAL_TEXT' },
-                  fields: 'namedStyleType'
-                }
-              }
-            ]
-          }
+                  fields: 'namedStyleType',
+                },
+              },
+            ],
+          },
         });
       }
 
-      return structuredResponse(
-        `Created Google Doc: ${data.name}\nID: ${doc.data.id}`,
-        {
-          id: doc.data.id,
-          name: data.name,
-          type: 'doc',
-          mimeType: GOOGLE_DOC_MIME,
-          webViewLink: `https://docs.google.com/document/d/${doc.data.id}/edit`
-        }
-      );
+      return structuredResponse(`Created Google Doc: ${data.name}\nID: ${doc.data.id}`, {
+        id: doc.data.id,
+        name: data.name,
+        type: 'doc',
+        mimeType: GOOGLE_MIME_TYPES.DOCUMENT,
+        webViewLink: `https://docs.google.com/document/d/${doc.data.id}/edit`,
+      });
     }
 
     case 'sheet': {
@@ -163,7 +143,7 @@ export async function handleCreateFile(
         sheetData = data.content as string[][];
       } else if (typeof data.content === 'string') {
         // Parse CSV-like string
-        sheetData = data.content.split('\n').map(row => row.split(','));
+        sheetData = data.content.split('\n').map((row) => row.split(','));
       } else {
         return errorResponse('Sheet content must be a 2D array or CSV string');
       }
@@ -172,14 +152,16 @@ export async function handleCreateFile(
       const spreadsheet = await sheets.spreadsheets.create({
         requestBody: {
           properties: { title: data.name },
-          sheets: [{
-            properties: {
-              sheetId: 0,
-              title: 'Sheet1',
-              gridProperties: { rowCount: Math.max(1000, sheetData.length), columnCount: 26 }
-            }
-          }]
-        }
+          sheets: [
+            {
+              properties: {
+                sheetId: 0,
+                title: 'Sheet1',
+                gridProperties: { rowCount: Math.max(1000, sheetData.length), columnCount: 26 },
+              },
+            },
+          ],
+        },
       });
 
       // Move to folder
@@ -187,7 +169,7 @@ export async function handleCreateFile(
         fileId: spreadsheet.data.spreadsheetId!,
         addParents: parentFolderId,
         removeParents: 'root',
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       // Populate data
@@ -196,7 +178,7 @@ export async function handleCreateFile(
           spreadsheetId: spreadsheet.data.spreadsheetId!,
           range: 'Sheet1!A1',
           valueInputOption: 'RAW',
-          requestBody: { values: sheetData }
+          requestBody: { values: sheetData },
         });
       }
 
@@ -206,8 +188,8 @@ export async function handleCreateFile(
           id: spreadsheet.data.spreadsheetId,
           name: data.name,
           type: 'sheet',
-          mimeType: GOOGLE_SHEET_MIME,
-          webViewLink: spreadsheet.data.spreadsheetUrl
+          mimeType: GOOGLE_MIME_TYPES.SPREADSHEET,
+          webViewLink: spreadsheet.data.spreadsheetUrl,
         }
       );
     }
@@ -215,11 +197,13 @@ export async function handleCreateFile(
     case 'slides': {
       // Ensure content is slides array
       let slidesData: Array<{ title: string; content: string }>;
-      if (Array.isArray(data.content) &&
-          data.content.length > 0 &&
-          typeof data.content[0] === 'object' &&
-          !Array.isArray(data.content[0]) &&
-          'title' in data.content[0]) {
+      if (
+        Array.isArray(data.content) &&
+        data.content.length > 0 &&
+        typeof data.content[0] === 'object' &&
+        !Array.isArray(data.content[0]) &&
+        'title' in data.content[0]
+      ) {
         slidesData = data.content as Array<{ title: string; content: string }>;
       } else if (typeof data.content === 'string') {
         // Create single slide with content
@@ -230,7 +214,7 @@ export async function handleCreateFile(
 
       // Create presentation
       const presentation = await slides.presentations.create({
-        requestBody: { title: data.name }
+        requestBody: { title: data.name },
       });
 
       // Move to folder
@@ -238,7 +222,7 @@ export async function handleCreateFile(
         fileId: presentation.data.presentationId!,
         addParents: parentFolderId,
         removeParents: 'root',
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       // Add slides (simplified - would need full implementation for content)
@@ -249,13 +233,13 @@ export async function handleCreateFile(
         await slides.presentations.batchUpdate({
           presentationId: presentation.data.presentationId!,
           requestBody: {
-            requests: slideIds.map(id => ({
+            requests: slideIds.map((id) => ({
               createSlide: {
                 objectId: id,
-                slideLayoutReference: { predefinedLayout: 'TITLE_AND_BODY' }
-              }
-            }))
-          }
+                slideLayoutReference: { predefinedLayout: 'TITLE_AND_BODY' },
+              },
+            })),
+          },
         });
       }
 
@@ -265,39 +249,37 @@ export async function handleCreateFile(
           id: presentation.data.presentationId,
           name: data.name,
           type: 'slides',
-          mimeType: GOOGLE_SLIDES_MIME,
-          webViewLink: `https://docs.google.com/presentation/d/${presentation.data.presentationId}/edit`
+          mimeType: GOOGLE_MIME_TYPES.PRESENTATION,
+          webViewLink: `https://docs.google.com/presentation/d/${presentation.data.presentationId}/edit`,
         }
       );
     }
 
     case 'text': {
-      const content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
-      const mimeType = data.name.endsWith('.md') ? TEXT_MARKDOWN_MIME : TEXT_PLAIN_MIME;
+      const content =
+        typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+      const mimeType = data.name.endsWith('.md') ? TEXT_MIME_TYPES.MARKDOWN : TEXT_MIME_TYPES.PLAIN;
 
       const file = await drive.files.create({
         requestBody: {
           name: data.name,
           mimeType,
-          parents: [parentFolderId]
+          parents: [parentFolderId],
         },
         media: {
           mimeType,
-          body: content
+          body: content,
         },
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
-      return structuredResponse(
-        `Created text file: ${data.name}\nID: ${file.data.id}`,
-        {
-          id: file.data.id,
-          name: data.name,
-          type: 'text',
-          mimeType,
-          webViewLink: file.data.webViewLink
-        }
-      );
+      return structuredResponse(`Created text file: ${data.name}\nID: ${file.data.id}`, {
+        id: file.data.id,
+        name: data.name,
+        type: 'text',
+        mimeType,
+        webViewLink: file.data.webViewLink,
+      });
     }
   }
 }
@@ -309,13 +291,11 @@ export async function handleUpdateFile(
   drive: drive_v3.Drive,
   docs: docs_v1.Docs,
   sheets: sheets_v4.Sheets,
-  slides: slides_v1.Slides,
+  _slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = UpdateFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(UpdateFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve file ID
@@ -325,14 +305,15 @@ export async function handleUpdateFile(
   const file = await drive.files.get({
     fileId,
     fields: 'name, mimeType',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const fileType = getTypeFromMime(file.data.mimeType!);
 
   switch (fileType) {
     case 'doc': {
-      const content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+      const content =
+        typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
 
       // Get current document to find end index
       const doc = await docs.documents.get({ documentId: fileId });
@@ -344,15 +325,17 @@ export async function handleUpdateFile(
         requestBody: {
           requests: [
             { deleteContentRange: { range: { startIndex: 1, endIndex: endIndex - 1 } } },
-            { insertText: { location: { index: 1 }, text: content } }
-          ]
-        }
+            { insertText: { location: { index: 1 }, text: content } },
+          ],
+        },
       });
 
-      return structuredResponse(
-        `Updated Google Doc: ${file.data.name}`,
-        { id: fileId, name: file.data.name, type: 'doc', updated: true }
-      );
+      return structuredResponse(`Updated Google Doc: ${file.data.name}`, {
+        id: fileId,
+        name: file.data.name,
+        type: 'doc',
+        updated: true,
+      });
     }
 
     case 'sheet': {
@@ -360,7 +343,7 @@ export async function handleUpdateFile(
       if (Array.isArray(data.content) && Array.isArray(data.content[0])) {
         sheetData = data.content as string[][];
       } else if (typeof data.content === 'string') {
-        sheetData = data.content.split('\n').map(row => row.split(','));
+        sheetData = data.content.split('\n').map((row) => row.split(','));
       } else {
         return errorResponse('Sheet content must be a 2D array or CSV string');
       }
@@ -371,44 +354,50 @@ export async function handleUpdateFile(
         spreadsheetId: fileId,
         range,
         valueInputOption: 'RAW',
-        requestBody: { values: sheetData }
+        requestBody: { values: sheetData },
       });
 
-      return structuredResponse(
-        `Updated Google Sheet: ${file.data.name}`,
-        { id: fileId, name: file.data.name, type: 'sheet', range, updated: true }
-      );
+      return structuredResponse(`Updated Google Sheet: ${file.data.name}`, {
+        id: fileId,
+        name: file.data.name,
+        type: 'sheet',
+        range,
+        updated: true,
+      });
     }
 
     case 'slides': {
       return errorResponse(
         'Updating slides requires the updateGoogleSlides tool for slide-by-slide control. ' +
-        'Use updateGoogleSlides with presentationId and slides array.'
+          'Use updateGoogleSlides with presentationId and slides array.'
       );
     }
 
     case 'text': {
-      const content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+      const content =
+        typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
 
       await drive.files.update({
         fileId,
         media: {
           mimeType: file.data.mimeType!,
-          body: content
+          body: content,
         },
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
-      return structuredResponse(
-        `Updated text file: ${file.data.name}`,
-        { id: fileId, name: file.data.name, type: 'text', updated: true }
-      );
+      return structuredResponse(`Updated text file: ${file.data.name}`, {
+        id: fileId,
+        name: file.data.name,
+        type: 'text',
+        updated: true,
+      });
     }
 
     case 'binary':
       return errorResponse(
         `Cannot update binary file "${file.data.name}" (${file.data.mimeType}). ` +
-        'Use uploadFile to replace the file.'
+          'Use uploadFile to replace the file.'
       );
   }
 }
@@ -423,10 +412,8 @@ export async function handleGetFileContent(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetFileContentSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetFileContentSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve file ID
@@ -436,7 +423,7 @@ export async function handleGetFileContent(
   const file = await drive.files.get({
     fileId,
     fields: 'name, mimeType, modifiedTime, size',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const fileType = getTypeFromMime(file.data.mimeType!);
@@ -458,20 +445,17 @@ export async function handleGetFileContent(
         }
       }
 
-      return structuredResponse(
-        content.trim(),
-        {
-          fileId,
-          name: file.data.name,
-          type: 'doc',
-          mimeType: file.data.mimeType,
-          content: content.trim(),
-          metadata: {
-            modifiedTime: file.data.modifiedTime,
-            title: doc.data.title
-          }
-        }
-      );
+      return structuredResponse(content.trim(), {
+        fileId,
+        name: file.data.name,
+        type: 'doc',
+        mimeType: file.data.mimeType,
+        content: content.trim(),
+        metadata: {
+          modifiedTime: file.data.modifiedTime,
+          title: doc.data.title,
+        },
+      });
     }
 
     case 'sheet': {
@@ -479,7 +463,7 @@ export async function handleGetFileContent(
 
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: fileId,
-        range
+        range,
       });
 
       const values = response.data.values || [];
@@ -496,15 +480,15 @@ export async function handleGetFileContent(
           metadata: {
             modifiedTime: file.data.modifiedTime,
             rowCount: values.length,
-            columnCount: values[0]?.length || 0
-          }
+            columnCount: values[0]?.length || 0,
+          },
         }
       );
     }
 
     case 'slides': {
       const presentation = await slides.presentations.get({
-        presentationId: fileId
+        presentationId: fileId,
       });
 
       const slideData = (presentation.data.slides || []).map((slide, index) => {
@@ -514,8 +498,8 @@ export async function handleGetFileContent(
         for (const element of slide.pageElements || []) {
           if (element.shape?.text?.textElements) {
             const text = element.shape.text.textElements
-              .filter(te => te.textRun?.content)
-              .map(te => te.textRun!.content)
+              .filter((te) => te.textRun?.content)
+              .map((te) => te.textRun!.content)
               .join('');
 
             // First text element with content is likely the title
@@ -531,25 +515,22 @@ export async function handleGetFileContent(
           index,
           objectId: slide.objectId,
           title: title || `Slide ${index + 1}`,
-          content: content.trim()
+          content: content.trim(),
         };
       });
 
-      return structuredResponse(
-        `Presentation: ${file.data.name}\nSlides: ${slideData.length}`,
-        {
-          fileId,
-          name: file.data.name,
-          type: 'slides',
-          mimeType: file.data.mimeType,
-          content: slideData,
-          metadata: {
-            modifiedTime: file.data.modifiedTime,
-            slideCount: slideData.length,
-            title: presentation.data.title
-          }
-        }
-      );
+      return structuredResponse(`Presentation: ${file.data.name}\nSlides: ${slideData.length}`, {
+        fileId,
+        name: file.data.name,
+        type: 'slides',
+        mimeType: file.data.mimeType,
+        content: slideData,
+        metadata: {
+          modifiedTime: file.data.modifiedTime,
+          slideCount: slideData.length,
+          title: presentation.data.title,
+        },
+      });
     }
 
     case 'text': {
@@ -558,30 +539,25 @@ export async function handleGetFileContent(
         { responseType: 'text' }
       );
 
-      const content = typeof response.data === 'string'
-        ? response.data
-        : String(response.data);
+      const content = typeof response.data === 'string' ? response.data : String(response.data);
 
-      return structuredResponse(
+      return structuredResponse(content, {
+        fileId,
+        name: file.data.name,
+        type: 'text',
+        mimeType: file.data.mimeType,
         content,
-        {
-          fileId,
-          name: file.data.name,
-          type: 'text',
-          mimeType: file.data.mimeType,
-          content,
-          metadata: {
-            modifiedTime: file.data.modifiedTime,
-            size: file.data.size
-          }
-        }
-      );
+        metadata: {
+          modifiedTime: file.data.modifiedTime,
+          size: file.data.size,
+        },
+      });
     }
 
     case 'binary':
       return errorResponse(
         `Cannot read binary file "${file.data.name}" (${file.data.mimeType}) as text. ` +
-        'Use downloadFile to download the raw content.'
+          'Use downloadFile to download the raw content.'
       );
   }
 }

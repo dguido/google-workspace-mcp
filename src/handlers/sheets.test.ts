@@ -9,33 +9,30 @@ import {
   handleAddGoogleSheetConditionalFormat,
   handleCreateSheetTab,
   handleDeleteSheetTab,
-  handleRenameSheetTab
+  handleRenameSheetTab,
 } from './sheets.js';
 
-vi.mock('../utils/index.js', () => ({
-  log: vi.fn(),
-  successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  structuredResponse: (text: string, data: Record<string, unknown>) => ({
-    content: [{ type: 'text', text }],
-    structuredContent: data,
-    isError: false
-  }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
-  withTimeout: <T>(promise: Promise<T>) => promise
-}));
+vi.mock('../utils/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/index.js')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    withTimeout: <T>(promise: Promise<T>) => promise,
+  };
+});
 
 vi.mock('../utils/sheetCache.js', () => ({
   getCachedSheetMetadata: vi.fn(() => undefined),
   setCachedSheetMetadata: vi.fn(),
-  clearSheetCache: vi.fn()
+  clearSheetCache: vi.fn(),
 }));
 
 function createMockDrive(): drive_v3.Drive {
   return {
     files: {
       list: vi.fn(),
-      update: vi.fn()
-    }
+      update: vi.fn(),
+    },
   } as unknown as drive_v3.Drive;
 }
 
@@ -47,9 +44,9 @@ function createMockSheets(): sheets_v4.Sheets {
       batchUpdate: vi.fn(),
       values: {
         update: vi.fn(),
-        get: vi.fn()
-      }
-    }
+        get: vi.fn(),
+      },
+    },
   } as unknown as sheets_v4.Sheets;
 }
 
@@ -65,14 +62,17 @@ describe('handleCreateGoogleSheet', () => {
 
   it('creates spreadsheet successfully', async () => {
     vi.mocked(mockSheets.spreadsheets.create).mockResolvedValue({
-      data: { spreadsheetId: 'sheet123' }
+      data: { spreadsheetId: 'sheet123' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
     vi.mocked(mockSheets.spreadsheets.values.update).mockResolvedValue({} as never);
 
     const result = await handleCreateGoogleSheet(mockDrive, mockSheets, {
       name: 'Test Sheet',
-      data: [['A1', 'B1'], ['A2', 'B2']]
+      data: [
+        ['A1', 'B1'],
+        ['A2', 'B2'],
+      ],
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created Google Sheet');
@@ -80,12 +80,12 @@ describe('handleCreateGoogleSheet', () => {
 
   it('returns error when sheet already exists', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleCreateGoogleSheet(mockDrive, mockSheets, {
       name: 'Existing Sheet',
-      data: [[]]
+      data: [[]],
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -94,7 +94,7 @@ describe('handleCreateGoogleSheet', () => {
   it('returns error for empty name', async () => {
     const result = await handleCreateGoogleSheet(mockDrive, mockSheets, {
       name: '',
-      data: [[]]
+      data: [[]],
     });
     expect(result.isError).toBe(true);
   });
@@ -113,7 +113,7 @@ describe('handleUpdateGoogleSheet', () => {
     const result = await handleUpdateGoogleSheet(mockSheets, {
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      data: [['New', 'Data']]
+      data: [['New', 'Data']],
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Updated Google Sheet');
@@ -123,7 +123,7 @@ describe('handleUpdateGoogleSheet', () => {
     const result = await handleUpdateGoogleSheet(mockSheets, {
       spreadsheetId: '',
       range: 'A1',
-      data: [[]]
+      data: [[]],
     });
     expect(result.isError).toBe(true);
   });
@@ -138,12 +138,17 @@ describe('handleGetGoogleSheetContent', () => {
 
   it('returns content successfully', async () => {
     vi.mocked(mockSheets.spreadsheets.values.get).mockResolvedValue({
-      data: { values: [['A1', 'B1'], ['A2', 'B2']] }
+      data: {
+        values: [
+          ['A1', 'B1'],
+          ['A2', 'B2'],
+        ],
+      },
     } as never);
 
     const result = await handleGetGoogleSheetContent(mockSheets, {
       spreadsheetId: 'sheet123',
-      range: 'A1:B2'
+      range: 'A1:B2',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('A1');
@@ -151,12 +156,12 @@ describe('handleGetGoogleSheetContent', () => {
 
   it('handles empty range', async () => {
     vi.mocked(mockSheets.spreadsheets.values.get).mockResolvedValue({
-      data: { values: undefined }
+      data: { values: undefined },
     } as never);
 
     const result = await handleGetGoogleSheetContent(mockSheets, {
       spreadsheetId: 'sheet123',
-      range: 'A1:A1'
+      range: 'A1:A1',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('empty range');
@@ -169,7 +174,7 @@ describe('handleFormatGoogleSheetCells', () => {
   beforeEach(() => {
     mockSheets = createMockSheets();
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
   });
 
@@ -179,7 +184,7 @@ describe('handleFormatGoogleSheetCells', () => {
     const result = await handleFormatGoogleSheetCells(mockSheets, {
       spreadsheetId: 'sheet123',
       range: 'Sheet1!A1:B2',
-      backgroundColor: { red: 1, green: 0, blue: 0 }
+      backgroundColor: { red: 1, green: 0, blue: 0 },
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Formatted cells');
@@ -194,7 +199,7 @@ describe('handleFormatGoogleSheetCells', () => {
       range: 'Sheet1!A1:B2',
       bold: true,
       italic: true,
-      fontSize: 14
+      fontSize: 14,
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Formatted cells');
@@ -207,7 +212,7 @@ describe('handleFormatGoogleSheetCells', () => {
     const result = await handleFormatGoogleSheetCells(mockSheets, {
       spreadsheetId: 'sheet123',
       range: 'Sheet1!A1:A10',
-      numberFormat: { pattern: '$#,##0.00', type: 'CURRENCY' }
+      numberFormat: { pattern: '$#,##0.00', type: 'CURRENCY' },
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Formatted cells');
@@ -220,7 +225,7 @@ describe('handleFormatGoogleSheetCells', () => {
     const result = await handleFormatGoogleSheetCells(mockSheets, {
       spreadsheetId: 'sheet123',
       range: 'Sheet1!A1:B2',
-      borders: { style: 'SOLID', width: 2 }
+      borders: { style: 'SOLID', width: 2 },
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Formatted cells');
@@ -236,7 +241,7 @@ describe('handleFormatGoogleSheetCells', () => {
       backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
       bold: true,
       horizontalAlignment: 'CENTER',
-      borders: { style: 'SOLID' }
+      borders: { style: 'SOLID' },
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Formatted cells');
@@ -245,7 +250,7 @@ describe('handleFormatGoogleSheetCells', () => {
   it('returns error when no formatting options specified', async () => {
     const result = await handleFormatGoogleSheetCells(mockSheets, {
       spreadsheetId: 'sheet123',
-      range: 'Sheet1!A1:B2'
+      range: 'Sheet1!A1:B2',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('No formatting options');
@@ -253,13 +258,13 @@ describe('handleFormatGoogleSheetCells', () => {
 
   it('returns error when sheet not found', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [] }
+      data: { sheets: [] },
     } as never);
 
     const result = await handleFormatGoogleSheetCells(mockSheets, {
       spreadsheetId: 'sheet123',
       range: 'NonExistent!A1',
-      backgroundColor: { red: 1 }
+      backgroundColor: { red: 1 },
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
@@ -272,7 +277,7 @@ describe('handleMergeGoogleSheetCells', () => {
   beforeEach(() => {
     mockSheets = createMockSheets();
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
   });
 
@@ -282,7 +287,7 @@ describe('handleMergeGoogleSheetCells', () => {
     const result = await handleMergeGoogleSheetCells(mockSheets, {
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      mergeType: 'MERGE_ALL'
+      mergeType: 'MERGE_ALL',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Merged cells');
@@ -295,7 +300,7 @@ describe('handleAddGoogleSheetConditionalFormat', () => {
   beforeEach(() => {
     mockSheets = createMockSheets();
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
   });
 
@@ -306,7 +311,7 @@ describe('handleAddGoogleSheetConditionalFormat', () => {
       spreadsheetId: 'sheet123',
       range: 'A1:A10',
       condition: { type: 'NUMBER_GREATER', value: '100' },
-      format: { backgroundColor: { red: 1, green: 0, blue: 0 } }
+      format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Added conditional formatting');
@@ -323,15 +328,15 @@ describe('handleCreateSheetTab', () => {
   it('creates sheet tab successfully', async () => {
     // Sheet doesn't exist yet
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({
-      data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] }
+      data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] },
     } as never);
 
     const result = await handleCreateSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
-      title: 'NewTab'
+      title: 'NewTab',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created new sheet tab');
@@ -340,28 +345,28 @@ describe('handleCreateSheetTab', () => {
 
   it('creates sheet tab at specific index', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({
-      data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] }
+      data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] },
     } as never);
 
     const result = await handleCreateSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
       title: 'NewTab',
-      index: 0
+      index: 0,
     });
     expect(result.isError).toBe(false);
   });
 
   it('returns error when tab already exists', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'ExistingTab' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'ExistingTab' } }] },
     } as never);
 
     const result = await handleCreateSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
-      title: 'ExistingTab'
+      title: 'ExistingTab',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -370,7 +375,7 @@ describe('handleCreateSheetTab', () => {
   it('returns error for empty spreadsheetId', async () => {
     const result = await handleCreateSheetTab(mockSheets, {
       spreadsheetId: '',
-      title: 'NewTab'
+      title: 'NewTab',
     });
     expect(result.isError).toBe(true);
   });
@@ -378,7 +383,7 @@ describe('handleCreateSheetTab', () => {
   it('returns error for empty title', async () => {
     const result = await handleCreateSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
-      title: ''
+      title: '',
     });
     expect(result.isError).toBe(true);
   });
@@ -393,16 +398,18 @@ describe('handleDeleteSheetTab', () => {
 
   it('deletes sheet tab successfully', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [
-        { properties: { sheetId: 0, title: 'Sheet1' } },
-        { properties: { sheetId: 1, title: 'ToDelete' } }
-      ] }
+      data: {
+        sheets: [
+          { properties: { sheetId: 0, title: 'Sheet1' } },
+          { properties: { sheetId: 1, title: 'ToDelete' } },
+        ],
+      },
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleDeleteSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
-      sheetTitle: 'ToDelete'
+      sheetTitle: 'ToDelete',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Deleted sheet tab');
@@ -410,12 +417,12 @@ describe('handleDeleteSheetTab', () => {
 
   it('returns error when tab not found', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
 
     const result = await handleDeleteSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
-      sheetTitle: 'NonExistent'
+      sheetTitle: 'NonExistent',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
@@ -423,7 +430,7 @@ describe('handleDeleteSheetTab', () => {
 
   it('returns error when trying to delete last sheet', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'LastSheet' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'LastSheet' } }] },
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockRejectedValue(
       new Error('Cannot delete the last sheet')
@@ -431,7 +438,7 @@ describe('handleDeleteSheetTab', () => {
 
     const result = await handleDeleteSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
-      sheetTitle: 'LastSheet'
+      sheetTitle: 'LastSheet',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('at least one sheet');
@@ -440,7 +447,7 @@ describe('handleDeleteSheetTab', () => {
   it('returns error for empty spreadsheetId', async () => {
     const result = await handleDeleteSheetTab(mockSheets, {
       spreadsheetId: '',
-      sheetTitle: 'Sheet1'
+      sheetTitle: 'Sheet1',
     });
     expect(result.isError).toBe(true);
   });
@@ -455,14 +462,14 @@ describe('handleRenameSheetTab', () => {
 
   it('renames sheet tab successfully', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'OldName' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'OldName' } }] },
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleRenameSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
       currentTitle: 'OldName',
-      newTitle: 'NewName'
+      newTitle: 'NewName',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Renamed sheet tab');
@@ -472,13 +479,13 @@ describe('handleRenameSheetTab', () => {
 
   it('returns error when source tab not found', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] }
+      data: { sheets: [{ properties: { sheetId: 0, title: 'Sheet1' } }] },
     } as never);
 
     const result = await handleRenameSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
       currentTitle: 'NonExistent',
-      newTitle: 'NewName'
+      newTitle: 'NewName',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
@@ -486,16 +493,18 @@ describe('handleRenameSheetTab', () => {
 
   it('returns error when target name already exists', async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
-      data: { sheets: [
-        { properties: { sheetId: 0, title: 'OldName' } },
-        { properties: { sheetId: 1, title: 'ExistingName' } }
-      ] }
+      data: {
+        sheets: [
+          { properties: { sheetId: 0, title: 'OldName' } },
+          { properties: { sheetId: 1, title: 'ExistingName' } },
+        ],
+      },
     } as never);
 
     const result = await handleRenameSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
       currentTitle: 'OldName',
-      newTitle: 'ExistingName'
+      newTitle: 'ExistingName',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -505,7 +514,7 @@ describe('handleRenameSheetTab', () => {
     const result = await handleRenameSheetTab(mockSheets, {
       spreadsheetId: '',
       currentTitle: 'OldName',
-      newTitle: 'NewName'
+      newTitle: 'NewName',
     });
     expect(result.isError).toBe(true);
   });
@@ -514,7 +523,7 @@ describe('handleRenameSheetTab', () => {
     const result = await handleRenameSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
       currentTitle: '',
-      newTitle: 'NewName'
+      newTitle: 'NewName',
     });
     expect(result.isError).toBe(true);
   });
@@ -523,7 +532,7 @@ describe('handleRenameSheetTab', () => {
     const result = await handleRenameSheetTab(mockSheets, {
       spreadsheetId: 'sheet123',
       currentTitle: 'OldName',
-      newTitle: ''
+      newTitle: '',
     });
     expect(result.isError).toBe(true);
   });

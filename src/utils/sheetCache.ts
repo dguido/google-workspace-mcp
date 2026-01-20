@@ -44,7 +44,7 @@ export function setCachedSheetMetadata(
 
   cache.set(spreadsheetId, {
     sheets: sheetsMap,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   });
 }
 
@@ -59,6 +59,6 @@ export function clearSheetCache(spreadsheetId?: string): void {
 export function getSheetCacheStats(): { size: number; entries: string[] } {
   return {
     size: cache.size,
-    entries: Array.from(cache.keys())
+    entries: Array.from(cache.keys()),
   };
 }

@@ -17,7 +17,7 @@ describe('withTimeout', () => {
   });
 
   it('rejects with timeout error when promise takes too long', async () => {
-    const slowPromise = new Promise(resolve => setTimeout(() => resolve('late'), 2000));
+    const slowPromise = new Promise((resolve) => setTimeout(() => resolve('late'), 2000));
 
     const resultPromise = withTimeout(slowPromise, 1000, 'Test operation');
 

@@ -72,7 +72,12 @@ async function testEmptyTrashSupportsAllDrives() {
       // supportsAllDrives: true  // Currently missing!
     });
 
-    recordResult(testName, true, undefined, 'API accepts call without supportsAllDrives (but may not empty Shared Drive trash)');
+    recordResult(
+      testName,
+      true,
+      undefined,
+      'API accepts call without supportsAllDrives (but may not empty Shared Drive trash)'
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     // Check if error is related to missing Shared Drive support
@@ -114,8 +119,12 @@ async function testInsertTextAtDocumentEnd() {
 
     // Our validation only checks index >= 1, but inserting at endIndex should work
     // This tests if our validation is too restrictive
-    recordResult(testName, true, undefined, `Document has content ending at index ${endIndex}. Insertion should be valid at indices 1 to ${endIndex - 1}`);
-
+    recordResult(
+      testName,
+      true,
+      undefined,
+      `Document has content ending at index ${endIndex}. Insertion should be valid at indices 1 to ${endIndex - 1}`
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     recordResult(testName, false, msg);
@@ -143,7 +152,7 @@ async function testSpecialCharacterEscaping() {
     for (const tc of testCases) {
       try {
         // Test if query syntax is valid
-        const escapedName = tc.name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+        const escapedName = tc.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const query = `name = '${escapedName}' and trashed = false`;
 
         await drive.files.list({
@@ -163,7 +172,6 @@ async function testSpecialCharacterEscaping() {
     }
 
     recordResult(testName, true, undefined, 'All special character queries accepted');
-
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     recordResult(testName, false, msg);
@@ -189,8 +197,12 @@ async function testRateLimitingBehavior() {
 
     await Promise.all(promises);
 
-    recordResult(testName, true, undefined, '20 parallel requests succeeded without rate limiting. Real batch operations may trigger 429s.');
-
+    recordResult(
+      testName,
+      true,
+      undefined,
+      '20 parallel requests succeeded without rate limiting. Real batch operations may trigger 429s.'
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes('429') || msg.includes('Rate Limit') || msg.includes('quota')) {
@@ -243,8 +255,12 @@ async function testSpeakerNotesStructure() {
       }
     }
 
-    recordResult(testName, true, undefined, `Analyzed ${slidesData.length} slides for speaker notes structure`);
-
+    recordResult(
+      testName,
+      true,
+      undefined,
+      `Analyzed ${slidesData.length} slides for speaker notes structure`
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     recordResult(testName, false, msg);
@@ -258,7 +274,6 @@ async function testBatchDeletePartialFailure() {
   const testName = 'batch operations handle partial failures';
 
   // This tests the concept - real test would need actual file IDs
-  const validId = 'some-valid-id';
   const invalidId = 'definitely-not-a-real-file-id-12345';
 
   try {
@@ -274,12 +289,21 @@ async function testBatchDeletePartialFailure() {
 
       // Our code checks for these patterns
       if (msg.includes('File not found') || msg.includes('not found')) {
-        recordResult(testName, true, undefined, 'API returns expected "not found" error for non-existent files');
+        recordResult(
+          testName,
+          true,
+          undefined,
+          'API returns expected "not found" error for non-existent files'
+        );
       } else {
-        recordResult(testName, true, undefined, `API returns: ${msg}. Our error matching may need adjustment.`);
+        recordResult(
+          testName,
+          true,
+          undefined,
+          `API returns: ${msg}. Our error matching may need adjustment.`
+        );
       }
     }
-
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     recordResult(testName, false, msg);
@@ -304,26 +328,31 @@ async function testSheetNameLookup() {
       spreadsheetId: TEST_CONFIG.testSpreadsheetId,
     });
 
-    const sheetNames = spreadsheet.data.sheets?.map(s => s.properties?.title).filter(Boolean) || [];
+    const sheetNames =
+      spreadsheet.data.sheets?.map((s) => s.properties?.title).filter(Boolean) || [];
     log(`  Available sheets: ${sheetNames.join(', ')}`);
 
     // Test exact match
     const firstSheet = sheetNames[0];
     if (firstSheet) {
       // Our code does exact string comparison
-      const found = sheetNames.find(s => s === firstSheet);
+      const found = sheetNames.find((s) => s === firstSheet);
       log(`  Exact match for "${firstSheet}": ${found ? 'found' : 'not found'}`);
     }
 
     // Test case sensitivity (Google Sheets is case-sensitive)
     if (sheetNames.length > 0) {
       const testName = sheetNames[0]?.toUpperCase();
-      const found = sheetNames.find(s => s === testName);
+      const found = sheetNames.find((s) => s === testName);
       log(`  Case-insensitive test "${testName}": ${found ? 'found' : 'not found (expected)'}`);
     }
 
-    recordResult(testName, true, undefined, `Found ${sheetNames.length} sheets. Sheet names are case-sensitive.`);
-
+    recordResult(
+      testName,
+      true,
+      undefined,
+      `Found ${sheetNames.length} sheets. Sheet names are case-sensitive.`
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     recordResult(testName, false, msg);
@@ -341,14 +370,10 @@ async function testPathResolutionUnicode() {
     const drive = google.drive({ version: 'v3', auth });
 
     // Test if unicode folder names work in queries
-    const unicodeFolderNames = [
-      '日本語フォルダ',
-      'Émojis 🎉 Here',
-      'Spëcîål Çhàrs',
-    ];
+    const unicodeFolderNames = ['日本語フォルダ', 'Émojis 🎉 Here', 'Spëcîål Çhàrs'];
 
     for (const folderName of unicodeFolderNames) {
-      const escapedName = folderName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const escapedName = folderName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const query = `name = '${escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
 
       try {
@@ -366,7 +391,6 @@ async function testPathResolutionUnicode() {
     }
 
     recordResult(testName, true, undefined, 'All unicode folder name queries accepted');
-
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     recordResult(testName, false, msg);
@@ -397,8 +421,8 @@ async function main() {
   log('Summary');
   log('========================================');
 
-  const passed = results.filter(r => r.passed).length;
-  const failed = results.filter(r => !r.passed).length;
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.filter((r) => !r.passed).length;
 
   log(`Passed: ${passed}/${results.length}`);
   log(`Failed: ${failed}/${results.length}`);
@@ -406,7 +430,7 @@ async function main() {
   if (failed > 0) {
     log('');
     log('Failed tests:');
-    for (const r of results.filter(r => !r.passed)) {
+    for (const r of results.filter((r) => !r.passed)) {
       log(`  - ${r.name}: ${r.error}`);
     }
   }

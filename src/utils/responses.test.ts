@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { successResponse, structuredResponse, errorResponse } from './responses.js';
 
 vi.mock('./logging.js', () => ({
-  log: vi.fn()
+  log: vi.fn(),
 }));
 
 describe('successResponse', () => {
@@ -10,7 +10,7 @@ describe('successResponse', () => {
     const result = successResponse('Operation successful');
     expect(result).toEqual({
       content: [{ type: 'text', text: 'Operation successful' }],
-      isError: false
+      isError: false,
     });
   });
 
@@ -18,7 +18,7 @@ describe('successResponse', () => {
     const result = successResponse('');
     expect(result).toEqual({
       content: [{ type: 'text', text: '' }],
-      isError: false
+      isError: false,
     });
   });
 });
@@ -29,14 +29,14 @@ describe('structuredResponse', () => {
     expect(result).toEqual({
       content: [{ type: 'text', text: 'File metadata' }],
       structuredContent: { id: '123', name: 'test.txt' },
-      isError: false
+      isError: false,
     });
   });
 
   it('handles nested data structures', () => {
     const data = {
       user: { name: 'John', email: 'john@example.com' },
-      permissions: [{ role: 'reader' }, { role: 'writer' }]
+      permissions: [{ role: 'reader' }, { role: 'writer' }],
     };
     const result = structuredResponse('Sharing info', data);
     expect(result.structuredContent).toEqual(data);
@@ -49,7 +49,7 @@ describe('errorResponse', () => {
     const result = errorResponse('Something went wrong');
     expect(result).toEqual({
       content: [{ type: 'text', text: 'Error: Something went wrong' }],
-      isError: true
+      isError: true,
     });
   });
 

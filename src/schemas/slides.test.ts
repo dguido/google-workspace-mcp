@@ -7,14 +7,14 @@ import {
   CreateGoogleSlidesShapeSchema,
   GetGoogleSlidesSpeakerNotesSchema,
   UpdateGoogleSlidesSpeakerNotesSchema,
-  FormatGoogleSlidesElementSchema
+  FormatGoogleSlidesElementSchema,
 } from './slides.js';
 
 describe('CreateGoogleSlidesSchema', () => {
   it('accepts valid input', () => {
     const result = CreateGoogleSlidesSchema.safeParse({
       name: 'My Presentation',
-      slides: [{ title: 'Slide 1', content: 'Content 1' }]
+      slides: [{ title: 'Slide 1', content: 'Content 1' }],
     });
     expect(result.success).toBe(true);
   });
@@ -24,8 +24,8 @@ describe('CreateGoogleSlidesSchema', () => {
       name: 'My Presentation',
       slides: [
         { title: 'Slide 1', content: 'Content 1' },
-        { title: 'Slide 2', content: 'Content 2' }
-      ]
+        { title: 'Slide 2', content: 'Content 2' },
+      ],
     });
     expect(result.success).toBe(true);
   });
@@ -34,7 +34,7 @@ describe('CreateGoogleSlidesSchema', () => {
     const result = CreateGoogleSlidesSchema.safeParse({
       name: 'My Presentation',
       slides: [{ title: 'Slide 1', content: 'Content 1' }],
-      parentFolderId: 'folder123'
+      parentFolderId: 'folder123',
     });
     expect(result.success).toBe(true);
   });
@@ -42,7 +42,7 @@ describe('CreateGoogleSlidesSchema', () => {
   it('rejects empty name', () => {
     const result = CreateGoogleSlidesSchema.safeParse({
       name: '',
-      slides: [{ title: 'Slide', content: 'Content' }]
+      slides: [{ title: 'Slide', content: 'Content' }],
     });
     expect(result.success).toBe(false);
   });
@@ -50,7 +50,7 @@ describe('CreateGoogleSlidesSchema', () => {
   it('rejects empty slides array', () => {
     const result = CreateGoogleSlidesSchema.safeParse({
       name: 'My Presentation',
-      slides: []
+      slides: [],
     });
     expect(result.success).toBe(false);
   });
@@ -60,7 +60,7 @@ describe('UpdateGoogleSlidesSchema', () => {
   it('accepts valid input', () => {
     const result = UpdateGoogleSlidesSchema.safeParse({
       presentationId: 'pres123',
-      slides: [{ title: 'Updated', content: 'Updated content' }]
+      slides: [{ title: 'Updated', content: 'Updated content' }],
     });
     expect(result.success).toBe(true);
   });
@@ -68,7 +68,7 @@ describe('UpdateGoogleSlidesSchema', () => {
   it('rejects empty presentationId', () => {
     const result = UpdateGoogleSlidesSchema.safeParse({
       presentationId: '',
-      slides: [{ title: 'Slide', content: 'Content' }]
+      slides: [{ title: 'Slide', content: 'Content' }],
     });
     expect(result.success).toBe(false);
   });
@@ -76,7 +76,7 @@ describe('UpdateGoogleSlidesSchema', () => {
   it('rejects empty slides array', () => {
     const result = UpdateGoogleSlidesSchema.safeParse({
       presentationId: 'pres123',
-      slides: []
+      slides: [],
     });
     expect(result.success).toBe(false);
   });
@@ -91,7 +91,7 @@ describe('GetGoogleSlidesContentSchema', () => {
   it('accepts optional slideIndex', () => {
     const result = GetGoogleSlidesContentSchema.safeParse({
       presentationId: 'pres123',
-      slideIndex: 0
+      slideIndex: 0,
     });
     expect(result.success).toBe(true);
   });
@@ -104,7 +104,7 @@ describe('GetGoogleSlidesContentSchema', () => {
   it('rejects negative slideIndex', () => {
     const result = GetGoogleSlidesContentSchema.safeParse({
       presentationId: 'pres123',
-      slideIndex: -1
+      slideIndex: -1,
     });
     expect(result.success).toBe(false);
   });
@@ -119,7 +119,7 @@ describe('CreateGoogleSlidesTextBoxSchema', () => {
       x: 100,
       y: 100,
       width: 300,
-      height: 50
+      height: 50,
     });
     expect(result.success).toBe(true);
   });
@@ -135,7 +135,7 @@ describe('CreateGoogleSlidesTextBoxSchema', () => {
       height: 50,
       fontSize: 14,
       bold: true,
-      italic: true
+      italic: true,
     });
     expect(result.success).toBe(true);
   });
@@ -148,7 +148,7 @@ describe('CreateGoogleSlidesTextBoxSchema', () => {
       x: 0,
       y: 0,
       width: 100,
-      height: 50
+      height: 50,
     });
     expect(result.success).toBe(false);
   });
@@ -163,14 +163,22 @@ describe('CreateGoogleSlidesShapeSchema', () => {
       x: 100,
       y: 100,
       width: 200,
-      height: 100
+      height: 100,
     });
     expect(result.success).toBe(true);
   });
 
   it('accepts all shape types', () => {
-    const types = ['RECTANGLE', 'ELLIPSE', 'DIAMOND', 'TRIANGLE', 'STAR', 'ROUND_RECTANGLE', 'ARROW'];
-    types.forEach(type => {
+    const types = [
+      'RECTANGLE',
+      'ELLIPSE',
+      'DIAMOND',
+      'TRIANGLE',
+      'STAR',
+      'ROUND_RECTANGLE',
+      'ARROW',
+    ];
+    types.forEach((type) => {
       const result = CreateGoogleSlidesShapeSchema.safeParse({
         presentationId: 'pres123',
         pageObjectId: 'page1',
@@ -178,7 +186,7 @@ describe('CreateGoogleSlidesShapeSchema', () => {
         x: 0,
         y: 0,
         width: 100,
-        height: 100
+        height: 100,
       });
       expect(result.success).toBe(true);
     });
@@ -193,7 +201,7 @@ describe('CreateGoogleSlidesShapeSchema', () => {
       y: 0,
       width: 100,
       height: 100,
-      backgroundColor: { red: 1, green: 0, blue: 0, alpha: 1 }
+      backgroundColor: { red: 1, green: 0, blue: 0, alpha: 1 },
     });
     expect(result.success).toBe(true);
   });
@@ -206,7 +214,7 @@ describe('CreateGoogleSlidesShapeSchema', () => {
       x: 0,
       y: 0,
       width: 100,
-      height: 100
+      height: 100,
     });
     expect(result.success).toBe(false);
   });
@@ -216,7 +224,7 @@ describe('GetGoogleSlidesSpeakerNotesSchema', () => {
   it('accepts valid input', () => {
     const result = GetGoogleSlidesSpeakerNotesSchema.safeParse({
       presentationId: 'pres123',
-      slideIndex: 0
+      slideIndex: 0,
     });
     expect(result.success).toBe(true);
   });
@@ -224,7 +232,7 @@ describe('GetGoogleSlidesSpeakerNotesSchema', () => {
   it('rejects negative slideIndex', () => {
     const result = GetGoogleSlidesSpeakerNotesSchema.safeParse({
       presentationId: 'pres123',
-      slideIndex: -1
+      slideIndex: -1,
     });
     expect(result.success).toBe(false);
   });
@@ -235,7 +243,7 @@ describe('UpdateGoogleSlidesSpeakerNotesSchema', () => {
     const result = UpdateGoogleSlidesSpeakerNotesSchema.safeParse({
       presentationId: 'pres123',
       slideIndex: 0,
-      notes: 'These are speaker notes'
+      notes: 'These are speaker notes',
     });
     expect(result.success).toBe(true);
   });
@@ -244,7 +252,7 @@ describe('UpdateGoogleSlidesSpeakerNotesSchema', () => {
     const result = UpdateGoogleSlidesSpeakerNotesSchema.safeParse({
       presentationId: 'pres123',
       slideIndex: 0,
-      notes: ''
+      notes: '',
     });
     expect(result.success).toBe(true);
   });
@@ -253,7 +261,7 @@ describe('UpdateGoogleSlidesSpeakerNotesSchema', () => {
     const result = UpdateGoogleSlidesSpeakerNotesSchema.safeParse({
       presentationId: 'pres123',
       slideIndex: -1,
-      notes: 'notes'
+      notes: 'notes',
     });
     expect(result.success).toBe(false);
   });
@@ -265,7 +273,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
       const result = FormatGoogleSlidesElementSchema.safeParse({
         presentationId: 'pres123',
         targetType: 'text',
-        bold: true
+        bold: true,
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -277,7 +285,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
       const result = FormatGoogleSlidesElementSchema.safeParse({
         presentationId: 'pres123',
         targetType: 'shape',
-        backgroundColor: { red: 1, green: 0, blue: 0 }
+        backgroundColor: { red: 1, green: 0, blue: 0 },
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -289,7 +297,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
       const result = FormatGoogleSlidesElementSchema.safeParse({
         presentationId: 'pres123',
         targetType: 'slide',
-        slideBackgroundColor: { red: 1, green: 1, blue: 1 }
+        slideBackgroundColor: { red: 1, green: 1, blue: 1 },
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -302,7 +310,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         presentationId: 'pres123',
         targetType: 'slide',
         pageObjectIds: [],
-        slideBackgroundColor: { red: 1, green: 1, blue: 1 }
+        slideBackgroundColor: { red: 1, green: 1, blue: 1 },
       });
       expect(result.success).toBe(false);
     });
@@ -318,7 +326,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         italic: false,
         fontSize: 14,
         fontFamily: 'Arial',
-        foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 }
+        foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 },
       });
       expect(result.success).toBe(true);
     });
@@ -330,7 +338,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         objectId: 'obj456',
         alignment: 'CENTER',
         lineSpacing: 1.5,
-        bulletStyle: 'DISC'
+        bulletStyle: 'DISC',
       });
       expect(result.success).toBe(true);
     });
@@ -342,7 +350,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         objectId: 'obj456',
         startIndex: 0,
         endIndex: 10,
-        bold: true
+        bold: true,
       });
       expect(result.success).toBe(true);
     });
@@ -357,7 +365,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
         outlineColor: { red: 0, green: 0, blue: 0 },
         outlineWeight: 2,
-        outlineDashStyle: 'SOLID'
+        outlineDashStyle: 'SOLID',
       });
       expect(result.success).toBe(true);
     });
@@ -367,7 +375,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         presentationId: 'pres123',
         targetType: 'shape',
         objectId: 'shape789',
-        outlineDashStyle: 'INVALID'
+        outlineDashStyle: 'INVALID',
       });
       expect(result.success).toBe(false);
     });
@@ -379,7 +387,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         presentationId: 'pres123',
         targetType: 'slide',
         pageObjectIds: ['slide1', 'slide2'],
-        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 }
+        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
       });
       expect(result.success).toBe(true);
     });
@@ -391,7 +399,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         presentationId: 'pres123',
         targetType: 'text',
         objectId: 'obj456',
-        foregroundColor: { red: 255, green: 0, blue: 0 }
+        foregroundColor: { red: 255, green: 0, blue: 0 },
       });
       expect(result.success).toBe(false);
     });
@@ -401,7 +409,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
         presentationId: 'pres123',
         targetType: 'text',
         objectId: 'obj456',
-        foregroundColor: { red: 0, green: 1, blue: 0.5 }
+        foregroundColor: { red: 0, green: 1, blue: 0.5 },
       });
       expect(result.success).toBe(true);
     });
@@ -415,7 +423,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
           presentationId: 'pres123',
           targetType: 'text',
           objectId: 'obj456',
-          alignment
+          alignment,
         });
         expect(result.success).toBe(true);
       }
@@ -428,7 +436,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
           presentationId: 'pres123',
           targetType: 'text',
           objectId: 'obj456',
-          bulletStyle
+          bulletStyle,
         });
         expect(result.success).toBe(true);
       }
@@ -437,7 +445,7 @@ describe('FormatGoogleSlidesElementSchema', () => {
     it('validates targetType enum', () => {
       const result = FormatGoogleSlidesElementSchema.safeParse({
         presentationId: 'pres123',
-        targetType: 'invalid'
+        targetType: 'invalid',
       });
       expect(result.success).toBe(false);
     });

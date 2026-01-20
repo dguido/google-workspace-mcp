@@ -15,10 +15,6 @@ const buildOptions = {
   target: 'node18',
   outfile: join(__dirname, '../dist/index.js'),
   format: 'esm',
-  // Remove banner for ESM format - shebang will be added by npm/npx
-  // banner: {
-  //   js: '#!/usr/bin/env node\n',
-  // },
   packages: 'external', // Don't bundle node_modules
   sourcemap: true,
 };
@@ -29,7 +25,7 @@ if (isWatch) {
   console.log('Watching for changes...');
 } else {
   await esbuild.build(buildOptions);
-  
+
   // Make the file executable on non-Windows platforms
   if (process.platform !== 'win32') {
     const { chmod } = await import('fs/promises');

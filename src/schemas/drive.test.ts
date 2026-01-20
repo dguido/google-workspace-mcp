@@ -7,7 +7,7 @@ import {
   ListFolderSchema,
   DeleteItemSchema,
   RenameItemSchema,
-  MoveItemSchema
+  MoveItemSchema,
 } from './drive.js';
 
 describe('SearchSchema', () => {
@@ -47,7 +47,7 @@ describe('CreateTextFileSchema', () => {
     const result = CreateTextFileSchema.safeParse({
       name: 'file.txt',
       content: 'hello',
-      parentFolderId: 'folder123'
+      parentFolderId: 'folder123',
     });
     expect(result.success).toBe(true);
   });
@@ -73,7 +73,7 @@ describe('UpdateTextFileSchema', () => {
     const result = UpdateTextFileSchema.safeParse({
       fileId: 'abc123',
       content: 'new content',
-      name: 'newname.txt'
+      name: 'newname.txt',
     });
     expect(result.success).toBe(true);
   });
@@ -111,7 +111,7 @@ describe('ListFolderSchema', () => {
     const result = ListFolderSchema.safeParse({
       folderId: 'folder123',
       pageSize: 50,
-      pageToken: 'token'
+      pageToken: 'token',
     });
     expect(result.success).toBe(true);
   });
@@ -155,7 +155,7 @@ describe('MoveItemSchema', () => {
   it('accepts optional destinationFolderId', () => {
     const result = MoveItemSchema.safeParse({
       itemId: 'item123',
-      destinationFolderId: 'dest456'
+      destinationFolderId: 'dest456',
     });
     expect(result.success).toBe(true);
   });

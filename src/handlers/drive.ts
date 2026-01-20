@@ -8,9 +8,12 @@ import {
   withRetry,
   elicitFileSelection,
   elicitConfirmation,
-  formatDisambiguationOptions
+  formatDisambiguationOptions,
+  validateArgs,
 } from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
+import { escapeQueryString, combineQueries, buildFullTextQuery } from '../utils/gdrive-query.js';
+import { formatBytes, formatBytesCompact } from '../utils/format.js';
 import {
   GetFolderTreeSchema,
   SearchSchema,
@@ -39,7 +42,7 @@ import {
   RemovePermissionSchema,
   ListTrashSchema,
   RestoreFromTrashSchema,
-  EmptyTrashSchema
+  EmptyTrashSchema,
 } from '../schemas/index.js';
 import {
   FOLDER_MIME_TYPE,
@@ -49,35 +52,28 @@ import {
   resolveFolderId,
   resolveOptionalFolderPath,
   checkFileExists,
-  processBatchOperation
+  processBatchOperation,
 } from './helpers.js';
 import type { HandlerContext } from './helpers.js';
 
-export async function handleSearch(
-  drive: drive_v3.Drive,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = SearchSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+export async function handleSearch(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
+  const validation = validateArgs(SearchSchema, args);
+  if (!validation.success) return validation.response;
   const { query: userQuery, pageSize, pageToken } = validation.data;
 
-  const escapedQuery = userQuery.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-  const formattedQuery = `fullText contains '${escapedQuery}' and trashed = false`;
+  const formattedQuery = combineQueries(buildFullTextQuery(userQuery), 'trashed = false');
 
   const res = await drive.files.list({
     q: formattedQuery,
     pageSize: Math.min(pageSize || 50, 100),
     pageToken: pageToken,
-    fields: "nextPageToken, files(id, name, mimeType, modifiedTime, size)",
+    fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size)',
     includeItemsFromAllDrives: true,
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
-  const fileList = res.data.files?.map(
-    (f: drive_v3.Schema$File) => `${f.name} (${f.mimeType})`
-  ).join("\n") || '';
+  const fileList =
+    res.data.files?.map((f: drive_v3.Schema$File) => `${f.name} (${f.mimeType})`).join('\n') || '';
   log('Search results', { query: userQuery, resultCount: res.data.files?.length });
 
   let response = `Found ${res.data.files?.length ?? 0} files:\n${fileList}`;
@@ -92,28 +88,30 @@ export async function handleCreateTextFile(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = CreateTextFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(CreateTextFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   validateTextFileExtension(data.name);
-  const parentFolderId = await resolveOptionalFolderPath(drive, data.parentFolderId, data.parentPath);
+  const parentFolderId = await resolveOptionalFolderPath(
+    drive,
+    data.parentFolderId,
+    data.parentPath
+  );
 
   // Check if file already exists
   const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
   if (existingFileId) {
     return errorResponse(
       `A file named "${data.name}" already exists in this location. ` +
-      `To update it, use updateTextFile with fileId: ${existingFileId}`
+        `To update it, use updateTextFile with fileId: ${existingFileId}`
     );
   }
 
   const fileMetadata = {
     name: data.name,
     mimeType: getMimeTypeFromFilename(data.name),
-    parents: [parentFolderId]
+    parents: [parentFolderId],
   };
 
   log('About to create file', { driveExists: !!drive });
@@ -124,7 +122,7 @@ export async function handleCreateTextFile(
       mimeType: fileMetadata.mimeType,
       body: data.content,
     },
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('File created successfully', { fileId: file.data?.id });
@@ -137,24 +135,22 @@ export async function handleUpdateTextFile(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = UpdateTextFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(UpdateTextFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Check file MIME type
   const existingFile = await drive.files.get({
     fileId: data.fileId,
     fields: 'mimeType, name, parents',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const currentMimeType = existingFile.data.mimeType || 'text/plain';
   if (!Object.values(TEXT_MIME_TYPES).includes(currentMimeType)) {
     return errorResponse(
       `File "${existingFile.data.name}" (${data.fileId}) is not a text or markdown file. ` +
-      `Current type: ${currentMimeType}. Supported types: text/plain, text/markdown.`
+        `Current type: ${currentMimeType}. Supported types: text/plain, text/markdown.`
     );
   }
 
@@ -170,10 +166,10 @@ export async function handleUpdateTextFile(
     requestBody: updateMetadata,
     media: {
       mimeType: updateMetadata.mimeType || currentMimeType,
-      body: data.content
+      body: data.content,
     },
     fields: 'id, name, modifiedTime, webViewLink',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   return successResponse(
@@ -185,10 +181,8 @@ export async function handleCreateFolder(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = CreateFolderSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(CreateFolderSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const parentFolderId = await resolveOptionalFolderPath(drive, data.parent, data.parentPath);
@@ -198,20 +192,20 @@ export async function handleCreateFolder(
   if (existingFolderId) {
     return errorResponse(
       `A folder named "${data.name}" already exists in this location. ` +
-      `Folder ID: ${existingFolderId}`
+        `Folder ID: ${existingFolderId}`
     );
   }
 
   const folderMetadata = {
     name: data.name,
     mimeType: FOLDER_MIME_TYPE,
-    parents: [parentFolderId]
+    parents: [parentFolderId],
   };
 
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id, name, webViewLink',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('Folder created successfully', { folderId: folder.data.id, name: folder.data.name });
@@ -223,10 +217,8 @@ export async function handleListFolder(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = ListFolderSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(ListFolderSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Default to root if no folder specified
@@ -236,17 +228,19 @@ export async function handleListFolder(
     q: `'${targetFolderId}' in parents and trashed = false`,
     pageSize: Math.min(data.pageSize || 50, 100),
     pageToken: data.pageToken,
-    fields: "nextPageToken, files(id, name, mimeType, modifiedTime, size)",
-    orderBy: "name",
+    fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size)',
+    orderBy: 'name',
     includeItemsFromAllDrives: true,
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const files = res.data.files || [];
-  const formattedFiles = files.map((file: drive_v3.Schema$File) => {
-    const isFolder = file.mimeType === FOLDER_MIME_TYPE;
-    return `${isFolder ? '📁' : '📄'} ${file.name} (ID: ${file.id})`;
-  }).join('\n');
+  const formattedFiles = files
+    .map((file: drive_v3.Schema$File) => {
+      const isFolder = file.mimeType === FOLDER_MIME_TYPE;
+      return `${isFolder ? '📁' : '📄'} ${file.name} (ID: ${file.id})`;
+    })
+    .join('\n');
 
   let response = `Contents of folder:\n\n${formattedFiles}`;
   if (res.data.nextPageToken) {
@@ -260,23 +254,21 @@ export async function handleDeleteItem(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = DeleteItemSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(DeleteItemSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const item = await drive.files.get({
     fileId: data.itemId,
     fields: 'name',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   // Move to trash instead of permanent deletion
   await drive.files.update({
     fileId: data.itemId,
     requestBody: { trashed: true },
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('Item moved to trash successfully', { itemId: data.itemId, name: item.data.name });
@@ -287,17 +279,15 @@ export async function handleRenameItem(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = RenameItemSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(RenameItemSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // If it's a text file, check extension
   const item = await drive.files.get({
     fileId: data.itemId,
     fields: 'name, mimeType',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   if (Object.values(TEXT_MIME_TYPES).includes(item.data.mimeType || '')) {
@@ -308,22 +298,15 @@ export async function handleRenameItem(
     fileId: data.itemId,
     requestBody: { name: data.newName },
     fields: 'id, name, modifiedTime',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
-  return successResponse(
-    `Successfully renamed "${item.data.name}" to "${updatedItem.data.name}"`
-  );
+  return successResponse(`Successfully renamed "${item.data.name}" to "${updatedItem.data.name}"`);
 }
 
-export async function handleMoveItem(
-  drive: drive_v3.Drive,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = MoveItemSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+export async function handleMoveItem(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
+  const validation = validateArgs(MoveItemSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const destinationFolderId = await resolveOptionalFolderPath(
@@ -334,13 +317,13 @@ export async function handleMoveItem(
 
   // Check we aren't moving a folder into itself
   if (destinationFolderId === data.itemId) {
-    return errorResponse("Cannot move a folder into itself.");
+    return errorResponse('Cannot move a folder into itself.');
   }
 
   const item = await drive.files.get({
     fileId: data.itemId,
     fields: 'name, parents',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   // Perform move
@@ -349,14 +332,14 @@ export async function handleMoveItem(
     addParents: destinationFolderId,
     removeParents: item.data.parents?.join(',') || '',
     fields: 'id, name, parents',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   // Get the destination folder name for a nice response
   const destinationFolder = await drive.files.get({
     fileId: destinationFolderId,
     fields: 'name',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   return successResponse(
@@ -364,34 +347,29 @@ export async function handleMoveItem(
   );
 }
 
-export async function handleCopyFile(
-  drive: drive_v3.Drive,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = CopyFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+export async function handleCopyFile(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
+  const validation = validateArgs(CopyFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get source file metadata
   const sourceFile = await drive.files.get({
     fileId: data.sourceFileId,
     fields: 'name, parents',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const destinationName = data.destinationName || `Copy of ${sourceFile.data.name}`;
   const destinationFolderId = data.destinationFolderId
     ? await resolveFolderId(drive, data.destinationFolderId)
-    : (sourceFile.data.parents?.[0] || 'root');
+    : sourceFile.data.parents?.[0] || 'root';
 
   // Check if destination name already exists
   const existingFileId = await checkFileExists(drive, destinationName, destinationFolderId);
   if (existingFileId) {
     return errorResponse(
       `A file named "${destinationName}" already exists in the destination folder. ` +
-      `Existing file ID: ${existingFileId}`
+        `Existing file ID: ${existingFileId}`
     );
   }
 
@@ -400,10 +378,10 @@ export async function handleCopyFile(
     fileId: data.sourceFileId,
     requestBody: {
       name: destinationName,
-      parents: [destinationFolderId]
+      parents: [destinationFolderId],
     },
     fields: 'id, name, webViewLink',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('File copied successfully', { sourceId: data.sourceFileId, newId: copiedFile.data.id });
@@ -417,25 +395,25 @@ export async function handleGetFileMetadata(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetFileMetadataSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetFileMetadataSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const file = await withTimeout(
     drive.files.get({
       fileId: data.fileId,
-      fields: 'id, name, mimeType, size, createdTime, modifiedTime, owners, shared, webViewLink, parents, description, starred',
-      supportsAllDrives: true
+      fields:
+        'id, name, mimeType, size, createdTime, modifiedTime, owners, shared, webViewLink, parents, description, starred',
+      supportsAllDrives: true,
     }),
     30000,
     'Get file metadata'
   );
 
   const metadata = file.data;
-  const ownerNames = metadata.owners?.map(o => o.displayName || o.emailAddress).join(', ') || 'Unknown';
-  const sizeStr = metadata.size ? `${(parseInt(metadata.size) / 1024).toFixed(2)} KB` : 'N/A';
+  const ownerNames =
+    metadata.owners?.map((o) => o.displayName || o.emailAddress).join(', ') || 'Unknown';
+  const sizeStr = formatBytes(metadata.size);
 
   const textResponse = [
     `Name: ${metadata.name}`,
@@ -449,8 +427,10 @@ export async function handleGetFileMetadata(
     `Starred: ${metadata.starred ? 'Yes' : 'No'}`,
     metadata.description ? `Description: ${metadata.description}` : null,
     metadata.parents ? `Parent folder(s): ${metadata.parents.join(', ')}` : null,
-    `Link: ${metadata.webViewLink}`
-  ].filter(Boolean).join('\n');
+    `Link: ${metadata.webViewLink}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return structuredResponse(textResponse, {
     id: metadata.id,
@@ -459,15 +439,15 @@ export async function handleGetFileMetadata(
     size: metadata.size,
     createdTime: metadata.createdTime,
     modifiedTime: metadata.modifiedTime,
-    owners: metadata.owners?.map(o => ({
+    owners: metadata.owners?.map((o) => ({
       displayName: o.displayName,
-      emailAddress: o.emailAddress
+      emailAddress: o.emailAddress,
     })),
     shared: metadata.shared,
     starred: metadata.starred,
     description: metadata.description,
     webViewLink: metadata.webViewLink,
-    parents: metadata.parents
+    parents: metadata.parents,
   });
 }
 
@@ -480,7 +460,7 @@ const EXPORT_MIME_TYPES: Record<string, string> = {
   tsv: 'text/tab-separated-values',
   odt: 'application/vnd.oasis.opendocument.text',
   ods: 'application/vnd.oasis.opendocument.spreadsheet',
-  odp: 'application/vnd.oasis.opendocument.presentation'
+  odp: 'application/vnd.oasis.opendocument.presentation',
 };
 
 const GOOGLE_DOC_FORMATS = ['pdf', 'docx', 'odt'];
@@ -491,17 +471,15 @@ export async function handleExportFile(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = ExportFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(ExportFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file metadata to determine type
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name, mimeType',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const mimeType = file.data.mimeType || '';
@@ -518,14 +496,14 @@ export async function handleExportFile(
   } else {
     return errorResponse(
       `File "${fileName}" is not a Google Doc, Sheet, or Slides. ` +
-      `Cannot export ${mimeType} files. Use this tool only for Google Workspace files.`
+        `Cannot export ${mimeType} files. Use this tool only for Google Workspace files.`
     );
   }
 
   if (!validFormats.includes(data.format)) {
     return errorResponse(
       `Cannot export Google ${mimeType.split('.').pop()} to ${data.format}. ` +
-      `Valid formats: ${validFormats.join(', ')}`
+        `Valid formats: ${validFormats.join(', ')}`
     );
   }
 
@@ -559,7 +537,7 @@ export async function handleExportFile(
   log('File exported successfully', { fileId: data.fileId, format: data.format });
   return successResponse(
     `Exported "${fileName}" as ${data.format}\n\n` +
-    `Base64 content (${buffer.length} bytes):\n${base64Content}`
+      `Base64 content (${buffer.length} bytes):\n${base64Content}`
   );
 }
 
@@ -567,14 +545,9 @@ export async function handleExportFile(
 // SHARING HANDLERS
 // -----------------------------------------------------------------------------
 
-export async function handleShareFile(
-  drive: drive_v3.Drive,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = ShareFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+export async function handleShareFile(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
+  const validation = validateArgs(ShareFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Validate emailAddress required for user/group
@@ -591,7 +564,7 @@ export async function handleShareFile(
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const permissionBody: {
@@ -601,7 +574,7 @@ export async function handleShareFile(
     domain?: string;
   } = {
     role: data.role,
-    type: data.type
+    type: data.type,
   };
 
   if (data.emailAddress) {
@@ -616,7 +589,7 @@ export async function handleShareFile(
     requestBody: permissionBody,
     sendNotificationEmail: data.sendNotificationEmail,
     emailMessage: data.emailMessage,
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('File shared successfully', { fileId: data.fileId, permissionId: permission.data.id });
@@ -632,7 +605,7 @@ export async function handleShareFile(
 
   return successResponse(
     `Shared "${file.data.name}" with ${targetDesc} as ${data.role}\n` +
-    `Permission ID: ${permission.data.id}`
+      `Permission ID: ${permission.data.id}`
   );
 }
 
@@ -640,10 +613,8 @@ export async function handleGetSharing(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetSharingSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetSharingSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file name
@@ -651,7 +622,7 @@ export async function handleGetSharing(
     drive.files.get({
       fileId: data.fileId,
       fields: 'name, webViewLink',
-      supportsAllDrives: true
+      supportsAllDrives: true,
     }),
     30000,
     'Get file info'
@@ -662,7 +633,7 @@ export async function handleGetSharing(
     drive.permissions.list({
       fileId: data.fileId,
       fields: 'permissions(id, role, type, emailAddress, domain, displayName)',
-      supportsAllDrives: true
+      supportsAllDrives: true,
     }),
     30000,
     'List permissions'
@@ -670,31 +641,33 @@ export async function handleGetSharing(
 
   const permissionList = permissions.data.permissions || [];
 
-  const formattedPermissions = permissionList.map(p => {
-    let target = '';
-    if (p.type === 'anyone') {
-      target = 'Anyone with the link';
-    } else if (p.type === 'domain') {
-      target = `Anyone in ${p.domain}`;
-    } else {
-      target = p.emailAddress || p.displayName || 'Unknown';
-    }
-    return `• ${target}: ${p.role} (ID: ${p.id})`;
-  }).join('\n');
+  const formattedPermissions = permissionList
+    .map((p) => {
+      let target = '';
+      if (p.type === 'anyone') {
+        target = 'Anyone with the link';
+      } else if (p.type === 'domain') {
+        target = `Anyone in ${p.domain}`;
+      } else {
+        target = p.emailAddress || p.displayName || 'Unknown';
+      }
+      return `• ${target}: ${p.role} (ID: ${p.id})`;
+    })
+    .join('\n');
 
   const textResponse = `Sharing settings for "${file.data.name}":\n\n${formattedPermissions}\n\nLink: ${file.data.webViewLink}`;
 
   return structuredResponse(textResponse, {
     fileName: file.data.name,
     webViewLink: file.data.webViewLink,
-    permissions: permissionList.map(p => ({
+    permissions: permissionList.map((p) => ({
       id: p.id,
       role: p.role,
       type: p.type,
       emailAddress: p.emailAddress,
       domain: p.domain,
-      displayName: p.displayName
-    }))
+      displayName: p.displayName,
+    })),
   });
 }
 
@@ -706,10 +679,8 @@ export async function handleListRevisions(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = ListRevisionsSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(ListRevisionsSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file name
@@ -717,7 +688,7 @@ export async function handleListRevisions(
     drive.files.get({
       fileId: data.fileId,
       fields: 'name, mimeType',
-      supportsAllDrives: true
+      supportsAllDrives: true,
     }),
     30000,
     'Get file info'
@@ -727,7 +698,7 @@ export async function handleListRevisions(
   if (file.data.mimeType?.startsWith('application/vnd.google-apps')) {
     return errorResponse(
       `Google Workspace files (${file.data.mimeType}) do not support revision history through this API. ` +
-      `Use the Google Docs/Sheets/Slides UI to view version history.`
+        `Use the Google Docs/Sheets/Slides UI to view version history.`
     );
   }
 
@@ -735,7 +706,7 @@ export async function handleListRevisions(
     drive.revisions.list({
       fileId: data.fileId,
       pageSize: data.pageSize || 100,
-      fields: 'revisions(id, modifiedTime, lastModifyingUser, size, keepForever)'
+      fields: 'revisions(id, modifiedTime, lastModifyingUser, size, keepForever)',
     }),
     30000,
     'List revisions'
@@ -747,27 +718,32 @@ export async function handleListRevisions(
     return successResponse(`No revisions found for "${file.data.name}".`);
   }
 
-  const formattedRevisions = revisionList.map((r, idx) => {
-    const author = r.lastModifyingUser?.displayName || r.lastModifyingUser?.emailAddress || 'Unknown';
-    const sizeStr = r.size ? `${(parseInt(r.size) / 1024).toFixed(2)} KB` : 'N/A';
-    const keepForever = r.keepForever ? ' (pinned)' : '';
-    return `${idx + 1}. ID: ${r.id} | ${r.modifiedTime} | ${author} | ${sizeStr}${keepForever}`;
-  }).join('\n');
+  const formattedRevisions = revisionList
+    .map((r, idx) => {
+      const author =
+        r.lastModifyingUser?.displayName || r.lastModifyingUser?.emailAddress || 'Unknown';
+      const sizeStr = formatBytes(r.size);
+      const keepForever = r.keepForever ? ' (pinned)' : '';
+      return `${idx + 1}. ID: ${r.id} | ${r.modifiedTime} | ${author} | ${sizeStr}${keepForever}`;
+    })
+    .join('\n');
 
   const textResponse = `Revisions for "${file.data.name}" (${revisionList.length} found):\n\n${formattedRevisions}`;
 
   return structuredResponse(textResponse, {
     fileName: file.data.name,
-    revisions: revisionList.map(r => ({
+    revisions: revisionList.map((r) => ({
       id: r.id,
       modifiedTime: r.modifiedTime,
       size: r.size,
       keepForever: r.keepForever,
-      lastModifyingUser: r.lastModifyingUser ? {
-        displayName: r.lastModifyingUser.displayName,
-        emailAddress: r.lastModifyingUser.emailAddress
-      } : undefined
-    }))
+      lastModifyingUser: r.lastModifyingUser
+        ? {
+            displayName: r.lastModifyingUser.displayName,
+            emailAddress: r.lastModifyingUser.emailAddress,
+          }
+        : undefined,
+    })),
   });
 }
 
@@ -775,24 +751,22 @@ export async function handleRestoreRevision(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = RestoreRevisionSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(RestoreRevisionSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file metadata
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name, mimeType',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   // Check if file supports revisions
   if (file.data.mimeType?.startsWith('application/vnd.google-apps')) {
     return errorResponse(
       `Google Workspace files cannot be restored through this API. ` +
-      `Use the Google Docs/Sheets/Slides UI to restore previous versions.`
+        `Use the Google Docs/Sheets/Slides UI to restore previous versions.`
     );
   }
 
@@ -810,9 +784,9 @@ export async function handleRestoreRevision(
     fileId: data.fileId,
     media: {
       mimeType: file.data.mimeType || 'application/octet-stream',
-      body: stream
+      body: stream,
     },
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('Revision restored successfully', { fileId: data.fileId, revisionId: data.revisionId });
@@ -838,24 +812,22 @@ const COMMON_MIME_TYPES: Record<string, string> = {
   xml: 'application/xml',
   html: 'text/html',
   css: 'text/css',
-  js: 'application/javascript'
+  js: 'application/javascript',
 };
 
 export async function handleDownloadFile(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = DownloadFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(DownloadFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file metadata
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name, mimeType, size',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const mimeType = file.data.mimeType || '';
@@ -865,7 +837,7 @@ export async function handleDownloadFile(
   if (mimeType.startsWith('application/vnd.google-apps')) {
     return errorResponse(
       `"${fileName}" is a Google Workspace file (${mimeType}). ` +
-      `Use exportFile instead to convert it to a downloadable format.`
+        `Use exportFile instead to convert it to a downloadable format.`
     );
   }
 
@@ -888,8 +860,8 @@ export async function handleDownloadFile(
     log('File downloaded successfully', { fileId: data.fileId, outputPath: fullPath });
     return successResponse(
       `Downloaded "${fileName}" to: ${fullPath}\n` +
-      `Size: ${buffer.length} bytes\n` +
-      `Type: ${mimeType}`
+        `Size: ${buffer.length} bytes\n` +
+        `Type: ${mimeType}`
     );
   }
 
@@ -899,9 +871,9 @@ export async function handleDownloadFile(
   log('File downloaded successfully', { fileId: data.fileId, size: buffer.length });
   return successResponse(
     `Downloaded "${fileName}"\n` +
-    `Size: ${buffer.length} bytes\n` +
-    `Type: ${mimeType}\n\n` +
-    `Base64 content:\n${base64Content}`
+      `Size: ${buffer.length} bytes\n` +
+      `Type: ${mimeType}\n\n` +
+      `Base64 content:\n${base64Content}`
   );
 }
 
@@ -909,10 +881,8 @@ export async function handleUploadFile(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = UploadFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(UploadFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Require either sourcePath or base64Content
@@ -935,7 +905,7 @@ export async function handleUploadFile(
   if (existingFileId) {
     return errorResponse(
       `A file named "${data.name}" already exists in this location. ` +
-      `Existing file ID: ${existingFileId}`
+        `Existing file ID: ${existingFileId}`
     );
   }
 
@@ -954,21 +924,21 @@ export async function handleUploadFile(
   const file = await drive.files.create({
     requestBody: {
       name: data.name,
-      parents: [folderId]
+      parents: [folderId],
     },
     media: {
       mimeType,
-      body: mediaBody
+      body: mediaBody,
     },
     fields: 'id, name, webViewLink',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('File uploaded successfully', { fileId: file.data.id, name: file.data.name });
   return successResponse(
     `Uploaded file: ${file.data.name}\n` +
-    `ID: ${file.data.id}\n` +
-    `Link: ${file.data.webViewLink}`
+      `ID: ${file.data.id}\n` +
+      `Link: ${file.data.webViewLink}`
   );
 }
 
@@ -980,14 +950,12 @@ export async function handleGetStorageQuota(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetStorageQuotaSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetStorageQuotaSchema, args);
+  if (!validation.success) return validation.response;
 
   const about = await withTimeout(
     drive.about.get({
-      fields: 'storageQuota, user'
+      fields: 'storageQuota, user',
     }),
     30000,
     'Get storage quota'
@@ -1000,15 +968,6 @@ export async function handleGetStorageQuota(
     return errorResponse('Unable to retrieve storage quota information');
   }
 
-  const formatBytes = (bytes: string | undefined | null): string => {
-    if (!bytes) return 'N/A';
-    const num = parseInt(bytes);
-    if (num >= 1073741824) return `${(num / 1073741824).toFixed(2)} GB`;
-    if (num >= 1048576) return `${(num / 1048576).toFixed(2)} MB`;
-    if (num >= 1024) return `${(num / 1024).toFixed(2)} KB`;
-    return `${num} bytes`;
-  };
-
   const limit = quota.limit ? formatBytes(quota.limit) : 'Unlimited';
   const usage = formatBytes(quota.usage);
   const usageInDrive = formatBytes(quota.usageInDrive);
@@ -1020,7 +979,8 @@ export async function handleGetStorageQuota(
     available = formatBytes(String(availableBytes));
   }
 
-  const textResponse = `Google Drive Storage Quota\n` +
+  const textResponse =
+    `Google Drive Storage Quota\n` +
     `User: ${user?.emailAddress || 'Unknown'}\n\n` +
     `Total limit: ${limit}\n` +
     `Total usage: ${usage}\n` +
@@ -1029,41 +989,38 @@ export async function handleGetStorageQuota(
     `Available: ${available}`;
 
   return structuredResponse(textResponse, {
-    user: user ? {
-      displayName: user.displayName,
-      emailAddress: user.emailAddress
-    } : undefined,
+    user: user
+      ? {
+          displayName: user.displayName,
+          emailAddress: user.emailAddress,
+        }
+      : undefined,
     storageQuota: {
       limit: quota.limit,
       usage: quota.usage,
       usageInDrive: quota.usageInDrive,
-      usageInDriveTrash: quota.usageInDriveTrash
-    }
+      usageInDriveTrash: quota.usageInDriveTrash,
+    },
   });
 }
 
-export async function handleStarFile(
-  drive: drive_v3.Drive,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = StarFileSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+export async function handleStarFile(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
+  const validation = validateArgs(StarFileSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file name
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   // Update starred status
   await drive.files.update({
     fileId: data.fileId,
     requestBody: { starred: data.starred },
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const action = data.starred ? 'starred' : 'unstarred';
@@ -1080,10 +1037,8 @@ export async function handleResolveFilePath(
   args: unknown,
   context?: HandlerContext
 ): Promise<ToolResponse> {
-  const validation = ResolveFilePathSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(ResolveFilePathSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   if (!data.path || data.path === '/') {
@@ -1092,7 +1047,7 @@ export async function handleResolveFilePath(
       name: 'My Drive',
       path: '/',
       mimeType: FOLDER_MIME_TYPE,
-      modifiedTime: null
+      modifiedTime: null,
     });
   }
 
@@ -1105,10 +1060,10 @@ export async function handleResolveFilePath(
     if (!part) continue;
 
     const isLastPart = i === parts.length - 1;
-    const escapedPart = part.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const escapedPart = escapeQueryString(part);
 
     // Build query based on whether we're looking for the final item or a folder
-    let query = `'${currentFolderId}' in parents and name = '${escapedPart}' and trashed = false`;
+    let query = combineQueries(`'${currentFolderId}' in parents`, `name = '${escapedPart}'`, 'trashed = false');
 
     if (isLastPart && data.type !== 'any') {
       if (data.type === 'folder') {
@@ -1126,7 +1081,7 @@ export async function handleResolveFilePath(
       fields: 'files(id, name, mimeType, modifiedTime)',
       pageSize: 10,
       includeItemsFromAllDrives: true,
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
 
     const files = response.data.files || [];
@@ -1134,7 +1089,8 @@ export async function handleResolveFilePath(
     if (files.length === 0) {
       // Build helpful error message
       const pathSoFar = '/' + resolvedPath.join('/');
-      const searchedIn = resolvedPath.length > 0 ? `"${resolvedPath[resolvedPath.length - 1]}"` : 'root';
+      const searchedIn =
+        resolvedPath.length > 0 ? `"${resolvedPath[resolvedPath.length - 1]}"` : 'root';
 
       // List what's in the current folder for context
       const contentsResponse = await drive.files.list({
@@ -1142,16 +1098,17 @@ export async function handleResolveFilePath(
         fields: 'files(name, mimeType)',
         pageSize: 20,
         includeItemsFromAllDrives: true,
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       const contents = (contentsResponse.data.files || [])
-        .map(f => f.mimeType === FOLDER_MIME_TYPE ? `📁 ${f.name}` : `📄 ${f.name}`)
+        .map((f) => (f.mimeType === FOLDER_MIME_TYPE ? `📁 ${f.name}` : `📄 ${f.name}`))
         .slice(0, 10);
 
-      const contentsStr = contents.length > 0
-        ? `\nContents of ${searchedIn}: ${contents.join(', ')}${contents.length >= 10 ? '...' : ''}`
-        : `\n${searchedIn} appears to be empty.`;
+      const contentsStr =
+        contents.length > 0
+          ? `\nContents of ${searchedIn}: ${contents.join(', ')}${contents.length >= 10 ? '...' : ''}`
+          : `\n${searchedIn} appears to be empty.`;
 
       return errorResponse(
         `Path segment "${part}" not found at "${pathSoFar || '/'}".${contentsStr}`
@@ -1161,12 +1118,12 @@ export async function handleResolveFilePath(
     if (files.length > 1) {
       // Multiple matches - try elicitation if context available
       if (context?.server) {
-        const fileOptions = files.map(f => ({
+        const fileOptions = files.map((f) => ({
           id: f.id!,
           name: f.name!,
           mimeType: f.mimeType || undefined,
           modifiedTime: f.modifiedTime || undefined,
-          path: '/' + [...resolvedPath, f.name!].join('/')
+          path: '/' + [...resolvedPath, f.name!].join('/'),
         }));
 
         const result = await elicitFileSelection(
@@ -1185,7 +1142,7 @@ export async function handleResolveFilePath(
         }
 
         if (result.selectedFileId) {
-          const selectedFile = files.find(f => f.id === result.selectedFileId)!;
+          const selectedFile = files.find((f) => f.id === result.selectedFileId)!;
           resolvedPath.push(selectedFile.name!);
 
           if (isLastPart) {
@@ -1197,7 +1154,7 @@ export async function handleResolveFilePath(
                 name: selectedFile.name,
                 path: '/' + resolvedPath.join('/'),
                 mimeType: selectedFile.mimeType,
-                modifiedTime: selectedFile.modifiedTime
+                modifiedTime: selectedFile.modifiedTime,
               }
             );
           }
@@ -1209,11 +1166,11 @@ export async function handleResolveFilePath(
 
       // Fall back to error with disambiguation options
       const disambiguationMessage = formatDisambiguationOptions(
-        files.map(f => ({
+        files.map((f) => ({
           id: f.id!,
           name: f.name!,
           mimeType: f.mimeType || undefined,
-          modifiedTime: f.modifiedTime
+          modifiedTime: f.modifiedTime,
         })),
         `Multiple items named "${part}" found at "/${resolvedPath.join('/')}".`
       );
@@ -1233,7 +1190,7 @@ export async function handleResolveFilePath(
           name: file.name,
           path: '/' + resolvedPath.join('/'),
           mimeType: file.mimeType,
-          modifiedTime: file.modifiedTime
+          modifiedTime: file.modifiedTime,
         }
       );
     }
@@ -1255,10 +1212,8 @@ export async function handleBatchDelete(
   args: unknown,
   context?: HandlerContext
 ): Promise<ToolResponse> {
-  const validation = BatchDeleteSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(BatchDeleteSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const { success: deleted, failed } = await processBatchOperation(
@@ -1267,13 +1222,13 @@ export async function handleBatchDelete(
       const file = await drive.files.get({
         fileId,
         fields: 'name',
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       await drive.files.update({
         fileId,
         requestBody: { trashed: true },
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       return { fileId, name: file.data.name };
@@ -1287,8 +1242,12 @@ export async function handleBatchDelete(
 
   return structuredResponse(
     summary +
-    (deleted.length > 0 ? `\n\nDeleted: ${deleted.map(d => d.name || d.fileId).join(', ')}` : '') +
-    (failed.length > 0 ? `\n\nFailed: ${failed.map(f => `${f.id}: ${f.error}`).join(', ')}` : ''),
+      (deleted.length > 0
+        ? `\n\nDeleted: ${deleted.map((d) => d.name || d.fileId).join(', ')}`
+        : '') +
+      (failed.length > 0
+        ? `\n\nFailed: ${failed.map((f) => `${f.id}: ${f.error}`).join(', ')}`
+        : ''),
     { deleted, failed }
   );
 }
@@ -1298,10 +1257,8 @@ export async function handleBatchMove(
   args: unknown,
   context?: HandlerContext
 ): Promise<ToolResponse> {
-  const validation = BatchMoveSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(BatchMoveSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve destination folder (supports both ID and path)
@@ -1316,11 +1273,12 @@ export async function handleBatchMove(
   if (destinationFolderId !== 'root') {
     try {
       const destFolder = await withRetry(
-        () => drive.files.get({
-          fileId: destinationFolderId,
-          fields: 'name',
-          supportsAllDrives: true
-        }),
+        () =>
+          drive.files.get({
+            fileId: destinationFolderId,
+            fields: 'name',
+            supportsAllDrives: true,
+          }),
         { operationName: 'getDestinationFolder' }
       );
       destName = destFolder.data.name || destinationFolderId;
@@ -1335,7 +1293,7 @@ export async function handleBatchMove(
       const file = await drive.files.get({
         fileId,
         fields: 'name, parents',
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       const previousParents = (file.data.parents || []).join(',');
@@ -1344,7 +1302,7 @@ export async function handleBatchMove(
         fileId,
         addParents: destinationFolderId,
         removeParents: previousParents,
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       return { fileId, name: file.data.name };
@@ -1358,8 +1316,10 @@ export async function handleBatchMove(
 
   return structuredResponse(
     summary +
-    (moved.length > 0 ? `\n\nMoved: ${moved.map(m => m.name || m.fileId).join(', ')}` : '') +
-    (failed.length > 0 ? `\n\nFailed: ${failed.map(f => `${f.id}: ${f.error}`).join(', ')}` : ''),
+      (moved.length > 0 ? `\n\nMoved: ${moved.map((m) => m.name || m.fileId).join(', ')}` : '') +
+      (failed.length > 0
+        ? `\n\nFailed: ${failed.map((f) => `${f.id}: ${f.error}`).join(', ')}`
+        : ''),
     { moved, failed, destinationFolder: { id: destinationFolderId, name: destName } }
   );
 }
@@ -1369,10 +1329,8 @@ export async function handleBatchShare(
   args: unknown,
   context?: HandlerContext
 ): Promise<ToolResponse> {
-  const validation = BatchShareSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(BatchShareSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const { success: shared, failed } = await processBatchOperation(
@@ -1381,7 +1339,7 @@ export async function handleBatchShare(
       const file = await drive.files.get({
         fileId,
         fields: 'name',
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       await drive.permissions.create({
@@ -1389,10 +1347,10 @@ export async function handleBatchShare(
         requestBody: {
           role: data.role,
           type: 'user',
-          emailAddress: data.email
+          emailAddress: data.email,
         },
         sendNotificationEmail: data.sendNotification,
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       return { fileId, name: file.data.name };
@@ -1406,8 +1364,10 @@ export async function handleBatchShare(
 
   return structuredResponse(
     summary +
-    (shared.length > 0 ? `\n\nShared: ${shared.map(s => s.name || s.fileId).join(', ')}` : '') +
-    (failed.length > 0 ? `\n\nFailed: ${failed.map(f => `${f.id}: ${f.error}`).join(', ')}` : ''),
+      (shared.length > 0 ? `\n\nShared: ${shared.map((s) => s.name || s.fileId).join(', ')}` : '') +
+      (failed.length > 0
+        ? `\n\nFailed: ${failed.map((f) => `${f.id}: ${f.error}`).join(', ')}`
+        : ''),
     { shared, failed, shareDetails: { email: data.email, role: data.role } }
   );
 }
@@ -1420,17 +1380,15 @@ export async function handleRemovePermission(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = RemovePermissionSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(RemovePermissionSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file name for reporting
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   let permissionIdToRemove = data.permissionId;
@@ -1440,22 +1398,22 @@ export async function handleRemovePermission(
     const permissions = await drive.permissions.list({
       fileId: data.fileId,
       fields: 'permissions(id, emailAddress, role)',
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
 
     const permission = (permissions.data.permissions || []).find(
-      p => p.emailAddress?.toLowerCase() === data.email!.toLowerCase()
+      (p) => p.emailAddress?.toLowerCase() === data.email!.toLowerCase()
     );
 
     if (!permission) {
       // List current permissions for context
       const currentPerms = (permissions.data.permissions || [])
-        .map(p => `${p.emailAddress || 'anonymous'} (${p.role})`)
+        .map((p) => `${p.emailAddress || 'anonymous'} (${p.role})`)
         .join(', ');
 
       return errorResponse(
         `No permission found for email "${data.email}" on file "${file.data.name}". ` +
-        `Current permissions: ${currentPerms || 'none'}`
+          `Current permissions: ${currentPerms || 'none'}`
       );
     }
 
@@ -1463,7 +1421,7 @@ export async function handleRemovePermission(
     if (permission.role === 'owner') {
       return errorResponse(
         `Cannot remove owner permission for "${data.email}". ` +
-        `Transfer ownership first if you want to remove this user's access.`
+          `Transfer ownership first if you want to remove this user's access.`
       );
     }
 
@@ -1476,13 +1434,13 @@ export async function handleRemovePermission(
       fileId: data.fileId,
       permissionId: permissionIdToRemove,
       fields: 'role, emailAddress',
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
 
     if (permDetails.data.role === 'owner') {
       return errorResponse(
         `Cannot remove owner permission (${permDetails.data.emailAddress}). ` +
-        `Transfer ownership first if you want to remove this user's access.`
+          `Transfer ownership first if you want to remove this user's access.`
       );
     }
   }
@@ -1490,13 +1448,16 @@ export async function handleRemovePermission(
   await drive.permissions.delete({
     fileId: data.fileId,
     permissionId: permissionIdToRemove!,
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
-  log('Permission removed successfully', { fileId: data.fileId, permissionId: permissionIdToRemove });
+  log('Permission removed successfully', {
+    fileId: data.fileId,
+    permissionId: permissionIdToRemove,
+  });
   return successResponse(
     `Removed permission from "${file.data.name}"` +
-    (data.email ? ` for ${data.email}` : ` (permission ID: ${permissionIdToRemove})`)
+      (data.email ? ` for ${data.email}` : ` (permission ID: ${permissionIdToRemove})`)
   );
 }
 
@@ -1504,14 +1465,9 @@ export async function handleRemovePermission(
 // TRASH MANAGEMENT
 // -----------------------------------------------------------------------------
 
-export async function handleListTrash(
-  drive: drive_v3.Drive,
-  args: unknown
-): Promise<ToolResponse> {
-  const validation = ListTrashSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+export async function handleListTrash(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
+  const validation = validateArgs(ListTrashSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const response = await withTimeout(
@@ -1521,7 +1477,7 @@ export async function handleListTrash(
       pageToken: data.pageToken,
       fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size, trashedTime)',
       includeItemsFromAllDrives: true,
-      supportsAllDrives: true
+      supportsAllDrives: true,
     }),
     30000,
     'List trash'
@@ -1532,36 +1488,33 @@ export async function handleListTrash(
   if (files.length === 0) {
     return structuredResponse('Trash is empty', {
       files: [],
-      nextPageToken: null
+      nextPageToken: null,
     });
   }
 
-  const formatSize = (size: string | null | undefined): string => {
-    if (!size) return 'N/A';
-    const num = parseInt(size);
-    if (num >= 1048576) return `${(num / 1048576).toFixed(1)} MB`;
-    if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`;
-    return `${num} B`;
-  };
+  const fileList = files
+    .map((f) => {
+      const icon = f.mimeType === FOLDER_MIME_TYPE ? '📁' : '📄';
+      const size = f.mimeType === FOLDER_MIME_TYPE ? '' : ` (${formatBytesCompact(f.size)})`;
+      return `${icon} ${f.name}${size} - ID: ${f.id}`;
+    })
+    .join('\n');
 
-  const fileList = files.map(f => {
-    const icon = f.mimeType === FOLDER_MIME_TYPE ? '📁' : '📄';
-    const size = f.mimeType === FOLDER_MIME_TYPE ? '' : ` (${formatSize(f.size)})`;
-    return `${icon} ${f.name}${size} - ID: ${f.id}`;
-  }).join('\n');
-
-  const textResponse = `Trash contents (${files.length} items):\n\n${fileList}` +
-    (response.data.nextPageToken ? '\n\n(More items available - use nextPageToken to continue)' : '');
+  const textResponse =
+    `Trash contents (${files.length} items):\n\n${fileList}` +
+    (response.data.nextPageToken
+      ? '\n\n(More items available - use nextPageToken to continue)'
+      : '');
 
   return structuredResponse(textResponse, {
-    files: files.map(f => ({
+    files: files.map((f) => ({
       id: f.id,
       name: f.name,
       mimeType: f.mimeType,
       size: f.size,
-      trashedTime: f.trashedTime
+      trashedTime: f.trashedTime,
     })),
-    nextPageToken: response.data.nextPageToken || null
+    nextPageToken: response.data.nextPageToken || null,
   });
 }
 
@@ -1569,17 +1522,15 @@ export async function handleRestoreFromTrash(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = RestoreFromTrashSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(RestoreFromTrashSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get file info
   const file = await drive.files.get({
     fileId: data.fileId,
     fields: 'name, trashed',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   if (!file.data.trashed) {
@@ -1589,7 +1540,7 @@ export async function handleRestoreFromTrash(
   await drive.files.update({
     fileId: data.fileId,
     requestBody: { trashed: false },
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   log('File restored from trash', { fileId: data.fileId });
@@ -1601,17 +1552,21 @@ export async function handleEmptyTrash(
   args: unknown,
   context?: HandlerContext
 ): Promise<ToolResponse> {
-  const validation = EmptyTrashSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(EmptyTrashSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Count items in trash first
-  const listParams: { q: string; fields: string; pageSize: number; driveId?: string; corpora?: string } = {
+  const listParams: {
+    q: string;
+    fields: string;
+    pageSize: number;
+    driveId?: string;
+    corpora?: string;
+  } = {
     q: 'trashed = true',
     fields: 'files(id, name)',
-    pageSize: 1000
+    pageSize: 1000,
   };
 
   // If driveId is specified, query that shared drive's trash
@@ -1625,14 +1580,16 @@ export async function handleEmptyTrash(
   const itemCount = trashContents.data.files?.length || 0;
 
   if (itemCount === 0) {
-    return successResponse(data.driveId ? 'Shared drive trash is already empty' : 'Trash is already empty');
+    return successResponse(
+      data.driveId ? 'Shared drive trash is already empty' : 'Trash is already empty'
+    );
   }
 
   // Use elicitation for confirmation if context available
   if (context?.server) {
     const sampleFiles = (trashContents.data.files || [])
       .slice(0, 5)
-      .map(f => f.name)
+      .map((f) => f.name)
       .join(', ');
     const moreText = itemCount > 5 ? ` and ${itemCount - 5} more` : '';
 
@@ -1649,7 +1606,7 @@ export async function handleEmptyTrash(
     if (!confirmResult.confirmed) {
       return errorResponse(
         `Empty trash requires confirmation. ${itemCount} item(s) will be permanently deleted. ` +
-        `Files include: ${sampleFiles}${moreText}`
+          `Files include: ${sampleFiles}${moreText}`
       );
     }
   }
@@ -1687,7 +1644,7 @@ async function buildFolderTree(
   const node: FolderTreeNode = {
     id: folderId,
     name: folderName,
-    type: 'folder'
+    type: 'folder',
   };
 
   if (currentDepth >= maxDepth) {
@@ -1701,7 +1658,7 @@ async function buildFolderTree(
     pageSize: 100,
     orderBy: 'folder,name',
     includeItemsFromAllDrives: true,
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   const files = response.data.files || [];
@@ -1724,7 +1681,7 @@ async function buildFolderTree(
         id: file.id!,
         name: file.name!,
         type: 'file',
-        mimeType: file.mimeType || undefined
+        mimeType: file.mimeType || undefined,
       });
     }
   }
@@ -1736,7 +1693,11 @@ async function buildFolderTree(
   return node;
 }
 
-function formatTreeAsText(node: FolderTreeNode, indent: string = '', isLast: boolean = true): string {
+function formatTreeAsText(
+  node: FolderTreeNode,
+  indent: string = '',
+  isLast: boolean = true
+): string {
   const prefix = indent + (isLast ? '└── ' : '├── ');
   const icon = node.type === 'folder' ? '📁' : '📄';
   let result = prefix + icon + ' ' + node.name + '\n';
@@ -1756,10 +1717,8 @@ export async function handleGetFolderTree(
   drive: drive_v3.Drive,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetFolderTreeSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetFolderTreeSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Resolve folder ID
@@ -1773,7 +1732,7 @@ export async function handleGetFolderTree(
     const folder = await drive.files.get({
       fileId: folderId,
       fields: 'name',
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
     folderName = folder.data.name || folderId;
     folderPath = data.folderPath || `/${folderName}`;
@@ -1783,16 +1742,20 @@ export async function handleGetFolderTree(
   const tree = await buildFolderTree(drive, folderId, folderName, 0, data.depth || 2);
 
   // Format as text
-  const treeText = '📁 ' + folderName + '\n' + (tree.children
-    ? tree.children.map((child, index) =>
-        formatTreeAsText(child, '', index === tree.children!.length - 1)
-      ).join('')
-    : '(empty)');
+  const treeText =
+    '📁 ' +
+    folderName +
+    '\n' +
+    (tree.children
+      ? tree.children
+          .map((child, index) => formatTreeAsText(child, '', index === tree.children!.length - 1))
+          .join('')
+      : '(empty)');
 
   return structuredResponse(treeText, {
     id: folderId,
     name: folderName,
     path: folderPath,
-    children: tree.children || []
+    children: tree.children || [],
   });
 }

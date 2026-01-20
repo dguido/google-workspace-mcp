@@ -120,17 +120,17 @@ You can run the server directly without installation:
 
 ```bash
 # Run the server (authentication happens automatically on first run)
-npx @piotr-agier/google-drive-mcp
+npx @dguido/google-drive-mcp
 
 # Optional: Run authentication manually if needed
-npx @piotr-agier/google-drive-mcp auth
+npx @dguido/google-drive-mcp auth
 ```
 
 ### Option 2: Local Installation
 
 1. Clone and install:
    ```bash
-   git clone https://github.com/piotr-agier/google-drive-mcp.git
+   git clone https://github.com/dguido/google-drive-mcp.git
    cd google-drive-mcp
    npm install
    ```
@@ -157,7 +157,7 @@ npx @piotr-agier/google-drive-mcp auth
 1. **Authenticate locally first** - Docker containers cannot open browsers for OAuth:
    ```bash
    # Using npx
-   npx @piotr-agier/google-drive-mcp auth
+   npx @dguido/google-drive-mcp auth
    
    # Or using local installation
    npm run auth
@@ -271,7 +271,7 @@ Add the server to your Claude Desktop configuration:
   "mcpServers": {
     "google-drive": {
       "command": "npx",
-      "args": ["@piotr-agier/google-drive-mcp"],
+      "args": ["@dguido/google-drive-mcp"],
       "env": {
         "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/your/gcp-oauth.keys.json"
       }
@@ -522,7 +522,7 @@ These tools are used less frequently and can be loaded on-demand:
   "mcpServers": {
     "google-drive": {
       "command": "npx",
-      "args": ["@piotr-agier/google-drive-mcp"],
+      "args": ["@dguido/google-drive-mcp"],
       "tool_configuration": {
         "defer_loading": [
           "formatGoogleDocRange",
@@ -572,7 +572,7 @@ Run the auth command when you need to:
 
 ```bash
 # Using npx
-npx @piotr-agier/google-drive-mcp auth
+npx @dguido/google-drive-mcp auth
 
 # Using local installation
 npm run auth
@@ -653,7 +653,7 @@ lsof -i :3000-3004
 kill -9 <PID>
 
 # Re-run authentication
-npx @piotr-agier/google-drive-mcp auth
+npx @dguido/google-drive-mcp auth
 ```
 
 #### "Tokens expired" or "Invalid grant"
@@ -665,7 +665,7 @@ npx @piotr-agier/google-drive-mcp auth
 ```bash
 # Clear old tokens and re-authenticate
 rm ~/.config/google-drive-mcp/tokens.json
-npx @piotr-agier/google-drive-mcp auth
+npx @dguido/google-drive-mcp auth
 ```
 
 **For production:**
@@ -725,7 +725,7 @@ Error: Google Sheets API has not been used in project...
 **Solution:**
 ```bash
 # 1. Authenticate outside Docker first
-npx @piotr-agier/google-drive-mcp auth
+npx @dguido/google-drive-mcp auth
 
 # 2. Verify tokens exist
 ls -la ~/.config/google-drive-mcp/tokens.json
@@ -770,15 +770,15 @@ Enable detailed logging:
 ```bash
 # Set debug environment variable
 export DEBUG=google-drive-mcp:*
-npx @piotr-agier/google-drive-mcp
+npx @dguido/google-drive-mcp
 ```
 
 ### Getting Help
 
 1. **Check logs**: Server logs errors to stderr
-2. **Verify setup**: Run `npx @piotr-agier/google-drive-mcp help`
-3. **Test auth**: Run `npx @piotr-agier/google-drive-mcp auth`
-4. **Report issues**: [GitHub Issues](https://github.com/piotr-agier/google-drive-mcp/issues)
+2. **Verify setup**: Run `npx @dguido/google-drive-mcp help`
+3. **Test auth**: Run `npx @dguido/google-drive-mcp auth`
+4. **Report issues**: [GitHub Issues](https://github.com/dguido/google-drive-mcp/issues)
 
 ## Development
 
@@ -871,8 +871,14 @@ Contributions are welcome! Please:
 
 ## Support
 
-- 📚 [Documentation](https://github.com/piotr-agier/google-drive-mcp)
-- 🐛 [Issue Tracker](https://github.com/piotr-agier/google-drive-mcp/issues)
+- 📚 [Documentation](https://github.com/dguido/google-drive-mcp)
+- 🐛 [Issue Tracker](https://github.com/dguido/google-drive-mcp/issues)
+
+## Origin
+
+This project is a substantial rewrite of [piotr-agier/google-drive-mcp](https://github.com/piotr-agier/google-drive-mcp),
+originally created by Piotr Agier. While the original provided the foundation, this version has been
+extensively rewritten with new features, improved architecture, and comprehensive test coverage.
 
 ## Acknowledgments
 

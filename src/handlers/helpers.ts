@@ -1,6 +1,13 @@
 import type { drive_v3 } from 'googleapis';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { log } from '../utils/index.js';
+import {
+  GOOGLE_MIME_TYPES,
+  TEXT_MIME_TYPES as MIME_TEXT_TYPES,
+  getExtension,
+  getMimeTypeFromExtension,
+} from '../utils/mimeTypes.js';
+import { escapeQueryString, combineQueries } from '../utils/gdrive-query.js';
 
 /**
  * Context passed to handlers for access to MCP features like progress and elicitation
@@ -12,20 +19,21 @@ export interface HandlerContext {
   progressToken?: string | number;
 }
 
-// Constants
-export const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
+// Re-export FOLDER_MIME_TYPE for backward compatibility
+export const FOLDER_MIME_TYPE = GOOGLE_MIME_TYPES.FOLDER;
+
+// Re-export TEXT_MIME_TYPES for backward compatibility
 export const TEXT_MIME_TYPES: Record<string, string> = {
-  txt: 'text/plain',
-  md: 'text/markdown'
+  txt: MIME_TEXT_TYPES.PLAIN,
+  md: MIME_TEXT_TYPES.MARKDOWN,
 };
 
 export function getExtensionFromFilename(filename: string): string {
-  return filename.split('.').pop()?.toLowerCase() || '';
+  return getExtension(filename);
 }
 
 export function getMimeTypeFromFilename(filename: string): string {
-  const ext = getExtensionFromFilename(filename);
-  return TEXT_MIME_TYPES[ext] || 'text/plain';
+  return getMimeTypeFromExtension(filename);
 }
 
 /**
@@ -34,7 +42,7 @@ export function getMimeTypeFromFilename(filename: string): string {
 export function validateTextFileExtension(name: string): void {
   const ext = getExtensionFromFilename(name);
   if (!['txt', 'md'].includes(ext)) {
-    throw new Error("File name must end with .txt or .md for text files.");
+    throw new Error('File name must end with .txt or .md for text files.');
   }
 }
 
@@ -42,10 +50,7 @@ export function validateTextFileExtension(name: string): void {
  * Resolve a slash-delimited path (e.g. "/some/folder") within Google Drive
  * into a folder ID. Creates folders if they don't exist.
  */
-export async function resolvePath(
-  drive: drive_v3.Drive,
-  pathStr: string
-): Promise<string> {
+export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promise<string> {
   if (!pathStr || pathStr === '/') return 'root';
 
   const parts = pathStr.replace(/^\/+|\/+$/g, '').split('/');
@@ -58,7 +63,7 @@ export async function resolvePath(
       fields: 'files(id)',
       spaces: 'drive',
       includeItemsFromAllDrives: true,
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
 
     // If the folder segment doesn't exist, create it
@@ -66,12 +71,12 @@ export async function resolvePath(
       const folderMetadata = {
         name: part,
         mimeType: FOLDER_MIME_TYPE,
-        parents: [currentFolderId]
+        parents: [currentFolderId],
       };
       const folder = await drive.files.create({
         requestBody: folderMetadata,
         fields: 'id',
-        supportsAllDrives: true
+        supportsAllDrives: true,
       });
 
       if (!folder.data.id) {
@@ -119,7 +124,7 @@ export async function resolveOptionalFolderPath(
   folderPath?: string
 ): Promise<string> {
   if (folderId && folderPath) {
-    throw new Error("Provide either folderId or folderPath, not both");
+    throw new Error('Provide either folderId or folderPath, not both');
   }
   if (folderId) return folderId;
   if (folderPath) return resolvePath(drive, folderPath);
@@ -136,10 +141,10 @@ export async function resolveFileIdFromPath(
   filePath?: string
 ): Promise<string> {
   if (fileId && filePath) {
-    throw new Error("Provide either fileId or filePath, not both");
+    throw new Error('Provide either fileId or filePath, not both');
   }
   if (!fileId && !filePath) {
-    throw new Error("Either fileId or filePath must be provided");
+    throw new Error('Either fileId or filePath must be provided');
   }
   if (fileId) return fileId;
 
@@ -149,7 +154,7 @@ export async function resolveFileIdFromPath(
   const fileName = parts.pop();
 
   if (!fileName) {
-    throw new Error("Invalid file path: no filename specified");
+    throw new Error('Invalid file path: no filename specified');
   }
 
   // Resolve parent folder (don't create if missing)
@@ -160,13 +165,13 @@ export async function resolveFileIdFromPath(
   }
 
   // Find the file in the parent folder
-  const escapedName = fileName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const escapedName = escapeQueryString(fileName);
   const response = await drive.files.list({
-    q: `'${parentFolderId}' in parents and name = '${escapedName}' and trashed = false`,
+    q: combineQueries(`'${parentFolderId}' in parents`, `name = '${escapedName}'`, 'trashed = false'),
     fields: 'files(id, name)',
     pageSize: 1,
     includeItemsFromAllDrives: true,
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   if (!response.data.files?.length) {
@@ -179,10 +184,7 @@ export async function resolveFileIdFromPath(
 /**
  * Resolve a path without creating folders. Throws if any folder doesn't exist.
  */
-async function resolvePathWithoutCreate(
-  drive: drive_v3.Drive,
-  pathStr: string
-): Promise<string> {
+async function resolvePathWithoutCreate(drive: drive_v3.Drive, pathStr: string): Promise<string> {
   if (!pathStr || pathStr === '/') return 'root';
 
   const parts = pathStr.replace(/^\/+|\/+$/g, '').split('/');
@@ -190,13 +192,13 @@ async function resolvePathWithoutCreate(
 
   for (const part of parts) {
     if (!part) continue;
-    const escapedPart = part.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const escapedPart = escapeQueryString(part);
     const response = await drive.files.list({
-      q: `'${currentFolderId}' in parents and name = '${escapedPart}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
+      q: combineQueries(`'${currentFolderId}' in parents`, `name = '${escapedPart}'`, `mimeType = '${FOLDER_MIME_TYPE}'`, 'trashed = false'),
       fields: 'files(id)',
       spaces: 'drive',
       includeItemsFromAllDrives: true,
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
 
     if (!response.data.files?.length) {
@@ -219,15 +221,15 @@ export async function checkFileExists(
   parentFolderId: string = 'root'
 ): Promise<string | null> {
   try {
-    const escapedName = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    const query = `name = '${escapedName}' and '${parentFolderId}' in parents and trashed = false`;
+    const escapedName = escapeQueryString(name);
+    const query = combineQueries(`name = '${escapedName}'`, `'${parentFolderId}' in parents`, 'trashed = false');
 
     const res = await drive.files.list({
       q: query,
       fields: 'files(id, name, mimeType)',
       pageSize: 1,
       includeItemsFromAllDrives: true,
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
 
     if (res.data.files && res.data.files.length > 0) {
@@ -310,7 +312,7 @@ export const EMU_PER_POINT = 12700;
 export const EMU_PER_PIXEL_96DPI = 9525;
 
 // Standard Google Slides dimensions in EMU (default 16:9 aspect ratio)
-export const SLIDES_WIDTH_EMU = 9144000;  // 10 inches
+export const SLIDES_WIDTH_EMU = 9144000; // 10 inches
 export const SLIDES_HEIGHT_EMU = 5143500; // ~5.625 inches
 
 export function inchesToEmu(inches: number): number {
@@ -322,7 +324,7 @@ export function pointsToEmu(points: number): number {
 }
 
 export function pixelsToEmu(pixels: number, dpi = 96): number {
-  return Math.round(pixels * EMU_PER_INCH / dpi);
+  return Math.round((pixels * EMU_PER_INCH) / dpi);
 }
 
 export function emuToInches(emu: number): number {
@@ -334,7 +336,7 @@ export function emuToPoints(emu: number): number {
 }
 
 export function emuToPixels(emu: number, dpi = 96): number {
-  return emu * dpi / EMU_PER_INCH;
+  return (emu * dpi) / EMU_PER_INCH;
 }
 
 // -----------------------------------------------------------------------------
@@ -376,13 +378,12 @@ export async function processBatchOperation<T>(
         items: ids,
         processor: operation,
         concurrency,
-        operationName: options.operationName
+        operationName: options.operationName,
       })
-    : await withRateLimitedBatch(
-        ids,
-        operation,
-        { concurrency, operationName: options.operationName }
-      );
+    : await withRateLimitedBatch(ids, operation, {
+        concurrency,
+        operationName: options.operationName,
+      });
 
   // Normalize results into success/failed arrays
   const success: T[] = [];
@@ -394,7 +395,7 @@ export async function processBatchOperation<T>(
     } else {
       failed.push({
         id: ids[index],
-        error: result.error
+        error: result.error,
       });
     }
   });

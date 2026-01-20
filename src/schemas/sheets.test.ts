@@ -5,14 +5,17 @@ import {
   GetGoogleSheetContentSchema,
   FormatGoogleSheetCellsSchema,
   MergeGoogleSheetCellsSchema,
-  AddGoogleSheetConditionalFormatSchema
+  AddGoogleSheetConditionalFormatSchema,
 } from './sheets.js';
 
 describe('CreateGoogleSheetSchema', () => {
   it('accepts valid input', () => {
     const result = CreateGoogleSheetSchema.safeParse({
       name: 'My Sheet',
-      data: [['A1', 'B1'], ['A2', 'B2']]
+      data: [
+        ['A1', 'B1'],
+        ['A2', 'B2'],
+      ],
     });
     expect(result.success).toBe(true);
   });
@@ -22,7 +25,7 @@ describe('CreateGoogleSheetSchema', () => {
       name: 'My Sheet',
       data: [['A1']],
       parentFolderId: 'folder123',
-      valueInputOption: 'USER_ENTERED'
+      valueInputOption: 'USER_ENTERED',
     });
     expect(result.success).toBe(true);
   });
@@ -36,7 +39,7 @@ describe('CreateGoogleSheetSchema', () => {
     const result = CreateGoogleSheetSchema.safeParse({
       name: 'Sheet',
       data: [[]],
-      valueInputOption: 'INVALID'
+      valueInputOption: 'INVALID',
     });
     expect(result.success).toBe(false);
   });
@@ -47,7 +50,7 @@ describe('UpdateGoogleSheetSchema', () => {
     const result = UpdateGoogleSheetSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      data: [['A1', 'B1']]
+      data: [['A1', 'B1']],
     });
     expect(result.success).toBe(true);
   });
@@ -56,7 +59,7 @@ describe('UpdateGoogleSheetSchema', () => {
     const result = UpdateGoogleSheetSchema.safeParse({
       spreadsheetId: '',
       range: 'A1',
-      data: [[]]
+      data: [[]],
     });
     expect(result.success).toBe(false);
   });
@@ -65,7 +68,7 @@ describe('UpdateGoogleSheetSchema', () => {
     const result = UpdateGoogleSheetSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: '',
-      data: [[]]
+      data: [[]],
     });
     expect(result.success).toBe(false);
   });
@@ -75,7 +78,7 @@ describe('GetGoogleSheetContentSchema', () => {
   it('accepts valid input', () => {
     const result = GetGoogleSheetContentSchema.safeParse({
       spreadsheetId: 'sheet123',
-      range: 'A1:B10'
+      range: 'A1:B10',
     });
     expect(result.success).toBe(true);
   });
@@ -91,7 +94,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      backgroundColor: { red: 1, green: 0, blue: 0 }
+      backgroundColor: { red: 1, green: 0, blue: 0 },
     });
     expect(result.success).toBe(true);
   });
@@ -102,7 +105,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
       range: 'A1',
       horizontalAlignment: 'CENTER',
       verticalAlignment: 'MIDDLE',
-      wrapStrategy: 'WRAP'
+      wrapStrategy: 'WRAP',
     });
     expect(result.success).toBe(true);
   });
@@ -111,7 +114,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      horizontalAlignment: 'INVALID'
+      horizontalAlignment: 'INVALID',
     });
     expect(result.success).toBe(false);
   });
@@ -122,7 +125,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
       range: 'A1:B2',
       bold: true,
       italic: true,
-      fontSize: 12
+      fontSize: 12,
     });
     expect(result.success).toBe(true);
   });
@@ -131,7 +134,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 }
+      foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 },
     });
     expect(result.success).toBe(true);
   });
@@ -140,7 +143,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      fontSize: 0
+      fontSize: 0,
     });
     expect(result.success).toBe(false);
   });
@@ -149,7 +152,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:A10',
-      numberFormat: { pattern: '$#,##0.00' }
+      numberFormat: { pattern: '$#,##0.00' },
     });
     expect(result.success).toBe(true);
   });
@@ -158,7 +161,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      numberFormat: { pattern: '0.00%', type: 'PERCENT' }
+      numberFormat: { pattern: '0.00%', type: 'PERCENT' },
     });
     expect(result.success).toBe(true);
   });
@@ -167,7 +170,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      borders: { style: 'SOLID' }
+      borders: { style: 'SOLID' },
     });
     expect(result.success).toBe(true);
   });
@@ -185,8 +188,8 @@ describe('FormatGoogleSheetCellsSchema', () => {
         left: false,
         right: false,
         innerHorizontal: true,
-        innerVertical: true
-      }
+        innerVertical: true,
+      },
     });
     expect(result.success).toBe(true);
   });
@@ -195,7 +198,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
     const result = FormatGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1',
-      borders: { style: 'SOLID', width: 5 }
+      borders: { style: 'SOLID', width: 5 },
     });
     expect(result.success).toBe(false);
   });
@@ -208,7 +211,7 @@ describe('FormatGoogleSheetCellsSchema', () => {
       bold: true,
       horizontalAlignment: 'CENTER',
       numberFormat: { pattern: '#,##0' },
-      borders: { style: 'SOLID' }
+      borders: { style: 'SOLID' },
     });
     expect(result.success).toBe(true);
   });
@@ -219,18 +222,18 @@ describe('MergeGoogleSheetCellsSchema', () => {
     const result = MergeGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      mergeType: 'MERGE_ALL'
+      mergeType: 'MERGE_ALL',
     });
     expect(result.success).toBe(true);
   });
 
   it('accepts all merge types', () => {
     const types = ['MERGE_ALL', 'MERGE_COLUMNS', 'MERGE_ROWS'];
-    types.forEach(type => {
+    types.forEach((type) => {
       const result = MergeGoogleSheetCellsSchema.safeParse({
         spreadsheetId: 'sheet123',
         range: 'A1:B2',
-        mergeType: type
+        mergeType: type,
       });
       expect(result.success).toBe(true);
     });
@@ -240,7 +243,7 @@ describe('MergeGoogleSheetCellsSchema', () => {
     const result = MergeGoogleSheetCellsSchema.safeParse({
       spreadsheetId: 'sheet123',
       range: 'A1:B2',
-      mergeType: 'INVALID'
+      mergeType: 'INVALID',
     });
     expect(result.success).toBe(false);
   });
@@ -252,7 +255,7 @@ describe('AddGoogleSheetConditionalFormatSchema', () => {
       spreadsheetId: 'sheet123',
       range: 'A1:A10',
       condition: { type: 'NUMBER_GREATER', value: '100' },
-      format: { backgroundColor: { red: 1, green: 0, blue: 0 } }
+      format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
     });
     expect(result.success).toBe(true);
   });
@@ -265,25 +268,28 @@ describe('AddGoogleSheetConditionalFormatSchema', () => {
       format: {
         textFormat: {
           bold: true,
-          foregroundColor: { red: 1, green: 0, blue: 0 }
-        }
-      }
+          foregroundColor: { red: 1, green: 0, blue: 0 },
+        },
+      },
     });
     expect(result.success).toBe(true);
   });
 
   it('accepts all condition types', () => {
     const types = [
-      'NUMBER_GREATER', 'NUMBER_LESS',
-      'TEXT_CONTAINS', 'TEXT_STARTS_WITH', 'TEXT_ENDS_WITH',
-      'CUSTOM_FORMULA'
+      'NUMBER_GREATER',
+      'NUMBER_LESS',
+      'TEXT_CONTAINS',
+      'TEXT_STARTS_WITH',
+      'TEXT_ENDS_WITH',
+      'CUSTOM_FORMULA',
     ];
-    types.forEach(type => {
+    types.forEach((type) => {
       const result = AddGoogleSheetConditionalFormatSchema.safeParse({
         spreadsheetId: 'sheet123',
         range: 'A1',
         condition: { type, value: 'test' },
-        format: {}
+        format: {},
       });
       expect(result.success).toBe(true);
     });
@@ -294,7 +300,7 @@ describe('AddGoogleSheetConditionalFormatSchema', () => {
       spreadsheetId: 'sheet123',
       range: 'A1',
       condition: { type: 'INVALID', value: 'test' },
-      format: {}
+      format: {},
     });
     expect(result.success).toBe(false);
   });

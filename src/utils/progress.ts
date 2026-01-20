@@ -73,8 +73,8 @@ export function createProgressReporter(
             progressToken,
             progress,
             ...(total !== undefined && { total }),
-            ...(message !== undefined && { message })
-          }
+            ...(message !== undefined && { message }),
+          },
         });
       } catch (error) {
         // Log but don't fail the operation if progress notification fails
@@ -82,10 +82,10 @@ export function createProgressReporter(
           error: (error as Error).message,
           progress,
           total,
-          message
+          message,
         });
       }
-    }
+    },
   };
 }
 
@@ -135,11 +135,12 @@ export async function processBatchWithProgress<T, R>(
     items,
     processor,
     concurrency = 5,
-    operationName = 'Processing'
+    operationName = 'Processing',
   } = options;
 
   const reporter = createProgressReporter(server, progressToken);
-  const results: Array<{ success: true; result: R } | { success: false; error: string; item: T }> = [];
+  const results: Array<{ success: true; result: R } | { success: false; error: string; item: T }> =
+    [];
   let completed = 0;
 
   // Report initial progress
@@ -152,19 +153,24 @@ export async function processBatchWithProgress<T, R>(
     const batch = items.slice(i, i + concurrency);
 
     const batchResults = await Promise.all(
-      batch.map(async (item, batchIndex): Promise<{ success: true; result: R } | { success: false; error: string; item: T }> => {
-        const index = i + batchIndex;
-        try {
-          const result = await processor(item, index);
-          return { success: true, result };
-        } catch (error) {
-          return {
-            success: false,
-            error: (error as Error).message || String(error),
-            item
-          };
+      batch.map(
+        async (
+          item,
+          batchIndex
+        ): Promise<{ success: true; result: R } | { success: false; error: string; item: T }> => {
+          const index = i + batchIndex;
+          try {
+            const result = await processor(item, index);
+            return { success: true, result };
+          } catch (error) {
+            return {
+              success: false,
+              error: (error as Error).message || String(error),
+              item,
+            };
+          }
         }
-      })
+      )
     );
 
     results.push(...batchResults);
@@ -182,8 +188,8 @@ export async function processBatchWithProgress<T, R>(
 
   // Report completion
   if (reporter.isAvailable()) {
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.filter(r => !r.success).length;
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
     await reporter.report(
       items.length,
       items.length,
@@ -222,7 +228,9 @@ export async function processBatchWithProgress<T, R>(
 export async function withProgressReporting<T>(
   server: Server,
   progressToken: string | number | undefined,
-  operation: (report: (progress: number, total?: number, message?: string) => Promise<void>) => Promise<T>
+  operation: (
+    report: (progress: number, total?: number, message?: string) => Promise<void>
+  ) => Promise<T>
 ): Promise<T> {
   const reporter = createProgressReporter(server, progressToken);
   return operation((progress, total, message) => reporter.report(progress, total, message));

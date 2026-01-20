@@ -5,27 +5,24 @@ import {
   handleUpdateGoogleDoc,
   handleGetGoogleDocContent,
   handleAppendToDoc,
-  handleFormatGoogleDocRange
+  handleFormatGoogleDocRange,
 } from './docs.js';
 
-vi.mock('../utils/index.js', () => ({
-  log: vi.fn(),
-  successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  structuredResponse: (text: string, data: Record<string, unknown>) => ({
-    content: [{ type: 'text', text }],
-    structuredContent: data,
-    isError: false
-  }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
-  withTimeout: <T>(promise: Promise<T>) => promise
-}));
+vi.mock('../utils/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/index.js')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    withTimeout: <T>(promise: Promise<T>) => promise,
+  };
+});
 
 function createMockDrive(): drive_v3.Drive {
   return {
     files: {
       list: vi.fn(),
-      create: vi.fn()
-    }
+      create: vi.fn(),
+    },
   } as unknown as drive_v3.Drive;
 }
 
@@ -33,8 +30,8 @@ function createMockDocs(): docs_v1.Docs {
   return {
     documents: {
       get: vi.fn(),
-      batchUpdate: vi.fn()
-    }
+      batchUpdate: vi.fn(),
+    },
   } as unknown as docs_v1.Docs;
 }
 
@@ -50,13 +47,13 @@ describe('handleCreateGoogleDoc', () => {
 
   it('creates document successfully', async () => {
     vi.mocked(mockDrive.files.create).mockResolvedValue({
-      data: { id: 'doc123', name: 'Test Doc', webViewLink: 'https://docs.google.com/d/doc123' }
+      data: { id: 'doc123', name: 'Test Doc', webViewLink: 'https://docs.google.com/d/doc123' },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleCreateGoogleDoc(mockDrive, mockDocs, {
       name: 'Test Doc',
-      content: 'Hello World'
+      content: 'Hello World',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created Google Doc');
@@ -64,12 +61,12 @@ describe('handleCreateGoogleDoc', () => {
 
   it('returns error when document already exists', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleCreateGoogleDoc(mockDrive, mockDocs, {
       name: 'Existing Doc',
-      content: 'Content'
+      content: 'Content',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -78,7 +75,7 @@ describe('handleCreateGoogleDoc', () => {
   it('returns error for empty name', async () => {
     const result = await handleCreateGoogleDoc(mockDrive, mockDocs, {
       name: '',
-      content: 'Content'
+      content: 'Content',
     });
     expect(result.isError).toBe(true);
   });
@@ -95,14 +92,14 @@ describe('handleUpdateGoogleDoc', () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
       data: {
         title: 'Test Doc',
-        body: { content: [{ endIndex: 10 }] }
-      }
+        body: { content: [{ endIndex: 10 }] },
+      },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleUpdateGoogleDoc(mockDocs, {
       documentId: 'doc123',
-      content: 'New content'
+      content: 'New content',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Updated Google Doc');
@@ -111,7 +108,7 @@ describe('handleUpdateGoogleDoc', () => {
   it('returns error for empty documentId', async () => {
     const result = await handleUpdateGoogleDoc(mockDocs, {
       documentId: '',
-      content: 'Content'
+      content: 'Content',
     });
     expect(result.isError).toBe(true);
   });
@@ -131,14 +128,12 @@ describe('handleGetGoogleDocContent', () => {
           content: [
             {
               paragraph: {
-                elements: [
-                  { textRun: { content: 'Hello World' } }
-                ]
-              }
-            }
-          ]
-        }
-      }
+                elements: [{ textRun: { content: 'Hello World' } }],
+              },
+            },
+          ],
+        },
+      },
     } as never);
 
     const result = await handleGetGoogleDocContent(mockDocs, { documentId: 'doc123' });
@@ -153,7 +148,7 @@ describe('handleGetGoogleDocContent', () => {
 
   it('handles empty document', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [] } }
+      data: { body: { content: [] } },
     } as never);
 
     const result = await handleGetGoogleDocContent(mockDocs, { documentId: 'doc123' });
@@ -172,14 +167,14 @@ describe('handleAppendToDoc', () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
       data: {
         title: 'Test Doc',
-        body: { content: [{ endIndex: 50 }] }
-      }
+        body: { content: [{ endIndex: 50 }] },
+      },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleAppendToDoc(mockDocs, {
       documentId: 'doc123',
-      text: 'Appended text'
+      text: 'Appended text',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Appended');
@@ -190,15 +185,15 @@ describe('handleAppendToDoc', () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
       data: {
         title: 'Test Doc',
-        body: { content: [{ endIndex: 50 }] }
-      }
+        body: { content: [{ endIndex: 50 }] },
+      },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleAppendToDoc(mockDocs, {
       documentId: 'doc123',
       text: 'No newline',
-      insertNewline: false
+      insertNewline: false,
     });
     expect(result.isError).toBe(false);
   });
@@ -207,14 +202,14 @@ describe('handleAppendToDoc', () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
       data: {
         title: 'Empty Doc',
-        body: { content: [] }
-      }
+        body: { content: [] },
+      },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleAppendToDoc(mockDocs, {
       documentId: 'doc123',
-      text: 'First content'
+      text: 'First content',
     });
     expect(result.isError).toBe(false);
   });
@@ -222,7 +217,7 @@ describe('handleAppendToDoc', () => {
   it('returns error for empty documentId', async () => {
     const result = await handleAppendToDoc(mockDocs, {
       documentId: '',
-      text: 'Some text'
+      text: 'Some text',
     });
     expect(result.isError).toBe(true);
   });
@@ -230,7 +225,7 @@ describe('handleAppendToDoc', () => {
   it('returns error for empty text', async () => {
     const result = await handleAppendToDoc(mockDocs, {
       documentId: 'doc123',
-      text: ''
+      text: '',
     });
     expect(result.isError).toBe(true);
   });
@@ -245,7 +240,7 @@ describe('handleFormatGoogleDocRange', () => {
 
   it('applies text formatting successfully', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 100 }] } }
+      data: { body: { content: [{ endIndex: 100 }] } },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
@@ -253,7 +248,7 @@ describe('handleFormatGoogleDocRange', () => {
       documentId: 'doc123',
       startIndex: 1,
       endIndex: 10,
-      bold: true
+      bold: true,
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Applied formatting');
@@ -262,7 +257,7 @@ describe('handleFormatGoogleDocRange', () => {
 
   it('applies paragraph formatting successfully', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 100 }] } }
+      data: { body: { content: [{ endIndex: 100 }] } },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
@@ -270,7 +265,7 @@ describe('handleFormatGoogleDocRange', () => {
       documentId: 'doc123',
       startIndex: 1,
       endIndex: 10,
-      alignment: 'CENTER'
+      alignment: 'CENTER',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Applied formatting');
@@ -279,7 +274,7 @@ describe('handleFormatGoogleDocRange', () => {
 
   it('applies combined text and paragraph formatting', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 100 }] } }
+      data: { body: { content: [{ endIndex: 100 }] } },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
@@ -290,7 +285,7 @@ describe('handleFormatGoogleDocRange', () => {
       bold: true,
       italic: true,
       alignment: 'CENTER',
-      namedStyleType: 'HEADING_1'
+      namedStyleType: 'HEADING_1',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('bold');
@@ -301,13 +296,13 @@ describe('handleFormatGoogleDocRange', () => {
 
   it('defaults to entire document when no range specified', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 50 }] } }
+      data: { body: { content: [{ endIndex: 50 }] } },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
     const result = await handleFormatGoogleDocRange(mockDocs, {
       documentId: 'doc123',
-      bold: true
+      bold: true,
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('1-50');
@@ -315,13 +310,13 @@ describe('handleFormatGoogleDocRange', () => {
 
   it('returns error when no formatting specified', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 100 }] } }
+      data: { body: { content: [{ endIndex: 100 }] } },
     } as never);
 
     const result = await handleFormatGoogleDocRange(mockDocs, {
       documentId: 'doc123',
       startIndex: 1,
-      endIndex: 10
+      endIndex: 10,
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('No formatting options');
@@ -330,14 +325,14 @@ describe('handleFormatGoogleDocRange', () => {
   it('returns error for empty documentId', async () => {
     const result = await handleFormatGoogleDocRange(mockDocs, {
       documentId: '',
-      bold: true
+      bold: true,
     });
     expect(result.isError).toBe(true);
   });
 
   it('accepts all text formatting options', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 100 }] } }
+      data: { body: { content: [{ endIndex: 100 }] } },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
@@ -351,14 +346,14 @@ describe('handleFormatGoogleDocRange', () => {
       strikethrough: true,
       fontSize: 14,
       fontFamily: 'Arial',
-      foregroundColor: { red: 1, green: 0, blue: 0 }
+      foregroundColor: { red: 1, green: 0, blue: 0 },
     });
     expect(result.isError).toBe(false);
   });
 
   it('accepts all paragraph formatting options', async () => {
     vi.mocked(mockDocs.documents.get).mockResolvedValue({
-      data: { body: { content: [{ endIndex: 100 }] } }
+      data: { body: { content: [{ endIndex: 100 }] } },
     } as never);
     vi.mocked(mockDocs.documents.batchUpdate).mockResolvedValue({} as never);
 
@@ -370,7 +365,7 @@ describe('handleFormatGoogleDocRange', () => {
       alignment: 'CENTER',
       lineSpacing: 150,
       spaceAbove: 12,
-      spaceBelow: 12
+      spaceBelow: 12,
     });
     expect(result.isError).toBe(false);
   });

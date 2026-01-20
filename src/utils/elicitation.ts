@@ -39,7 +39,9 @@ export interface ElicitConfirmationResult {
  */
 export function supportsFormElicitation(server: Server): boolean {
   // Access the private _clientCapabilities field
-  const serverAny = server as unknown as { _clientCapabilities?: { elicitation?: { form?: boolean } } };
+  const serverAny = server as unknown as {
+    _clientCapabilities?: { elicitation?: { form?: boolean } };
+  };
   return !!serverAny._clientCapabilities?.elicitation?.form;
 }
 
@@ -70,22 +72,13 @@ export async function elicitFileSelection(
     return {
       selectedFileId: null,
       cancelled: false,
-      error: buildFileSelectionFallbackMessage(files, message)
+      error: buildFileSelectionFallbackMessage(files, message),
     };
   }
 
   try {
     // Build enum values from file options
-    const enumValues = files.map(f => f.id);
-    const enumLabels = files.reduce((acc, f, i) => {
-      const label = f.path
-        ? `${f.name} (${f.path})`
-        : f.modifiedTime
-          ? `${f.name} (modified: ${new Date(f.modifiedTime).toLocaleDateString()})`
-          : f.name;
-      acc[f.id] = label;
-      return acc;
-    }, {} as Record<string, string>);
+    const enumValues = files.map((f) => f.id);
 
     const result = await server.elicitInput({
       mode: 'form',
@@ -99,17 +92,17 @@ export async function elicitFileSelection(
             description: 'Choose which file to use',
             enum: enumValues,
             // Note: enumLabels is not standard JSON Schema but some clients may support it
-          }
+          },
         },
-        required: ['selectedFile']
-      }
+        required: ['selectedFile'],
+      },
     });
 
     if (result.action === 'accept' && result.content) {
       const content = result.content as { selectedFile?: string };
       return {
         selectedFileId: content.selectedFile || null,
-        cancelled: false
+        cancelled: false,
       };
     }
 
@@ -119,7 +112,7 @@ export async function elicitFileSelection(
     return {
       selectedFileId: null,
       cancelled: false,
-      error: buildFileSelectionFallbackMessage(files, message)
+      error: buildFileSelectionFallbackMessage(files, message),
     };
   }
 }
@@ -143,9 +136,7 @@ export async function elicitConfirmation(
   }
 
   try {
-    const fullMessage = details
-      ? `${message}\n\nDetails: ${details}`
-      : message;
+    const fullMessage = details ? `${message}\n\nDetails: ${details}` : message;
 
     const result = await server.elicitInput({
       mode: 'form',
@@ -157,11 +148,11 @@ export async function elicitConfirmation(
             type: 'boolean',
             title: 'Confirm',
             description: 'Check to confirm this operation',
-            default: false
-          }
+            default: false,
+          },
         },
-        required: ['confirm']
-      }
+        required: ['confirm'],
+      },
     });
 
     if (result.action === 'accept' && result.content) {
@@ -180,21 +171,25 @@ export async function elicitConfirmation(
  * Build a fallback message for file selection when elicitation is not available
  */
 function buildFileSelectionFallbackMessage(files: FileOption[], message?: string): string {
-  const header = message || 'Multiple files found with that name. Please specify which one by using the file ID:';
+  const header =
+    message ||
+    'Multiple files found with that name. Please specify which one by using the file ID:';
 
-  const fileList = files.map((f, i) => {
-    let entry = `${i + 1}. "${f.name}" (ID: ${f.id})`;
-    if (f.mimeType) {
-      entry += `\n   Type: ${f.mimeType}`;
-    }
-    if (f.modifiedTime) {
-      entry += `\n   Modified: ${new Date(f.modifiedTime).toLocaleString()}`;
-    }
-    if (f.path) {
-      entry += `\n   Path: ${f.path}`;
-    }
-    return entry;
-  }).join('\n\n');
+  const fileList = files
+    .map((f, i) => {
+      let entry = `${i + 1}. "${f.name}" (ID: ${f.id})`;
+      if (f.mimeType) {
+        entry += `\n   Type: ${f.mimeType}`;
+      }
+      if (f.modifiedTime) {
+        entry += `\n   Modified: ${new Date(f.modifiedTime).toLocaleString()}`;
+      }
+      if (f.path) {
+        entry += `\n   Path: ${f.path}`;
+      }
+      return entry;
+    })
+    .join('\n\n');
 
   return `${header}\n\n${fileList}\n\nPlease retry with the specific file ID.`;
 }
@@ -203,18 +198,24 @@ function buildFileSelectionFallbackMessage(files: FileOption[], message?: string
  * Format disambiguation options for non-elicitation fallback
  */
 export function formatDisambiguationOptions(
-  files: Array<{ id: string; name: string; mimeType?: string; modifiedTime?: string | null; parents?: string[] }>,
+  files: Array<{
+    id: string;
+    name: string;
+    mimeType?: string;
+    modifiedTime?: string | null;
+    parents?: string[];
+  }>,
   contextMessage: string
 ): string {
-  const options = files.map((f, i) => {
-    const modified = f.modifiedTime
-      ? ` (modified: ${new Date(f.modifiedTime).toLocaleDateString()})`
-      : '';
-    const type = f.mimeType
-      ? ` [${f.mimeType.split('.').pop() || f.mimeType}]`
-      : '';
-    return `${i + 1}. ${f.name}${type}${modified}\n   ID: ${f.id}`;
-  }).join('\n\n');
+  const options = files
+    .map((f, i) => {
+      const modified = f.modifiedTime
+        ? ` (modified: ${new Date(f.modifiedTime).toLocaleDateString()})`
+        : '';
+      const type = f.mimeType ? ` [${f.mimeType.split('.').pop() || f.mimeType}]` : '';
+      return `${i + 1}. ${f.name}${type}${modified}\n   ID: ${f.id}`;
+    })
+    .join('\n\n');
 
   return `${contextMessage}\n\n${options}\n\nTo proceed, please specify the file ID directly.`;
 }

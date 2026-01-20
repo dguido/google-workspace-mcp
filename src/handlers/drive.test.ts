@@ -19,20 +19,17 @@ import {
   handleDownloadFile,
   handleUploadFile,
   handleGetStorageQuota,
-  handleStarFile
+  handleStarFile,
 } from './drive.js';
 
-vi.mock('../utils/index.js', () => ({
-  log: vi.fn(),
-  successResponse: (text: string) => ({ content: [{ type: 'text', text }], isError: false }),
-  structuredResponse: (text: string, data: Record<string, unknown>) => ({
-    content: [{ type: 'text', text }],
-    structuredContent: data,
-    isError: false
-  }),
-  errorResponse: (message: string) => ({ content: [{ type: 'text', text: `Error: ${message}` }], isError: true }),
-  withTimeout: <T>(promise: Promise<T>) => promise
-}));
+vi.mock('../utils/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/index.js')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    withTimeout: <T>(promise: Promise<T>) => promise,
+  };
+});
 
 function createMockDrive(): drive_v3.Drive {
   return {
@@ -42,19 +39,19 @@ function createMockDrive(): drive_v3.Drive {
       update: vi.fn(),
       get: vi.fn(),
       copy: vi.fn(),
-      export: vi.fn()
+      export: vi.fn(),
     },
     permissions: {
       create: vi.fn(),
-      list: vi.fn()
+      list: vi.fn(),
     },
     revisions: {
       list: vi.fn(),
-      get: vi.fn()
+      get: vi.fn(),
     },
     about: {
-      get: vi.fn()
-    }
+      get: vi.fn(),
+    },
   } as unknown as drive_v3.Drive;
 }
 
@@ -70,9 +67,9 @@ describe('handleSearch', () => {
       data: {
         files: [
           { name: 'file1.txt', mimeType: 'text/plain' },
-          { name: 'file2.md', mimeType: 'text/markdown' }
-        ]
-      }
+          { name: 'file2.md', mimeType: 'text/markdown' },
+        ],
+      },
     } as never);
 
     const result = await handleSearch(mockDrive, { query: 'test' });
@@ -103,32 +100,34 @@ describe('handleCreateTextFile', () => {
 
   it('creates text file successfully', async () => {
     vi.mocked(mockDrive.files.create).mockResolvedValue({
-      data: { id: 'file123', name: 'test.txt' }
+      data: { id: 'file123', name: 'test.txt' },
     } as never);
 
     const result = await handleCreateTextFile(mockDrive, {
       name: 'test.txt',
-      content: 'Hello'
+      content: 'Hello',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Created file');
   });
 
   it('throws error for invalid extension', async () => {
-    await expect(handleCreateTextFile(mockDrive, {
-      name: 'test.pdf',
-      content: 'Hello'
-    })).rejects.toThrow('.txt or .md');
+    await expect(
+      handleCreateTextFile(mockDrive, {
+        name: 'test.pdf',
+        content: 'Hello',
+      })
+    ).rejects.toThrow('.txt or .md');
   });
 
   it('returns error when file already exists', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleCreateTextFile(mockDrive, {
       name: 'test.txt',
-      content: 'Hello'
+      content: 'Hello',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -144,15 +143,15 @@ describe('handleUpdateTextFile', () => {
 
   it('updates text file successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { mimeType: 'text/plain', name: 'test.txt' }
+      data: { mimeType: 'text/plain', name: 'test.txt' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({
-      data: { name: 'test.txt', modifiedTime: '2024-01-01' }
+      data: { name: 'test.txt', modifiedTime: '2024-01-01' },
     } as never);
 
     const result = await handleUpdateTextFile(mockDrive, {
       fileId: 'file123',
-      content: 'New content'
+      content: 'New content',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Updated file');
@@ -160,12 +159,12 @@ describe('handleUpdateTextFile', () => {
 
   it('returns error for non-text file', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { mimeType: 'application/pdf', name: 'test.pdf' }
+      data: { mimeType: 'application/pdf', name: 'test.pdf' },
     } as never);
 
     const result = await handleUpdateTextFile(mockDrive, {
       fileId: 'file123',
-      content: 'New content'
+      content: 'New content',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not a text');
@@ -174,7 +173,7 @@ describe('handleUpdateTextFile', () => {
   it('returns error for empty fileId', async () => {
     const result = await handleUpdateTextFile(mockDrive, {
       fileId: '',
-      content: 'content'
+      content: 'content',
     });
     expect(result.isError).toBe(true);
   });
@@ -190,7 +189,7 @@ describe('handleCreateFolder', () => {
 
   it('creates folder successfully', async () => {
     vi.mocked(mockDrive.files.create).mockResolvedValue({
-      data: { id: 'folder123', name: 'NewFolder' }
+      data: { id: 'folder123', name: 'NewFolder' },
     } as never);
 
     const result = await handleCreateFolder(mockDrive, { name: 'NewFolder' });
@@ -200,7 +199,7 @@ describe('handleCreateFolder', () => {
 
   it('returns error when folder already exists', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleCreateFolder(mockDrive, { name: 'ExistingFolder' });
@@ -226,9 +225,9 @@ describe('handleListFolder', () => {
       data: {
         files: [
           { id: '1', name: 'file1.txt', mimeType: 'text/plain' },
-          { id: '2', name: 'SubFolder', mimeType: 'application/vnd.google-apps.folder' }
-        ]
-      }
+          { id: '2', name: 'SubFolder', mimeType: 'application/vnd.google-apps.folder' },
+        ],
+      },
     } as never);
 
     const result = await handleListFolder(mockDrive, {});
@@ -239,7 +238,7 @@ describe('handleListFolder', () => {
 
   it('handles empty folder', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [] }
+      data: { files: [] },
     } as never);
 
     const result = await handleListFolder(mockDrive, { folderId: 'folder123' });
@@ -256,7 +255,7 @@ describe('handleDeleteItem', () => {
 
   it('moves item to trash successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt' }
+      data: { name: 'test.txt' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
 
@@ -280,15 +279,15 @@ describe('handleRenameItem', () => {
 
   it('renames item successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'old.txt', mimeType: 'text/plain' }
+      data: { name: 'old.txt', mimeType: 'text/plain' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({
-      data: { name: 'new.txt' }
+      data: { name: 'new.txt' },
     } as never);
 
     const result = await handleRenameItem(mockDrive, {
       itemId: 'item123',
-      newName: 'new.txt'
+      newName: 'new.txt',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('renamed');
@@ -296,13 +295,15 @@ describe('handleRenameItem', () => {
 
   it('throws error for invalid extension on text files', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt', mimeType: 'text/plain' }
+      data: { name: 'test.txt', mimeType: 'text/plain' },
     } as never);
 
-    await expect(handleRenameItem(mockDrive, {
-      itemId: 'item123',
-      newName: 'new.pdf'
-    })).rejects.toThrow('.txt or .md');
+    await expect(
+      handleRenameItem(mockDrive, {
+        itemId: 'item123',
+        newName: 'new.pdf',
+      })
+    ).rejects.toThrow('.txt or .md');
   });
 });
 
@@ -323,7 +324,7 @@ describe('handleMoveItem', () => {
 
     const result = await handleMoveItem(mockDrive, {
       itemId: 'item123',
-      destinationFolderId: 'dest456'
+      destinationFolderId: 'dest456',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('moved');
@@ -332,7 +333,7 @@ describe('handleMoveItem', () => {
   it('returns error when moving folder into itself', async () => {
     const result = await handleMoveItem(mockDrive, {
       itemId: 'folder123',
-      destinationFolderId: 'folder123'
+      destinationFolderId: 'folder123',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('into itself');
@@ -355,10 +356,10 @@ describe('handleCopyFile', () => {
 
   it('copies file successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'original.txt', parents: ['parent123'] }
+      data: { name: 'original.txt', parents: ['parent123'] },
     } as never);
     vi.mocked(mockDrive.files.copy).mockResolvedValue({
-      data: { id: 'copy123', name: 'Copy of original.txt', webViewLink: 'https://...' }
+      data: { id: 'copy123', name: 'Copy of original.txt', webViewLink: 'https://...' },
     } as never);
 
     const result = await handleCopyFile(mockDrive, { sourceFileId: 'file123' });
@@ -369,25 +370,25 @@ describe('handleCopyFile', () => {
 
   it('copies file with custom name', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'original.txt', parents: ['parent123'] }
+      data: { name: 'original.txt', parents: ['parent123'] },
     } as never);
     vi.mocked(mockDrive.files.copy).mockResolvedValue({
-      data: { id: 'copy123', name: 'custom-name.txt', webViewLink: 'https://...' }
+      data: { id: 'copy123', name: 'custom-name.txt', webViewLink: 'https://...' },
     } as never);
 
     const result = await handleCopyFile(mockDrive, {
       sourceFileId: 'file123',
-      destinationName: 'custom-name.txt'
+      destinationName: 'custom-name.txt',
     });
     expect(result.isError).toBe(false);
   });
 
   it('returns error when destination already exists', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'original.txt', parents: ['parent123'] }
+      data: { name: 'original.txt', parents: ['parent123'] },
     } as never);
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleCopyFile(mockDrive, { sourceFileId: 'file123' });
@@ -420,8 +421,8 @@ describe('handleGetFileMetadata', () => {
         owners: [{ displayName: 'Test User' }],
         shared: false,
         starred: false,
-        webViewLink: 'https://...'
-      }
+        webViewLink: 'https://...',
+      },
     } as never);
 
     const result = await handleGetFileMetadata(mockDrive, { fileId: 'file123' });
@@ -446,10 +447,10 @@ describe('handleExportFile', () => {
 
   it('exports Google Doc to PDF successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' }
+      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' },
     } as never);
     vi.mocked(mockDrive.files.export).mockResolvedValue({
-      data: new ArrayBuffer(100)
+      data: new ArrayBuffer(100),
     } as never);
 
     const result = await handleExportFile(mockDrive, { fileId: 'doc123', format: 'pdf' });
@@ -460,10 +461,10 @@ describe('handleExportFile', () => {
 
   it('exports Google Sheet to CSV successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'MySheet', mimeType: 'application/vnd.google-apps.spreadsheet' }
+      data: { name: 'MySheet', mimeType: 'application/vnd.google-apps.spreadsheet' },
     } as never);
     vi.mocked(mockDrive.files.export).mockResolvedValue({
-      data: new ArrayBuffer(50)
+      data: new ArrayBuffer(50),
     } as never);
 
     const result = await handleExportFile(mockDrive, { fileId: 'sheet123', format: 'csv' });
@@ -472,7 +473,7 @@ describe('handleExportFile', () => {
 
   it('returns error for invalid format for file type', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' }
+      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' },
     } as never);
 
     const result = await handleExportFile(mockDrive, { fileId: 'doc123', format: 'csv' });
@@ -482,7 +483,7 @@ describe('handleExportFile', () => {
 
   it('returns error for non-Google Workspace file', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'file.pdf', mimeType: 'application/pdf' }
+      data: { name: 'file.pdf', mimeType: 'application/pdf' },
     } as never);
 
     const result = await handleExportFile(mockDrive, { fileId: 'pdf123', format: 'pdf' });
@@ -509,17 +510,17 @@ describe('handleShareFile', () => {
 
   it('shares file with user successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt' }
+      data: { name: 'test.txt' },
     } as never);
     vi.mocked(mockDrive.permissions.create).mockResolvedValue({
-      data: { id: 'perm123' }
+      data: { id: 'perm123' },
     } as never);
 
     const result = await handleShareFile(mockDrive, {
       fileId: 'file123',
       role: 'reader',
       type: 'user',
-      emailAddress: 'test@example.com'
+      emailAddress: 'test@example.com',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Shared');
@@ -528,16 +529,16 @@ describe('handleShareFile', () => {
 
   it('shares file with anyone successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt' }
+      data: { name: 'test.txt' },
     } as never);
     vi.mocked(mockDrive.permissions.create).mockResolvedValue({
-      data: { id: 'perm123' }
+      data: { id: 'perm123' },
     } as never);
 
     const result = await handleShareFile(mockDrive, {
       fileId: 'file123',
       role: 'reader',
-      type: 'anyone'
+      type: 'anyone',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('anyone with the link');
@@ -547,7 +548,7 @@ describe('handleShareFile', () => {
     const result = await handleShareFile(mockDrive, {
       fileId: 'file123',
       role: 'reader',
-      type: 'user'
+      type: 'user',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Email address is required');
@@ -557,7 +558,7 @@ describe('handleShareFile', () => {
     const result = await handleShareFile(mockDrive, {
       fileId: '',
       role: 'reader',
-      type: 'anyone'
+      type: 'anyone',
     });
     expect(result.isError).toBe(true);
   });
@@ -572,15 +573,15 @@ describe('handleGetSharing', () => {
 
   it('returns sharing settings successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt', webViewLink: 'https://...' }
+      data: { name: 'test.txt', webViewLink: 'https://...' },
     } as never);
     vi.mocked(mockDrive.permissions.list).mockResolvedValue({
       data: {
         permissions: [
           { id: '1', role: 'owner', type: 'user', emailAddress: 'owner@example.com' },
-          { id: '2', role: 'reader', type: 'anyone' }
-        ]
-      }
+          { id: '2', role: 'reader', type: 'anyone' },
+        ],
+      },
     } as never);
 
     const result = await handleGetSharing(mockDrive, { fileId: 'file123' });
@@ -608,15 +609,15 @@ describe('handleListRevisions', () => {
 
   it('lists revisions successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.pdf', mimeType: 'application/pdf' }
+      data: { name: 'test.pdf', mimeType: 'application/pdf' },
     } as never);
     vi.mocked(mockDrive.revisions.list).mockResolvedValue({
       data: {
         revisions: [
           { id: 'rev1', modifiedTime: '2024-01-01T00:00:00.000Z', size: '1024' },
-          { id: 'rev2', modifiedTime: '2024-01-02T00:00:00.000Z', size: '2048' }
-        ]
-      }
+          { id: 'rev2', modifiedTime: '2024-01-02T00:00:00.000Z', size: '2048' },
+        ],
+      },
     } as never);
 
     const result = await handleListRevisions(mockDrive, { fileId: 'file123' });
@@ -628,10 +629,10 @@ describe('handleListRevisions', () => {
 
   it('returns empty message when no revisions', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.pdf', mimeType: 'application/pdf' }
+      data: { name: 'test.pdf', mimeType: 'application/pdf' },
     } as never);
     vi.mocked(mockDrive.revisions.list).mockResolvedValue({
-      data: { revisions: [] }
+      data: { revisions: [] },
     } as never);
 
     const result = await handleListRevisions(mockDrive, { fileId: 'file123' });
@@ -641,7 +642,7 @@ describe('handleListRevisions', () => {
 
   it('returns error for Google Workspace files', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' }
+      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' },
     } as never);
 
     const result = await handleListRevisions(mockDrive, { fileId: 'file123' });
@@ -664,16 +665,16 @@ describe('handleRestoreRevision', () => {
 
   it('restores revision successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.pdf', mimeType: 'application/pdf' }
+      data: { name: 'test.pdf', mimeType: 'application/pdf' },
     } as never);
     vi.mocked(mockDrive.revisions.get).mockResolvedValue({
-      data: new ArrayBuffer(100)
+      data: new ArrayBuffer(100),
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
 
     const result = await handleRestoreRevision(mockDrive, {
       fileId: 'file123',
-      revisionId: 'rev1'
+      revisionId: 'rev1',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Restored');
@@ -682,12 +683,12 @@ describe('handleRestoreRevision', () => {
 
   it('returns error for Google Workspace files', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' }
+      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' },
     } as never);
 
     const result = await handleRestoreRevision(mockDrive, {
       fileId: 'file123',
-      revisionId: 'rev1'
+      revisionId: 'rev1',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Google Workspace files');
@@ -696,7 +697,7 @@ describe('handleRestoreRevision', () => {
   it('returns error for empty fileId', async () => {
     const result = await handleRestoreRevision(mockDrive, {
       fileId: '',
-      revisionId: 'rev1'
+      revisionId: 'rev1',
     });
     expect(result.isError).toBe(true);
   });
@@ -704,7 +705,7 @@ describe('handleRestoreRevision', () => {
   it('returns error for empty revisionId', async () => {
     const result = await handleRestoreRevision(mockDrive, {
       fileId: 'file123',
-      revisionId: ''
+      revisionId: '',
     });
     expect(result.isError).toBe(true);
   });
@@ -724,10 +725,10 @@ describe('handleDownloadFile', () => {
   it('downloads file and returns base64 successfully', async () => {
     vi.mocked(mockDrive.files.get)
       .mockResolvedValueOnce({
-        data: { name: 'image.png', mimeType: 'image/png', size: '1024' }
+        data: { name: 'image.png', mimeType: 'image/png', size: '1024' },
       } as never)
       .mockResolvedValueOnce({
-        data: new ArrayBuffer(100)
+        data: new ArrayBuffer(100),
       } as never);
 
     const result = await handleDownloadFile(mockDrive, { fileId: 'file123' });
@@ -739,7 +740,7 @@ describe('handleDownloadFile', () => {
 
   it('returns error for Google Workspace files', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' }
+      data: { name: 'MyDoc', mimeType: 'application/vnd.google-apps.document' },
     } as never);
 
     const result = await handleDownloadFile(mockDrive, { fileId: 'file123' });
@@ -765,12 +766,12 @@ describe('handleUploadFile', () => {
 
   it('uploads file from base64 successfully', async () => {
     vi.mocked(mockDrive.files.create).mockResolvedValue({
-      data: { id: 'file123', name: 'image.png', webViewLink: 'https://...' }
+      data: { id: 'file123', name: 'image.png', webViewLink: 'https://...' },
     } as never);
 
     const result = await handleUploadFile(mockDrive, {
       name: 'image.png',
-      base64Content: 'iVBORw0KGgoAAAANSUhEUg=='
+      base64Content: 'iVBORw0KGgoAAAANSUhEUg==',
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Uploaded file');
@@ -785,12 +786,12 @@ describe('handleUploadFile', () => {
 
   it('returns error when file already exists', async () => {
     vi.mocked(mockDrive.files.list).mockResolvedValue({
-      data: { files: [{ id: 'existing123' }] }
+      data: { files: [{ id: 'existing123' }] },
     } as never);
 
     const result = await handleUploadFile(mockDrive, {
       name: 'image.png',
-      base64Content: 'iVBORw0KGgoAAAANSUhEUg=='
+      base64Content: 'iVBORw0KGgoAAAANSUhEUg==',
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
@@ -799,7 +800,7 @@ describe('handleUploadFile', () => {
   it('returns error for empty name', async () => {
     const result = await handleUploadFile(mockDrive, {
       name: '',
-      base64Content: 'iVBORw0KGgoAAAANSUhEUg=='
+      base64Content: 'iVBORw0KGgoAAAANSUhEUg==',
     });
     expect(result.isError).toBe(true);
   });
@@ -823,10 +824,10 @@ describe('handleGetStorageQuota', () => {
           limit: '16106127360',
           usage: '5368709120',
           usageInDrive: '4294967296',
-          usageInDriveTrash: '1073741824'
+          usageInDriveTrash: '1073741824',
         },
-        user: { emailAddress: 'test@example.com' }
-      }
+        user: { emailAddress: 'test@example.com' },
+      },
     } as never);
 
     const result = await handleGetStorageQuota(mockDrive, {});
@@ -841,10 +842,10 @@ describe('handleGetStorageQuota', () => {
       data: {
         storageQuota: {
           usage: '1073741824',
-          usageInDrive: '1073741824'
+          usageInDrive: '1073741824',
         },
-        user: { emailAddress: 'test@example.com' }
-      }
+        user: { emailAddress: 'test@example.com' },
+      },
     } as never);
 
     const result = await handleGetStorageQuota(mockDrive, {});
@@ -862,7 +863,7 @@ describe('handleStarFile', () => {
 
   it('stars file successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt' }
+      data: { name: 'test.txt' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
 
@@ -874,7 +875,7 @@ describe('handleStarFile', () => {
 
   it('unstars file successfully', async () => {
     vi.mocked(mockDrive.files.get).mockResolvedValue({
-      data: { name: 'test.txt' }
+      data: { name: 'test.txt' },
     } as never);
     vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
 

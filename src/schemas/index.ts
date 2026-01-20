@@ -27,7 +27,7 @@ export {
   RemovePermissionSchema,
   ListTrashSchema,
   RestoreFromTrashSchema,
-  EmptyTrashSchema
+  EmptyTrashSchema,
 } from './drive.js';
 
 export type {
@@ -58,7 +58,7 @@ export type {
   RemovePermissionInput,
   ListTrashInput,
   RestoreFromTrashInput,
-  EmptyTrashInput
+  EmptyTrashInput,
 } from './drive.js';
 
 // Docs schemas
@@ -70,7 +70,7 @@ export {
   InsertTextInDocSchema,
   DeleteTextInDocSchema,
   ReplaceTextInDocSchema,
-  FormatGoogleDocRangeSchema
+  FormatGoogleDocRangeSchema,
 } from './docs.js';
 
 export type {
@@ -81,7 +81,7 @@ export type {
   InsertTextInDocInput,
   DeleteTextInDocInput,
   ReplaceTextInDocInput,
-  FormatGoogleDocRangeInput
+  FormatGoogleDocRangeInput,
 } from './docs.js';
 
 // Sheets schemas
@@ -95,7 +95,7 @@ export {
   AddGoogleSheetConditionalFormatSchema,
   CreateSheetTabSchema,
   DeleteSheetTabSchema,
-  RenameSheetTabSchema
+  RenameSheetTabSchema,
 } from './sheets.js';
 
 export type {
@@ -108,7 +108,7 @@ export type {
   AddGoogleSheetConditionalFormatInput,
   CreateSheetTabInput,
   DeleteSheetTabInput,
-  RenameSheetTabInput
+  RenameSheetTabInput,
 } from './sheets.js';
 
 // Slides schemas
@@ -121,7 +121,7 @@ export {
   CreateGoogleSlidesShapeSchema,
   GetGoogleSlidesSpeakerNotesSchema,
   UpdateGoogleSlidesSpeakerNotesSchema,
-  FormatGoogleSlidesElementSchema
+  FormatGoogleSlidesElementSchema,
 } from './slides.js';
 
 export type {
@@ -133,18 +133,18 @@ export type {
   CreateGoogleSlidesShapeInput,
   GetGoogleSlidesSpeakerNotesInput,
   UpdateGoogleSlidesSpeakerNotesInput,
-  FormatGoogleSlidesElementInput
+  FormatGoogleSlidesElementInput,
 } from './slides.js';
 
 // Unified schemas
 export {
   CreateFileSchema,
   UpdateFileSchema,
-  GetFileContentSchema
+  GetFileContentSchema,
 } from './unified.js';
 
 export type {
   CreateFileInput,
   UpdateFileInput,
-  GetFileContentInput
+  GetFileContentInput,
 } from './unified.js';

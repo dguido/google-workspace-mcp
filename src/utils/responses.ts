@@ -11,7 +11,7 @@ export interface ToolResponse {
  * Create a success response for a tool call.
  */
 export function successResponse(text: string): ToolResponse {
-  return { content: [{ type: "text", text }], isError: false };
+  return { content: [{ type: 'text', text }], isError: false };
 }
 
 /**
@@ -19,14 +19,11 @@ export function successResponse(text: string): ToolResponse {
  * Includes both human-readable text and machine-parseable structured data.
  * Use this for tools that return structured data (metadata, lists, quotas, etc.).
  */
-export function structuredResponse(
-  text: string,
-  data: Record<string, unknown>
-): ToolResponse {
+export function structuredResponse(text: string, data: Record<string, unknown>): ToolResponse {
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: 'text', text }],
     structuredContent: data,
-    isError: false
+    isError: false,
   };
 }
 
@@ -36,5 +33,5 @@ export function structuredResponse(
  */
 export function errorResponse(message: string): ToolResponse {
   log('Error', { message });
-  return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+  return { content: [{ type: 'text', text: `Error: ${message}` }], isError: true };
 }

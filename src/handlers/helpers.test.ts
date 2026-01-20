@@ -4,9 +4,8 @@ import {
   getMimeTypeFromFilename,
   validateTextFileExtension,
   convertA1ToGridRange,
-  processBatchOperation
+  processBatchOperation,
 } from './helpers.js';
-import type { HandlerContext } from './helpers.js';
 
 describe('getExtensionFromFilename', () => {
   it('returns extension for simple filename', () => {
@@ -75,7 +74,7 @@ describe('convertA1ToGridRange', () => {
       startColumnIndex: 0,
       endColumnIndex: 1,
       startRowIndex: 0,
-      endRowIndex: 1
+      endRowIndex: 1,
     });
   });
 
@@ -86,7 +85,7 @@ describe('convertA1ToGridRange', () => {
       startColumnIndex: 0,
       endColumnIndex: 2,
       startRowIndex: 0,
-      endRowIndex: 2
+      endRowIndex: 2,
     });
   });
 
@@ -97,7 +96,7 @@ describe('convertA1ToGridRange', () => {
       startColumnIndex: 26,
       endColumnIndex: 28,
       startRowIndex: 0,
-      endRowIndex: 10
+      endRowIndex: 10,
     });
   });
 
@@ -106,7 +105,7 @@ describe('convertA1ToGridRange', () => {
     expect(result).toEqual({
       sheetId: 0,
       startColumnIndex: 0,
-      endColumnIndex: 2
+      endColumnIndex: 2,
     });
   });
 
@@ -115,7 +114,7 @@ describe('convertA1ToGridRange', () => {
     expect(result).toEqual({
       sheetId: 0,
       startRowIndex: 0,
-      endRowIndex: 5
+      endRowIndex: 5,
     });
   });
 
@@ -124,7 +123,7 @@ describe('convertA1ToGridRange', () => {
     expect(result).toEqual({
       sheetId: 0,
       startColumnIndex: 0,
-      endColumnIndex: 1
+      endColumnIndex: 1,
     });
   });
 
@@ -134,9 +133,7 @@ describe('convertA1ToGridRange', () => {
   });
 
   it('throws for invalid A1 notation', () => {
-    expect(() => convertA1ToGridRange('invalid!', 0)).toThrow(
-      'Invalid A1 notation: invalid!'
-    );
+    expect(() => convertA1ToGridRange('invalid!', 0)).toThrow('Invalid A1 notation: invalid!');
   });
 });
 
@@ -146,7 +143,7 @@ describe('processBatchOperation', () => {
     const operation = vi.fn().mockImplementation(async (id: string) => ({ id, processed: true }));
 
     const result = await processBatchOperation(ids, operation, undefined, {
-      operationName: 'test operation'
+      operationName: 'test operation',
     });
 
     expect(result.success).toHaveLength(3);
@@ -154,7 +151,7 @@ describe('processBatchOperation', () => {
     expect(result.success).toEqual([
       { id: 'id1', processed: true },
       { id: 'id2', processed: true },
-      { id: 'id3', processed: true }
+      { id: 'id3', processed: true },
     ]);
     expect(operation).toHaveBeenCalledTimes(3);
   });
@@ -169,18 +166,16 @@ describe('processBatchOperation', () => {
     });
 
     const result = await processBatchOperation(ids, operation, undefined, {
-      operationName: 'test operation'
+      operationName: 'test operation',
     });
 
     expect(result.success).toHaveLength(2);
     expect(result.failed).toHaveLength(1);
     expect(result.success).toEqual([
       { id: 'id1', processed: true },
-      { id: 'id3', processed: true }
+      { id: 'id3', processed: true },
     ]);
-    expect(result.failed).toEqual([
-      { id: 'id2', error: 'Operation failed for id2' }
-    ]);
+    expect(result.failed).toEqual([{ id: 'id2', error: 'Operation failed for id2' }]);
   });
 
   it('handles all failures', async () => {
@@ -188,7 +183,7 @@ describe('processBatchOperation', () => {
     const operation = vi.fn().mockRejectedValue(new Error('All failed'));
 
     const result = await processBatchOperation(ids, operation, undefined, {
-      operationName: 'test operation'
+      operationName: 'test operation',
     });
 
     expect(result.success).toHaveLength(0);
@@ -202,7 +197,7 @@ describe('processBatchOperation', () => {
     const operation = vi.fn();
 
     const result = await processBatchOperation(ids, operation, undefined, {
-      operationName: 'test operation'
+      operationName: 'test operation',
     });
 
     expect(result.success).toHaveLength(0);
@@ -218,14 +213,14 @@ describe('processBatchOperation', () => {
     const operation = vi.fn().mockImplementation(async (id: string) => {
       currentConcurrent++;
       concurrentCalls.push(currentConcurrent);
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       currentConcurrent--;
       return { id, processed: true };
     });
 
     const result = await processBatchOperation(ids, operation, undefined, {
       operationName: 'test operation',
-      concurrency: 2
+      concurrency: 2,
     });
 
     expect(result.success).toHaveLength(6);

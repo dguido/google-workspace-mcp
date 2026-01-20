@@ -1,5 +1,5 @@
 # Use Node.js LTS as base image
-FROM node:20-slim
+FROM node:22-slim
 
 # Set working directory
 WORKDIR /app
@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install production dependencies only, skipping lifecycle scripts
-RUN npm ci --only=production --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy built distribution files
 COPY dist ./dist

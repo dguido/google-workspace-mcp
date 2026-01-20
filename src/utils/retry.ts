@@ -32,7 +32,7 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
   maxDelayMs: 60000,
   backoffMultiplier: 2,
   jitterFactor: 0.1,
-  operationName: 'API call'
+  operationName: 'API call',
 };
 
 /**
@@ -43,7 +43,7 @@ const RETRYABLE_STATUS_CODES = [
   500, // Internal Server Error
   502, // Bad Gateway
   503, // Service Unavailable
-  504  // Gateway Timeout
+  504, // Gateway Timeout
 ];
 
 /**
@@ -54,7 +54,7 @@ const RETRYABLE_REASONS = [
   'userRateLimitExceeded',
   'quotaExceeded',
   'internalError',
-  'backendError'
+  'backendError',
 ];
 
 /**
@@ -94,13 +94,9 @@ function isRetryableError(error: unknown): boolean {
 /**
  * Calculates the delay for the next retry attempt with exponential backoff and jitter
  */
-function calculateDelay(
-  attempt: number,
-  options: Required<RetryOptions>
-): number {
+function calculateDelay(attempt: number, options: Required<RetryOptions>): number {
   // Exponential backoff: initialDelay * (multiplier ^ attempt)
-  const exponentialDelay =
-    options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt);
+  const exponentialDelay = options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt);
 
   // Cap at max delay
   const cappedDelay = Math.min(exponentialDelay, options.maxDelayMs);
@@ -116,7 +112,7 @@ function calculateDelay(
  * Sleep for a given number of milliseconds
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -151,14 +147,14 @@ export async function withRetry<T>(
       // Check if we should retry
       if (attempt >= config.maxRetries) {
         log(`${config.operationName} failed after ${config.maxRetries + 1} attempts`, {
-          error: (error as Error).message || String(error)
+          error: (error as Error).message || String(error),
         });
         throw error;
       }
 
       if (!isRetryableError(error)) {
         log(`${config.operationName} failed with non-retryable error`, {
-          error: (error as Error).message || String(error)
+          error: (error as Error).message || String(error),
         });
         throw error;
       }
@@ -168,7 +164,7 @@ export async function withRetry<T>(
       log(`${config.operationName} failed, retrying in ${delayMs}ms`, {
         attempt: attempt + 1,
         maxRetries: config.maxRetries,
-        error: (error as Error).message || String(error)
+        error: (error as Error).message || String(error),
       });
 
       await sleep(delayMs);
@@ -194,10 +190,7 @@ export async function withRetry<T>(
  * ```
  */
 export function createRetryWrapper(defaultOptions: RetryOptions) {
-  return async function <T>(
-    operation: () => Promise<T>,
-    options: RetryOptions = {}
-  ): Promise<T> {
+  return async function <T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
     return withRetry(operation, { ...defaultOptions, ...options });
   };
 }
@@ -236,24 +229,26 @@ export async function withRateLimitedBatch<T, R>(
     log(`Processing ${operationName} batch`, {
       batchStart: i,
       batchSize: batch.length,
-      totalItems: items.length
+      totalItems: items.length,
     });
 
     const batchResults = await Promise.all(
-      batch.map(async (item): Promise<{ success: true; result: R } | { success: false; error: string }> => {
-        try {
-          const result = await withRetry(() => processor(item), {
-            operationName,
-            maxRetries: 3
-          });
-          return { success: true, result };
-        } catch (error) {
-          return {
-            success: false,
-            error: (error as Error).message || String(error)
-          };
+      batch.map(
+        async (item): Promise<{ success: true; result: R } | { success: false; error: string }> => {
+          try {
+            const result = await withRetry(() => processor(item), {
+              operationName,
+              maxRetries: 3,
+            });
+            return { success: true, result };
+          } catch (error) {
+            return {
+              success: false,
+              error: (error as Error).message || String(error),
+            };
+          }
         }
-      })
+      )
     );
 
     results.push(...batchResults);

@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import { getKeysFilePath, generateCredentialsErrorMessage, OAuthCredentials } from './utils.js';
 
 async function loadCredentialsFromFile(): Promise<OAuthCredentials> {
-  const keysContent = await fs.readFile(getKeysFilePath(), "utf-8");
+  const keysContent = await fs.readFile(getKeysFilePath(), 'utf-8');
   const keys = JSON.parse(keysContent);
 
   if (keys.installed) {
@@ -19,10 +19,12 @@ async function loadCredentialsFromFile(): Promise<OAuthCredentials> {
     return {
       client_id: keys.client_id,
       client_secret: keys.client_secret,
-      redirect_uris: keys.redirect_uris || ['http://localhost:3000/oauth2callback']
+      redirect_uris: keys.redirect_uris || ['http://localhost:3000/oauth2callback'],
     };
   } else {
-    throw new Error('Invalid credentials file format. Expected either "installed", "web" object or direct client_id field.');
+    throw new Error(
+      'Invalid credentials file format. Expected either "installed", "web" object or direct client_id field.'
+    );
   }
 }
 
@@ -35,8 +37,10 @@ async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
     try {
       const legacyContent = await fs.readFile(legacyPath, 'utf-8');
       const legacyKeys = JSON.parse(legacyContent);
-      console.error('Warning: Using legacy client_secret.json. Please migrate to gcp-oauth.keys.json');
-      
+      console.error(
+        'Warning: Using legacy client_secret.json. Please migrate to gcp-oauth.keys.json'
+      );
+
       if (legacyKeys.installed) {
         return legacyKeys.installed;
       } else if (legacyKeys.web) {
@@ -44,10 +48,12 @@ async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
       } else {
         throw new Error('Invalid legacy credentials format');
       }
-    } catch (legacyError) {
+    } catch {
       // Generate helpful error message
       const errorMessage = generateCredentialsErrorMessage();
-      throw new Error(`${errorMessage}\n\nOriginal error: ${fileError instanceof Error ? fileError.message : fileError}`);
+      throw new Error(
+        `${errorMessage}\n\nOriginal error: ${fileError instanceof Error ? fileError.message : fileError}`
+      );
     }
   }
 }
@@ -55,7 +61,7 @@ async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
 export async function initializeOAuth2Client(): Promise<OAuth2Client> {
   try {
     const credentials = await loadCredentialsWithFallback();
-    
+
     // Use the first redirect URI as the default for the base client
     return new OAuth2Client({
       clientId: credentials.client_id,
@@ -70,13 +76,13 @@ export async function initializeOAuth2Client(): Promise<OAuth2Client> {
 export async function loadCredentials(): Promise<{ client_id: string; client_secret?: string }> {
   try {
     const credentials = await loadCredentialsWithFallback();
-    
+
     if (!credentials.client_id) {
-        throw new Error('Client ID missing in credentials.');
+      throw new Error('Client ID missing in credentials.');
     }
     return {
       client_id: credentials.client_id,
-      client_secret: credentials.client_secret
+      client_secret: credentials.client_secret,
     };
   } catch (error) {
     throw new Error(`Error loading credentials: ${error instanceof Error ? error.message : error}`);

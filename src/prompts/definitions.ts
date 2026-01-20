@@ -23,35 +23,37 @@ export interface PromptMessage {
 export const PROMPTS: PromptDefinition[] = [
   {
     name: 'organize-folder',
-    description: 'Organize files in a folder by type or date. Creates subfolders and moves files accordingly.',
+    description:
+      'Organize files in a folder by type or date. Creates subfolders and moves files accordingly.',
     arguments: [
       {
         name: 'folderId',
         description: 'The ID of the folder to organize (use "root" for My Drive)',
-        required: true
+        required: true,
       },
       {
         name: 'organizeBy',
         description: 'How to organize: "type" (by file type) or "date" (by creation date)',
-        required: true
-      }
-    ]
+        required: true,
+      },
+    ],
   },
   {
     name: 'backup-folder',
-    description: 'Export all files in a folder to a local directory. Google Docs are exported as their native formats.',
+    description:
+      'Export all files in a folder to a local directory. Google Docs are exported as their native formats.',
     arguments: [
       {
         name: 'folderId',
         description: 'The ID of the folder to backup',
-        required: true
+        required: true,
       },
       {
         name: 'localPath',
         description: 'Local directory path to save the backup',
-        required: true
-      }
-    ]
+        required: true,
+      },
+    ],
   },
   {
     name: 'share-with-team',
@@ -60,19 +62,19 @@ export const PROMPTS: PromptDefinition[] = [
       {
         name: 'fileIds',
         description: 'Comma-separated list of file IDs to share',
-        required: true
+        required: true,
       },
       {
         name: 'emails',
         description: 'Comma-separated list of email addresses',
-        required: true
+        required: true,
       },
       {
         name: 'role',
         description: 'Permission role: reader, commenter, or writer',
-        required: false
-      }
-    ]
+        required: false,
+      },
+    ],
   },
   {
     name: 'cleanup-old-files',
@@ -81,36 +83,38 @@ export const PROMPTS: PromptDefinition[] = [
       {
         name: 'folderId',
         description: 'The folder to search (use "root" for My Drive, or omit for all files)',
-        required: false
+        required: false,
       },
       {
         name: 'daysOld',
         description: 'Minimum age in days for files to be considered old',
-        required: true
+        required: true,
       },
       {
         name: 'action',
         description: 'Action to take: "list" (just show files) or "trash" (move to trash)',
-        required: false
-      }
-    ]
+        required: false,
+      },
+    ],
   },
   {
     name: 'migrate-format',
-    description: 'Convert legacy Microsoft Office files (.doc, .xls, .ppt) to Google Workspace formats.',
+    description:
+      'Convert legacy Microsoft Office files (.doc, .xls, .ppt) to Google Workspace formats.',
     arguments: [
       {
         name: 'folderId',
         description: 'The folder to search for files to convert (use "root" for My Drive)',
-        required: false
+        required: false,
       },
       {
         name: 'fileTypes',
-        description: 'Comma-separated file types to convert: doc, xls, ppt (or "all" for all types)',
-        required: false
-      }
-    ]
-  }
+        description:
+          'Comma-separated file types to convert: doc, xls, ppt (or "all" for all types)',
+        required: false,
+      },
+    ],
+  },
 ];
 
 /**
@@ -140,8 +144,9 @@ function generateOrganizeFolderPrompt(args: Record<string, string>): PromptMessa
   const folderId = args.folderId || 'root';
   const organizeBy = args.organizeBy || 'type';
 
-  const instructions = organizeBy === 'type'
-    ? `Please organize the files in folder "${folderId}" by their file type:
+  const instructions =
+    organizeBy === 'type'
+      ? `Please organize the files in folder "${folderId}" by their file type:
 
 1. First, use listFolder to get all files in the folder
 2. Create subfolders for each file type found (e.g., "Documents", "Spreadsheets", "Images", "Videos", "Other")
@@ -156,7 +161,7 @@ File type mappings:
 - Videos: .mp4, .mov, .avi
 - Audio: .mp3, .wav
 - Other: everything else`
-    : `Please organize the files in folder "${folderId}" by their creation date:
+      : `Please organize the files in folder "${folderId}" by their creation date:
 
 1. First, use listFolder to get all files in the folder
 2. For each file, check its creation date using getFileMetadata
@@ -169,9 +174,9 @@ File type mappings:
       role: 'user',
       content: {
         type: 'text',
-        text: instructions
-      }
-    }
+        text: instructions,
+      },
+    },
   ];
 }
 
@@ -197,9 +202,9 @@ function generateBackupFolderPrompt(args: Record<string, string>): PromptMessage
 5. At the end, provide a summary of:
    - Total files backed up
    - Total size
-   - Any files that failed to backup`
-      }
-    }
+   - Any files that failed to backup`,
+      },
+    },
   ];
 }
 
@@ -227,9 +232,9 @@ Steps:
    - Which email addresses received access
    - Any errors or files that couldn't be shared
 
-Note: If any file is already shared with a user, you may need to update their permission level.`
-      }
-    }
+Note: If any file is already shared with a user, you may need to update their permission level.`,
+      },
+    },
   ];
 }
 
@@ -238,14 +243,13 @@ function generateCleanupOldFilesPrompt(args: Record<string, string>): PromptMess
   const daysOld = args.daysOld;
   const action = args.action || 'list';
 
-  const folderClause = folderId
-    ? `in folder "${folderId}"`
-    : 'across your entire Google Drive';
+  const folderClause = folderId ? `in folder "${folderId}"` : 'across your entire Google Drive';
 
-  const actionInstructions = action === 'trash'
-    ? `4. For each file older than ${daysOld} days, use deleteItem to move it to trash
+  const actionInstructions =
+    action === 'trash'
+      ? `4. For each file older than ${daysOld} days, use deleteItem to move it to trash
 5. Report the files that were trashed`
-    : `4. Do NOT delete any files - only report what was found`;
+      : `4. Do NOT delete any files - only report what was found`;
 
   return [
     {
@@ -265,9 +269,9 @@ Report format:
 - Last modified date
 - Location (parent folder)
 
-Total count and size of old files found.`
-      }
-    }
+Total count and size of old files found.`,
+      },
+    },
   ];
 }
 
@@ -275,9 +279,13 @@ function generateMigrateFormatPrompt(args: Record<string, string>): PromptMessag
   const folderId = args.folderId || 'root';
   const fileTypes = args.fileTypes || 'all';
 
-  const typeFilter = fileTypes === 'all'
-    ? 'Microsoft Office files (.doc, .docx, .xls, .xlsx, .ppt, .pptx)'
-    : fileTypes.split(',').map(t => `.${t.trim()}`).join(', ');
+  const typeFilter =
+    fileTypes === 'all'
+      ? 'Microsoft Office files (.doc, .docx, .xls, .xlsx, .ppt, .pptx)'
+      : fileTypes
+          .split(',')
+          .map((t) => `.${t.trim()}`)
+          .join(', ');
 
   return [
     {
@@ -303,8 +311,8 @@ Steps:
    - Any files that failed to convert
    - Total storage impact (Google Workspace files don't count against quota)
 
-Note: This creates NEW Google Workspace files alongside the originals. Original files are preserved.`
-      }
-    }
+Note: This creates NEW Google Workspace files alongside the originals. Original files are preserved.`,
+      },
+    },
   ];
 }

@@ -1,6 +1,12 @@
 import type { drive_v3, slides_v1 } from 'googleapis';
 import { v4 as uuidv4 } from 'uuid';
-import { successResponse, structuredResponse, errorResponse, withTimeout } from '../utils/index.js';
+import {
+  successResponse,
+  structuredResponse,
+  errorResponse,
+  withTimeout,
+  validateArgs,
+} from '../utils/index.js';
 import type { ToolResponse } from '../utils/index.js';
 import {
   ListSlidePagesSchema,
@@ -11,49 +17,32 @@ import {
   CreateGoogleSlidesShapeSchema,
   GetGoogleSlidesSpeakerNotesSchema,
   UpdateGoogleSlidesSpeakerNotesSchema,
-  FormatGoogleSlidesElementSchema
+  FormatGoogleSlidesElementSchema,
 } from '../schemas/index.js';
-
-// Color conversion helpers
-function toColorStyle(color: { red?: number; green?: number; blue?: number }) {
-  return {
-    rgbColor: {
-      red: color.red || 0,
-      green: color.green || 0,
-      blue: color.blue || 0
-    }
-  };
-}
-
-function toSolidFill(color: { red?: number; green?: number; blue?: number; alpha?: number }) {
-  return {
-    solidFill: {
-      color: toColorStyle(color),
-      alpha: color.alpha ?? 1
-    }
-  };
-}
 import { resolveOptionalFolderPath, checkFileExists } from './helpers.js';
+import { toSlidesColorStyle, toSlidesSolidFill } from '../utils/colors.js';
 
 export async function handleCreateGoogleSlides(
   drive: drive_v3.Drive,
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = CreateGoogleSlidesSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(CreateGoogleSlidesSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
-  const parentFolderId = await resolveOptionalFolderPath(drive, data.parentFolderId, data.parentPath);
+  const parentFolderId = await resolveOptionalFolderPath(
+    drive,
+    data.parentFolderId,
+    data.parentPath
+  );
 
   // Check if presentation already exists
   const existingFileId = await checkFileExists(drive, data.name, parentFolderId);
   if (existingFileId) {
     return errorResponse(
       `A presentation named "${data.name}" already exists in this location. ` +
-      `File ID: ${existingFileId}. To modify it, you can use Google Slides directly.`
+        `File ID: ${existingFileId}. To modify it, you can use Google Slides directly.`
     );
   }
 
@@ -67,28 +56,28 @@ export async function handleCreateGoogleSlides(
     fileId: presentation.data.presentationId!,
     addParents: parentFolderId,
     removeParents: 'root',
-    supportsAllDrives: true
+    supportsAllDrives: true,
   });
 
   // Generate all slide IDs upfront
   const slideIds = data.slides.map(() => `slide_${uuidv4().substring(0, 8)}`);
 
   // API call 3: Batch create all slides at once
-  const createSlideRequests: slides_v1.Schema$Request[] = slideIds.map(slideObjectId => ({
+  const createSlideRequests: slides_v1.Schema$Request[] = slideIds.map((slideObjectId) => ({
     createSlide: {
       objectId: slideObjectId,
       slideLayoutReference: { predefinedLayout: 'TITLE_AND_BODY' },
-    }
+    },
   }));
 
   await slides.presentations.batchUpdate({
     presentationId: presentation.data.presentationId!,
-    requestBody: { requests: createSlideRequests }
+    requestBody: { requests: createSlideRequests },
   });
 
   // API call 4: Fetch all slides to get placeholder IDs
   const updatedPresentation = await slides.presentations.get({
-    presentationId: presentation.data.presentationId!
+    presentationId: presentation.data.presentationId!,
   });
 
   // Build insert text requests for all slides
@@ -105,11 +94,11 @@ export async function handleCreateGoogleSlides(
       for (const el of presentationSlide.pageElements) {
         if (el.shape?.placeholder?.type === 'TITLE' && el.objectId) {
           insertTextRequests.push({
-            insertText: { objectId: el.objectId, text: slide.title, insertionIndex: 0 }
+            insertText: { objectId: el.objectId, text: slide.title, insertionIndex: 0 },
           });
         } else if (el.shape?.placeholder?.type === 'BODY' && el.objectId) {
           insertTextRequests.push({
-            insertText: { objectId: el.objectId, text: slide.content, insertionIndex: 0 }
+            insertText: { objectId: el.objectId, text: slide.content, insertionIndex: 0 },
           });
         }
       }
@@ -120,14 +109,14 @@ export async function handleCreateGoogleSlides(
   if (insertTextRequests.length > 0) {
     await slides.presentations.batchUpdate({
       presentationId: presentation.data.presentationId!,
-      requestBody: { requests: insertTextRequests }
+      requestBody: { requests: insertTextRequests },
     });
   }
 
   return successResponse(
     `Created Google Slides presentation: ${data.name}\n` +
-    `ID: ${presentation.data.presentationId}\n` +
-    `Link: https://docs.google.com/presentation/d/${presentation.data.presentationId}`
+      `ID: ${presentation.data.presentationId}\n` +
+      `Link: https://docs.google.com/presentation/d/${presentation.data.presentationId}`
   );
 }
 
@@ -135,32 +124,30 @@ export async function handleUpdateGoogleSlides(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = UpdateGoogleSlidesSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(UpdateGoogleSlidesSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // API call 1: Get current presentation details
   const currentPresentation = await slides.presentations.get({
-    presentationId: data.presentationId
+    presentationId: data.presentationId,
   });
 
   if (!currentPresentation.data.slides) {
     return errorResponse(
       `No slides found in presentation ${data.presentationId}. ` +
-      `The presentation may be empty or inaccessible.`
+        `The presentation may be empty or inaccessible.`
     );
   }
 
   if (data.slides.length === 0) {
-    return errorResponse("At least one slide must be provided");
+    return errorResponse('At least one slide must be provided');
   }
 
   // Collect all slide IDs except the first one (we'll keep it for now)
   const slideIdsToDelete = currentPresentation.data.slides
     .slice(1)
-    .map(slide => slide.objectId)
+    .map((slide) => slide.objectId)
     .filter((id): id is string => id !== undefined);
 
   // Prepare all requests for a single batch update
@@ -179,8 +166,8 @@ export async function handleUpdateGoogleSlides(
         requests.push({
           deleteText: {
             objectId: element.objectId,
-            textRange: { type: 'ALL' }
-          }
+            textRange: { type: 'ALL' },
+          },
         });
       }
     }
@@ -193,11 +180,15 @@ export async function handleUpdateGoogleSlides(
     let bodyPlaceholderId: string | undefined;
 
     for (const element of firstSlide.pageElements) {
-      if (element.shape?.placeholder?.type === 'TITLE' ||
-          element.shape?.placeholder?.type === 'CENTERED_TITLE') {
+      if (
+        element.shape?.placeholder?.type === 'TITLE' ||
+        element.shape?.placeholder?.type === 'CENTERED_TITLE'
+      ) {
         titlePlaceholderId = element.objectId || undefined;
-      } else if (element.shape?.placeholder?.type === 'BODY' ||
-                 element.shape?.placeholder?.type === 'SUBTITLE') {
+      } else if (
+        element.shape?.placeholder?.type === 'BODY' ||
+        element.shape?.placeholder?.type === 'SUBTITLE'
+      ) {
         bodyPlaceholderId = element.objectId || undefined;
       }
     }
@@ -207,8 +198,8 @@ export async function handleUpdateGoogleSlides(
         insertText: {
           objectId: titlePlaceholderId,
           text: firstSlideContent.title,
-          insertionIndex: 0
-        }
+          insertionIndex: 0,
+        },
       });
     }
 
@@ -217,8 +208,8 @@ export async function handleUpdateGoogleSlides(
         insertText: {
           objectId: bodyPlaceholderId,
           text: firstSlideContent.content,
-          insertionIndex: 0
-        }
+          insertionIndex: 0,
+        },
       });
     }
   }
@@ -241,14 +232,14 @@ export async function handleUpdateGoogleSlides(
         placeholderIdMappings: [
           {
             layoutPlaceholder: { type: 'TITLE' },
-            objectId: titleId
+            objectId: titleId,
           },
           {
             layoutPlaceholder: { type: 'BODY' },
-            objectId: bodyId
-          }
-        ]
-      }
+            objectId: bodyId,
+          },
+        ],
+      },
     });
   }
 
@@ -261,27 +252,27 @@ export async function handleUpdateGoogleSlides(
       insertText: {
         objectId: titleId,
         text: slideContent.title,
-        insertionIndex: 0
-      }
+        insertionIndex: 0,
+      },
     });
     requests.push({
       insertText: {
         objectId: bodyId,
         text: slideContent.content,
-        insertionIndex: 0
-      }
+        insertionIndex: 0,
+      },
     });
   }
 
   // API call 2: Execute single batch update with all operations
   await slides.presentations.batchUpdate({
     presentationId: data.presentationId,
-    requestBody: { requests }
+    requestBody: { requests },
   });
 
   return successResponse(
     `Updated Google Slides presentation with ${data.slides.length} slide(s)\n` +
-    `Link: https://docs.google.com/presentation/d/${data.presentationId}`
+      `Link: https://docs.google.com/presentation/d/${data.presentationId}`
   );
 }
 
@@ -289,15 +280,13 @@ export async function handleGetGoogleSlidesContent(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetGoogleSlidesContentSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetGoogleSlidesContentSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const presentation = await withTimeout(
     slides.presentations.get({
-      presentationId: data.presentationId
+      presentationId: data.presentationId,
     }),
     30000,
     'Get presentation content'
@@ -306,14 +295,15 @@ export async function handleGetGoogleSlidesContent(
   if (!presentation.data.slides) {
     return errorResponse(
       `No slides found in presentation ${data.presentationId}. ` +
-      `The presentation may be empty or inaccessible.`
+        `The presentation may be empty or inaccessible.`
     );
   }
 
   let content = 'Presentation content with element IDs:\n\n';
-  const slidesToShow = data.slideIndex !== undefined
-    ? [presentation.data.slides[data.slideIndex]]
-    : presentation.data.slides;
+  const slidesToShow =
+    data.slideIndex !== undefined
+      ? [presentation.data.slides[data.slideIndex]]
+      : presentation.data.slides;
 
   interface SlideElement {
     objectId: string;
@@ -340,7 +330,7 @@ export async function handleGetGoogleSlidesContent(
     const slideData: SlideData = {
       index: slideIndex,
       objectId: slide.objectId,
-      elements: []
+      elements: [],
     };
 
     if (slide.pageElements) {
@@ -360,32 +350,32 @@ export async function handleGetGoogleSlidesContent(
           slideData.elements.push({
             objectId: element.objectId,
             type: 'textBox',
-            text: text.trim()
+            text: text.trim(),
           });
         } else if (element.shape) {
           content += `  Shape (ID: ${element.objectId}): ${element.shape.shapeType || 'Unknown'}\n`;
           slideData.elements.push({
             objectId: element.objectId,
             type: 'shape',
-            shapeType: element.shape.shapeType || undefined
+            shapeType: element.shape.shapeType || undefined,
           });
         } else if (element.image) {
           content += `  Image (ID: ${element.objectId})\n`;
           slideData.elements.push({
             objectId: element.objectId,
-            type: 'image'
+            type: 'image',
           });
         } else if (element.video) {
           content += `  Video (ID: ${element.objectId})\n`;
           slideData.elements.push({
             objectId: element.objectId,
-            type: 'video'
+            type: 'video',
           });
         } else if (element.table) {
           content += `  Table (ID: ${element.objectId})\n`;
           slideData.elements.push({
             objectId: element.objectId,
-            type: 'table'
+            type: 'table',
           });
         }
       });
@@ -398,7 +388,7 @@ export async function handleGetGoogleSlidesContent(
     presentationId: data.presentationId,
     title: presentation.data.title,
     slideCount: presentation.data.slides?.length || 0,
-    slides: structuredSlides
+    slides: structuredSlides,
   });
 }
 
@@ -406,10 +396,8 @@ export async function handleCreateGoogleSlidesTextBox(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = CreateGoogleSlidesTextBoxSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(CreateGoogleSlidesTextBoxSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const elementId = `textBox_${uuidv4().substring(0, 8)}`;
@@ -423,25 +411,25 @@ export async function handleCreateGoogleSlidesTextBox(
           pageObjectId: data.pageObjectId,
           size: {
             width: { magnitude: data.width, unit: 'EMU' },
-            height: { magnitude: data.height, unit: 'EMU' }
+            height: { magnitude: data.height, unit: 'EMU' },
           },
           transform: {
             scaleX: 1,
             scaleY: 1,
             translateX: data.x,
             translateY: data.y,
-            unit: 'EMU'
-          }
-        }
-      }
+            unit: 'EMU',
+          },
+        },
+      },
     },
     {
       insertText: {
         objectId: elementId,
         text: data.text,
-        insertionIndex: 0
-      }
-    }
+        insertionIndex: 0,
+      },
+    },
   ];
 
   // Apply optional formatting
@@ -470,15 +458,15 @@ export async function handleCreateGoogleSlidesTextBox(
           objectId: elementId,
           style: textStyle,
           fields: fields.join(','),
-          textRange: { type: 'ALL' }
-        }
+          textRange: { type: 'ALL' },
+        },
       });
     }
   }
 
   await slides.presentations.batchUpdate({
     presentationId: data.presentationId,
-    requestBody: { requests }
+    requestBody: { requests },
   });
 
   return successResponse(`Created text box with ID: ${elementId}`);
@@ -488,10 +476,8 @@ export async function handleCreateGoogleSlidesShape(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = CreateGoogleSlidesShapeSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(CreateGoogleSlidesShapeSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const elementId = `shape_${uuidv4().substring(0, 8)}`;
@@ -505,18 +491,18 @@ export async function handleCreateGoogleSlidesShape(
           pageObjectId: data.pageObjectId,
           size: {
             width: { magnitude: data.width, unit: 'EMU' },
-            height: { magnitude: data.height, unit: 'EMU' }
+            height: { magnitude: data.height, unit: 'EMU' },
           },
           transform: {
             scaleX: 1,
             scaleY: 1,
             translateX: data.x,
             translateY: data.y,
-            unit: 'EMU'
-          }
-        }
-      }
-    }
+            unit: 'EMU',
+          },
+        },
+      },
+    },
   ];
 
   // Apply background color if specified
@@ -531,21 +517,21 @@ export async function handleCreateGoogleSlidesShape(
                 rgbColor: {
                   red: data.backgroundColor.red || 0,
                   green: data.backgroundColor.green || 0,
-                  blue: data.backgroundColor.blue || 0
-                }
+                  blue: data.backgroundColor.blue || 0,
+                },
               },
-              alpha: data.backgroundColor.alpha || 1
-            }
-          }
+              alpha: data.backgroundColor.alpha || 1,
+            },
+          },
         },
-        fields: 'shapeBackgroundFill'
-      }
+        fields: 'shapeBackgroundFill',
+      },
     });
   }
 
   await slides.presentations.batchUpdate({
     presentationId: data.presentationId,
-    requestBody: { requests }
+    requestBody: { requests },
   });
 
   return successResponse(`Created ${data.shapeType} shape with ID: ${elementId}`);
@@ -555,15 +541,13 @@ export async function handleGetGoogleSlidesSpeakerNotes(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = GetGoogleSlidesSpeakerNotesSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(GetGoogleSlidesSpeakerNotesSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get the presentation to access the slide
   const presentation = await slides.presentations.get({
-    presentationId: data.presentationId
+    presentationId: data.presentationId,
   });
 
   const slideCount = presentation.data.slides?.length || 0;
@@ -579,23 +563,23 @@ export async function handleGetGoogleSlidesSpeakerNotes(
   const notesObjectId = slide.slideProperties?.notesPage?.notesProperties?.speakerNotesObjectId;
 
   if (!notesObjectId) {
-    return successResponse("No speaker notes found for this slide");
+    return successResponse('No speaker notes found for this slide');
   }
 
   // Find the notes page for this slide (already fetched in presentation)
   const notesPage = slide.slideProperties?.notesPage;
 
   if (!notesPage || !notesPage.pageElements) {
-    return successResponse("No speaker notes found for this slide");
+    return successResponse('No speaker notes found for this slide');
   }
 
   // Find the speaker notes shape
   const speakerNotesElement = notesPage.pageElements.find(
-    element => element.objectId === notesObjectId
+    (element) => element.objectId === notesObjectId
   );
 
   if (!speakerNotesElement || !speakerNotesElement.shape?.text) {
-    return successResponse("No speaker notes found for this slide");
+    return successResponse('No speaker notes found for this slide');
   }
 
   // Extract the text from the speaker notes
@@ -607,22 +591,20 @@ export async function handleGetGoogleSlidesSpeakerNotes(
     }
   });
 
-  return successResponse(notesText.trim() || "No speaker notes found for this slide");
+  return successResponse(notesText.trim() || 'No speaker notes found for this slide');
 }
 
 export async function handleUpdateGoogleSlidesSpeakerNotes(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = UpdateGoogleSlidesSpeakerNotesSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(UpdateGoogleSlidesSpeakerNotesSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   // Get the presentation to access the slide
   const presentation = await slides.presentations.get({
-    presentationId: data.presentationId
+    presentationId: data.presentationId,
   });
 
   const slideCount = presentation.data.slides?.length || 0;
@@ -639,8 +621,8 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
 
   if (!notesObjectId) {
     return errorResponse(
-      "This slide does not have a speaker notes object. " +
-      "Speaker notes may need to be initialized manually in Google Slides first."
+      'This slide does not have a speaker notes object. ' +
+        'Speaker notes may need to be initialized manually in Google Slides first.'
     );
   }
 
@@ -649,21 +631,21 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
     {
       deleteText: {
         objectId: notesObjectId,
-        textRange: { type: 'ALL' }
-      }
+        textRange: { type: 'ALL' },
+      },
     },
     {
       insertText: {
         objectId: notesObjectId,
         text: data.notes,
-        insertionIndex: 0
-      }
-    }
+        insertionIndex: 0,
+      },
+    },
   ];
 
   await slides.presentations.batchUpdate({
     presentationId: data.presentationId,
-    requestBody: { requests }
+    requestBody: { requests },
   });
 
   return successResponse(`Successfully updated speaker notes for slide ${data.slideIndex}`);
@@ -673,10 +655,8 @@ export async function handleFormatGoogleSlidesElement(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = FormatGoogleSlidesElementSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(FormatGoogleSlidesElementSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const requests: slides_v1.Schema$Request[] = [];
@@ -712,7 +692,7 @@ export async function handleFormatGoogleSlidesElement(
       textFields.push('fontFamily');
     }
     if (data.foregroundColor) {
-      textStyle.foregroundColor = { opaqueColor: toColorStyle(data.foregroundColor) };
+      textStyle.foregroundColor = { opaqueColor: toSlidesColorStyle(data.foregroundColor) };
       textFields.push('foregroundColor');
     }
 
@@ -722,10 +702,11 @@ export async function handleFormatGoogleSlidesElement(
           objectId: data.objectId!,
           style: textStyle,
           fields: textFields.join(','),
-          textRange: (data.startIndex !== undefined && data.endIndex !== undefined)
-            ? { type: 'FIXED_RANGE', startIndex: data.startIndex, endIndex: data.endIndex }
-            : { type: 'ALL' }
-        }
+          textRange:
+            data.startIndex !== undefined && data.endIndex !== undefined
+              ? { type: 'FIXED_RANGE', startIndex: data.startIndex, endIndex: data.endIndex }
+              : { type: 'ALL' },
+        },
       });
       appliedFormats.push('text style');
     }
@@ -736,8 +717,8 @@ export async function handleFormatGoogleSlidesElement(
         updateParagraphStyle: {
           objectId: data.objectId!,
           style: { alignment: data.alignment },
-          fields: 'alignment'
-        }
+          fields: 'alignment',
+        },
       });
       appliedFormats.push('alignment');
     }
@@ -747,8 +728,8 @@ export async function handleFormatGoogleSlidesElement(
         updateParagraphStyle: {
           objectId: data.objectId!,
           style: { lineSpacing: data.lineSpacing },
-          fields: 'lineSpacing'
-        }
+          fields: 'lineSpacing',
+        },
       });
       appliedFormats.push('line spacing');
     }
@@ -760,15 +741,15 @@ export async function handleFormatGoogleSlidesElement(
         requests.push({
           createParagraphBullets: {
             objectId: data.objectId!,
-            bulletPreset: 'NUMBERED_DIGIT_ALPHA_ROMAN'
-          }
+            bulletPreset: 'NUMBERED_DIGIT_ALPHA_ROMAN',
+          },
         });
       } else {
         requests.push({
           createParagraphBullets: {
             objectId: data.objectId!,
-            bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`
-          }
+            bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`,
+          },
         });
       }
       appliedFormats.push('bullet style');
@@ -778,7 +759,7 @@ export async function handleFormatGoogleSlidesElement(
     const fields: string[] = [];
 
     if (data.backgroundColor) {
-      shapeProperties.shapeBackgroundFill = toSolidFill(data.backgroundColor);
+      shapeProperties.shapeBackgroundFill = toSlidesSolidFill(data.backgroundColor);
       fields.push('shapeBackgroundFill');
       appliedFormats.push('background color');
     }
@@ -789,8 +770,8 @@ export async function handleFormatGoogleSlidesElement(
     if (data.outlineColor) {
       outline.outlineFill = {
         solidFill: {
-          color: toColorStyle(data.outlineColor)
-        }
+          color: toSlidesColorStyle(data.outlineColor),
+        },
       };
       hasOutlineChanges = true;
       appliedFormats.push('outline color');
@@ -818,20 +799,20 @@ export async function handleFormatGoogleSlidesElement(
         updateShapeProperties: {
           objectId: data.objectId!,
           shapeProperties,
-          fields: fields.join(',')
-        }
+          fields: fields.join(','),
+        },
       });
     }
   } else if (data.targetType === 'slide') {
     if (data.slideBackgroundColor) {
-      const bgRequests = data.pageObjectIds!.map(pageObjectId => ({
+      const bgRequests = data.pageObjectIds!.map((pageObjectId) => ({
         updatePageProperties: {
           objectId: pageObjectId,
           pageProperties: {
-            pageBackgroundFill: toSolidFill(data.slideBackgroundColor!)
+            pageBackgroundFill: toSlidesSolidFill(data.slideBackgroundColor!),
           },
-          fields: 'pageBackgroundFill'
-        }
+          fields: 'pageBackgroundFill',
+        },
       }));
       requests.push(...bgRequests);
       appliedFormats.push(`slide background (${data.pageObjectIds!.length} slide(s))`);
@@ -840,21 +821,22 @@ export async function handleFormatGoogleSlidesElement(
 
   if (requests.length === 0) {
     return errorResponse(
-      "No formatting options specified. For text: provide bold, italic, underline, strikethrough, " +
-      "fontSize, fontFamily, foregroundColor, alignment, lineSpacing, or bulletStyle. " +
-      "For shape: provide backgroundColor, outlineColor, outlineWeight, or outlineDashStyle. " +
-      "For slide: provide slideBackgroundColor."
+      'No formatting options specified. For text: provide bold, italic, underline, strikethrough, ' +
+        'fontSize, fontFamily, foregroundColor, alignment, lineSpacing, or bulletStyle. ' +
+        'For shape: provide backgroundColor, outlineColor, outlineWeight, or outlineDashStyle. ' +
+        'For slide: provide slideBackgroundColor.'
     );
   }
 
   await slides.presentations.batchUpdate({
     presentationId: data.presentationId,
-    requestBody: { requests }
+    requestBody: { requests },
   });
 
-  const targetDesc = data.targetType === 'slide'
-    ? `${data.pageObjectIds!.length} slide(s)`
-    : `${data.targetType} ${data.objectId}`;
+  const targetDesc =
+    data.targetType === 'slide'
+      ? `${data.pageObjectIds!.length} slide(s)`
+      : `${data.targetType} ${data.objectId}`;
 
   return successResponse(`Applied formatting to ${targetDesc}: ${appliedFormats.join(', ')}`);
 }
@@ -863,36 +845,26 @@ export async function handleListSlidePages(
   slides: slides_v1.Slides,
   args: unknown
 ): Promise<ToolResponse> {
-  const validation = ListSlidePagesSchema.safeParse(args);
-  if (!validation.success) {
-    return errorResponse(validation.error.errors[0].message);
-  }
+  const validation = validateArgs(ListSlidePagesSchema, args);
+  if (!validation.success) return validation.response;
   const data = validation.data;
 
   const response = await slides.presentations.get({
     presentationId: data.presentationId,
-    fields: 'presentationId,slides(objectId,slideProperties(layoutObjectId))'
+    fields: 'presentationId,slides(objectId,slideProperties(layoutObjectId))',
   });
 
-  const pages = response.data.slides?.map((slide, index) => {
-    // Try to find a title placeholder for the slide name
-    let title: string | undefined;
-
-    return {
+  const pages =
+    response.data.slides?.map((slide, index) => ({
       objectId: slide.objectId,
       index,
       pageType: 'SLIDE' as const,
-      title
-    };
-  }) || [];
+    })) || [];
 
-  const pageList = pages.map(p => `${p.index}: ${p.objectId}${p.title ? ` - "${p.title}"` : ''}`).join('\n');
+  const pageList = pages.map((p) => `${p.index}: ${p.objectId}`).join('\n');
 
-  return structuredResponse(
-    `Presentation has ${pages.length} slide(s):\n${pageList}`,
-    {
-      presentationId: data.presentationId,
-      pages
-    }
-  );
+  return structuredResponse(`Presentation has ${pages.length} slide(s):\n${pageList}`, {
+    presentationId: data.presentationId,
+    pages,
+  });
 }
