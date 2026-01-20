@@ -557,7 +557,7 @@ function showHelp(): void {
 Google Drive MCP Server v${VERSION}
 
 Usage:
-  npx @yourusername/google-drive-mcp [command]
+  npx @dguido/google-drive-mcp [command] [options]
 
 Commands:
   auth     Run the authentication flow
@@ -565,15 +565,28 @@ Commands:
   version  Show version information
   help     Show this help message
 
+Auth Options:
+  --token-path <path>        Save tokens to custom path (e.g., .credentials/tokens.json)
+  --credentials-path <path>  Use custom OAuth credentials file
+
 Examples:
-  npx @yourusername/google-drive-mcp auth
-  npx @yourusername/google-drive-mcp start
-  npx @yourusername/google-drive-mcp version
-  npx @yourusername/google-drive-mcp
+  npx @dguido/google-drive-mcp auth
+  npx @dguido/google-drive-mcp auth --token-path .credentials/tokens.json
+  npx @dguido/google-drive-mcp auth \\
+    --credentials-path .credentials/gcp-oauth.keys.json \\
+    --token-path .credentials/tokens.json
+  npx @dguido/google-drive-mcp start
+  npx @dguido/google-drive-mcp
 
 Environment Variables:
   GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file
   GOOGLE_DRIVE_MCP_TOKEN_PATH      Path to store authentication tokens
+
+Multi-Account Setup:
+  For project-level credential storage (useful with multiple Google accounts):
+  1. Create a .credentials directory in your project
+  2. Use CLI flags or env vars to point to project-level paths
+  3. Add .credentials/ to your .gitignore
 `);
 }
 
@@ -581,8 +594,16 @@ function showVersion(): void {
   console.log(`Google Drive MCP Server v${VERSION}`);
 }
 
-async function runAuthServer(): Promise<void> {
+async function runAuthServer(tokenPath?: string, credentialsPath?: string): Promise<void> {
   try {
+    // Set env vars from CLI flags (CLI takes precedence over existing env vars)
+    if (tokenPath) {
+      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = tokenPath;
+    }
+    if (credentialsPath) {
+      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = credentialsPath;
+    }
+
     // Initialize OAuth client
     const oauth2Client = await initializeOAuth2Client();
 
@@ -607,12 +628,32 @@ async function runAuthServer(): Promise<void> {
 // MAIN EXECUTION
 // -----------------------------------------------------------------------------
 
-function parseCliArgs(): { command: string | undefined } {
+interface CliArgs {
+  command: string | undefined;
+  tokenPath?: string;
+  credentialsPath?: string;
+}
+
+function parseCliArgs(): CliArgs {
   const args = process.argv.slice(2);
   let command: string | undefined;
+  let tokenPath: string | undefined;
+  let credentialsPath: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+
+    // Handle --token-path flag
+    if (arg === '--token-path' && i + 1 < args.length) {
+      tokenPath = args[++i];
+      continue;
+    }
+
+    // Handle --credentials-path flag
+    if (arg === '--credentials-path' && i + 1 < args.length) {
+      credentialsPath = args[++i];
+      continue;
+    }
 
     // Handle special version/help flags as commands
     if (arg === '--version' || arg === '-v' || arg === '--help' || arg === '-h') {
@@ -627,15 +668,15 @@ function parseCliArgs(): { command: string | undefined } {
     }
   }
 
-  return { command };
+  return { command, tokenPath, credentialsPath };
 }
 
 async function main() {
-  const { command } = parseCliArgs();
+  const { command, tokenPath, credentialsPath } = parseCliArgs();
 
   switch (command) {
     case 'auth':
-      await runAuthServer();
+      await runAuthServer(tokenPath, credentialsPath);
       break;
     case 'start':
     case undefined:

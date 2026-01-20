@@ -1,6 +1,8 @@
 import { OAuth2Client } from 'google-auth-library';
 import { TokenManager } from './tokenManager.js';
 import http from 'http';
+import os from 'os';
+import path from 'path';
 import { URL } from 'url';
 import open from 'open';
 import { loadCredentials } from './client.js';
@@ -69,6 +71,18 @@ export class AuthServer {
           // Get the path where tokens were saved
           const tokenPath = this.tokenManager.getTokenPath();
 
+          // Detect if tokens are stored in a project directory (not ~/.config)
+          const homeConfig = path.join(os.homedir(), '.config');
+          const isProjectLevel = !tokenPath.startsWith(homeConfig);
+          const credentialsDir = path.basename(path.dirname(tokenPath));
+          const gitignoreWarning = isProjectLevel
+            ? `
+                    <div class="warning">
+                        <p><strong>⚠️ Security:</strong> Add your credentials directory to .gitignore:</p>
+                        <p><code>${credentialsDir}/</code></p>
+                    </div>`
+            : '';
+
           // Send a more informative HTML response including the path
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(`
@@ -80,18 +94,20 @@ export class AuthServer {
                 <title>Authentication Successful</title>
                 <style>
                     body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f4; margin: 0; }
-                    .container { text-align: center; padding: 2em; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                    .container { text-align: center; padding: 2em; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; }
                     h1 { color: #4CAF50; }
                     p { color: #333; margin-bottom: 0.5em; }
                     code { background-color: #eee; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+                    .warning { background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 1em; margin-top: 1em; }
+                    .warning p { color: #856404; margin: 0.3em 0; }
                 </style>
             </head>
             <body>
                 <div class="container">
                     <h1>Authentication Successful!</h1>
                     <p>Your authentication tokens have been saved successfully to:</p>
-                    <p><code>${tokenPath}</code></p>
-                    <p>You can now close this browser window.</p>
+                    <p><code>${tokenPath}</code></p>${gitignoreWarning}
+                    <p style="margin-top: 1em;">You can now close this browser window.</p>
                 </div>
             </body>
             </html>

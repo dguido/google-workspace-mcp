@@ -258,6 +258,59 @@ Authentication tokens are stored securely following the XDG Base Directory speci
 - Tokens auto-refresh before expiration
 - Google OAuth apps in "Testing" status have refresh tokens that expire after 7 days (Google's policy)
 
+### Multi-Account Setup
+
+If you use multiple Google accounts (e.g., work, personal), store credentials per-project:
+
+#### Option 1: CLI Flags (Simplest)
+
+```bash
+# Create project credentials directory
+mkdir -p .credentials
+
+# Authenticate with project-level storage
+npx @dguido/google-drive-mcp auth \
+  --credentials-path .credentials/gcp-oauth.keys.json \
+  --token-path .credentials/tokens.json
+
+# Add to .gitignore
+echo ".credentials/" >> .gitignore
+```
+
+#### Option 2: Environment Variables
+
+```bash
+export GOOGLE_DRIVE_OAUTH_CREDENTIALS=".credentials/gcp-oauth.keys.json"
+export GOOGLE_DRIVE_MCP_TOKEN_PATH=".credentials/tokens.json"
+npx @dguido/google-drive-mcp auth
+```
+
+#### Claude Code MCP Config (Project-Level)
+
+```json
+{
+  "mcpServers": {
+    "google-drive": {
+      "command": "npx",
+      "args": ["-y", "@dguido/google-drive-mcp"],
+      "env": {
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": ".credentials/gcp-oauth.keys.json",
+        "GOOGLE_DRIVE_MCP_TOKEN_PATH": ".credentials/tokens.json"
+      }
+    }
+  }
+}
+```
+
+Relative paths resolve from the working directory where Claude Code is launched.
+
+#### When to Use Each Approach
+
+| Approach | Best For |
+|----------|----------|
+| User-level (`~/.config/`) | Single Google account, convenience |
+| Project-level (`.credentials/`) | Multiple accounts, account isolation per project |
+
 ## Usage with Claude Desktop
 
 Add the server to your Claude Desktop configuration:
