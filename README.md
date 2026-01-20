@@ -6,7 +6,7 @@ MCP server providing Claude access to Google Drive, Docs, Sheets, and Slides.
 
 ### Prerequisites
 
-- **Node.js** 18+ (LTS recommended)
+- **Node.js** 22+ (LTS recommended)
 - **Google Cloud Project** with Drive, Docs, Sheets, and Slides APIs enabled
 - **OAuth 2.0 Credentials** (Desktop application type)
 
