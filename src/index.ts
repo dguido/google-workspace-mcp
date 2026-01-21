@@ -156,33 +156,42 @@ function ensureDriveService() {
     hasCredentials: !!authClient.credentials,
     hasAccessToken: !!authClient.credentials?.access_token,
   });
+}
 
-  // Test the auth by making a simple API call
-  void drive.about
-    .get({ fields: "user" })
-    .then((response) => {
-      log("Auth test successful, user:", response.data.user?.emailAddress);
-    })
-    .catch((error: unknown) => {
-      const err = error as {
-        message?: string;
-        response?: {
-          status: number;
-          statusText: string;
-          headers: unknown;
-          data: unknown;
-        };
-      };
-      log("Auth test failed:", err.message || String(error));
-      if (err.response) {
-        log("Auth test error details:", {
-          status: err.response.status,
-          statusText: err.response.statusText,
-          headers: err.response.headers,
-          data: err.response.data,
-        });
-      }
-    });
+// Track auth health for debugging
+let lastAuthError: string | null = null;
+
+async function verifyAuthHealth(): Promise<boolean> {
+  if (!drive) {
+    lastAuthError = "Drive service not initialized";
+    return false;
+  }
+
+  try {
+    const response = await drive.about.get({ fields: "user" });
+    log("Auth verification successful, user:", response.data.user?.emailAddress);
+    lastAuthError = null;
+    return true;
+  } catch (error: unknown) {
+    const err = error as {
+      message?: string;
+      response?: { status: number; statusText: string };
+    };
+    lastAuthError = err.message || String(error);
+    log("WARNING: Auth verification failed:", lastAuthError);
+    if (err.response) {
+      log("Auth error details:", {
+        status: err.response.status,
+        statusText: err.response.statusText,
+      });
+    }
+    return false;
+  }
+}
+
+// Export for testing - allows checking last auth error
+export function getLastAuthError(): string | null {
+  return lastAuthError;
 }
 
 // -----------------------------------------------------------------------------
@@ -233,6 +242,12 @@ async function ensureAuthenticated() {
       });
       // Ensure drive service is created with auth
       ensureDriveService();
+
+      // Verify auth works by making a test API call (blocking on first auth)
+      const healthy = await verifyAuthHealth();
+      if (!healthy) {
+        log("WARNING: Authentication may be broken. Tool calls may fail.");
+      }
     } finally {
       // Clear the promise after completion (success or failure)
       authenticationPromise = null;
@@ -407,6 +422,116 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 });
 
 // -----------------------------------------------------------------------------
+// TOOL REGISTRY
+// -----------------------------------------------------------------------------
+
+import type { ToolResponse } from "./utils/index.js";
+import type { docs_v1, sheets_v4, slides_v1, calendar_v3 } from "googleapis";
+
+interface ToolServices {
+  drive: drive_v3.Drive;
+  docs: docs_v1.Docs;
+  sheets: sheets_v4.Sheets;
+  slides: slides_v1.Slides;
+  calendar: calendar_v3.Calendar;
+  context: HandlerContext;
+}
+
+type ToolHandler = (services: ToolServices, args: unknown) => Promise<ToolResponse>;
+
+function createToolRegistry(): Record<string, ToolHandler> {
+  return {
+    // Drive tools
+    search: ({ drive }, args) => handleSearch(drive, args),
+    createTextFile: ({ drive }, args) => handleCreateTextFile(drive, args),
+    updateTextFile: ({ drive }, args) => handleUpdateTextFile(drive, args),
+    createFolder: ({ drive }, args) => handleCreateFolder(drive, args),
+    listFolder: ({ drive }, args) => handleListFolder(drive, args),
+    deleteItem: ({ drive }, args) => handleDeleteItem(drive, args),
+    renameItem: ({ drive }, args) => handleRenameItem(drive, args),
+    moveItem: ({ drive }, args) => handleMoveItem(drive, args),
+    copyFile: ({ drive }, args) => handleCopyFile(drive, args),
+    getFileMetadata: ({ drive }, args) => handleGetFileMetadata(drive, args),
+    exportFile: ({ drive }, args) => handleExportFile(drive, args),
+    shareFile: ({ drive }, args) => handleShareFile(drive, args),
+    getSharing: ({ drive }, args) => handleGetSharing(drive, args),
+    listRevisions: ({ drive }, args) => handleListRevisions(drive, args),
+    restoreRevision: ({ drive }, args) => handleRestoreRevision(drive, args),
+    downloadFile: ({ drive }, args) => handleDownloadFile(drive, args),
+    uploadFile: ({ drive }, args) => handleUploadFile(drive, args),
+    getStorageQuota: ({ drive }, args) => handleGetStorageQuota(drive, args),
+    starFile: ({ drive }, args) => handleStarFile(drive, args),
+    resolveFilePath: ({ drive, context }, args) => handleResolveFilePath(drive, args, context),
+    batchDelete: ({ drive, context }, args) => handleBatchDelete(drive, args, context),
+    batchRestore: ({ drive, context }, args) => handleBatchRestore(drive, args, context),
+    batchMove: ({ drive, context }, args) => handleBatchMove(drive, args, context),
+    batchShare: ({ drive, context }, args) => handleBatchShare(drive, args, context),
+    removePermission: ({ drive }, args) => handleRemovePermission(drive, args),
+    listTrash: ({ drive }, args) => handleListTrash(drive, args),
+    restoreFromTrash: ({ drive }, args) => handleRestoreFromTrash(drive, args),
+    emptyTrash: ({ drive, context }, args) => handleEmptyTrash(drive, args, context),
+    getFolderTree: ({ drive }, args) => handleGetFolderTree(drive, args),
+
+    // Docs tools
+    createGoogleDoc: ({ drive, docs }, args) => handleCreateGoogleDoc(drive, docs, args),
+    updateGoogleDoc: ({ docs }, args) => handleUpdateGoogleDoc(docs, args),
+    getGoogleDocContent: ({ drive, docs }, args) => handleGetGoogleDocContent(drive, docs, args),
+    appendToDoc: ({ docs }, args) => handleAppendToDoc(docs, args),
+    insertTextInDoc: ({ docs }, args) => handleInsertTextInDoc(docs, args),
+    deleteTextInDoc: ({ docs }, args) => handleDeleteTextInDoc(docs, args),
+    replaceTextInDoc: ({ docs }, args) => handleReplaceTextInDoc(docs, args),
+    formatGoogleDocRange: ({ docs }, args) => handleFormatGoogleDocRange(docs, args),
+
+    // Sheets tools
+    createGoogleSheet: ({ drive, sheets }, args) => handleCreateGoogleSheet(drive, sheets, args),
+    updateGoogleSheet: ({ sheets }, args) => handleUpdateGoogleSheet(sheets, args),
+    getGoogleSheetContent: ({ drive, sheets }, args) =>
+      handleGetGoogleSheetContent(drive, sheets, args),
+    formatGoogleSheetCells: ({ sheets }, args) => handleFormatGoogleSheetCells(sheets, args),
+    mergeGoogleSheetCells: ({ sheets }, args) => handleMergeGoogleSheetCells(sheets, args),
+    addGoogleSheetConditionalFormat: ({ sheets }, args) =>
+      handleAddGoogleSheetConditionalFormat(sheets, args),
+    createSheetTab: ({ sheets }, args) => handleCreateSheetTab(sheets, args),
+    deleteSheetTab: ({ sheets }, args) => handleDeleteSheetTab(sheets, args),
+    renameSheetTab: ({ sheets }, args) => handleRenameSheetTab(sheets, args),
+    listSheetTabs: ({ sheets }, args) => handleListSheetTabs(sheets, args),
+
+    // Slides tools
+    createGoogleSlides: ({ drive, slides }, args) => handleCreateGoogleSlides(drive, slides, args),
+    updateGoogleSlides: ({ slides }, args) => handleUpdateGoogleSlides(slides, args),
+    getGoogleSlidesContent: ({ drive, slides }, args) =>
+      handleGetGoogleSlidesContent(drive, slides, args),
+    createGoogleSlidesTextBox: ({ slides }, args) => handleCreateGoogleSlidesTextBox(slides, args),
+    createGoogleSlidesShape: ({ slides }, args) => handleCreateGoogleSlidesShape(slides, args),
+    getGoogleSlidesSpeakerNotes: ({ slides }, args) =>
+      handleGetGoogleSlidesSpeakerNotes(slides, args),
+    updateGoogleSlidesSpeakerNotes: ({ slides }, args) =>
+      handleUpdateGoogleSlidesSpeakerNotes(slides, args),
+    formatGoogleSlidesElement: ({ slides }, args) => handleFormatGoogleSlidesElement(slides, args),
+    listSlidePages: ({ slides }, args) => handleListSlidePages(slides, args),
+
+    // Unified smart tools
+    createFile: ({ drive, docs, sheets, slides }, args) =>
+      handleCreateFile(drive, docs, sheets, slides, args),
+    updateFile: ({ drive, docs, sheets, slides }, args) =>
+      handleUpdateFile(drive, docs, sheets, slides, args),
+    getFileContent: ({ drive, docs, sheets, slides }, args) =>
+      handleGetFileContent(drive, docs, sheets, slides, args),
+
+    // Calendar tools
+    listCalendars: ({ calendar }, args) => handleListCalendars(calendar, args),
+    listEvents: ({ calendar }, args) => handleListEvents(calendar, args),
+    getEvent: ({ calendar }, args) => handleGetEvent(calendar, args),
+    createEvent: ({ calendar }, args) => handleCreateEvent(calendar, args),
+    updateEvent: ({ calendar }, args) => handleUpdateEvent(calendar, args),
+    deleteEvent: ({ calendar }, args) => handleDeleteEvent(calendar, args),
+    findFreeTime: ({ calendar }, args) => handleFindFreeTime(calendar, args),
+  };
+}
+
+const toolRegistry = createToolRegistry();
+
+// -----------------------------------------------------------------------------
 // TOOL CALL REQUEST HANDLER
 // -----------------------------------------------------------------------------
 
@@ -416,168 +541,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     const args = request.params.arguments;
-
-    // Create handler context for MCP features (progress, elicitation)
     const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
-    const context: HandlerContext = {
-      server,
-      progressToken: meta?.progressToken,
+
+    const services: ToolServices = {
+      drive: drive!,
+      docs: getDocsService(authClient!),
+      sheets: getSheetsService(authClient!),
+      slides: getSlidesService(authClient!),
+      calendar: getCalendarService(authClient!),
+      context: { server, progressToken: meta?.progressToken },
     };
 
-    // Get Google API services (authClient is guaranteed non-null after ensureAuthenticated)
-    const docs = getDocsService(authClient!);
-    const sheets = getSheetsService(authClient!);
-    const slides = getSlidesService(authClient!);
-    const calendar = getCalendarService(authClient!);
-
-    switch (request.params.name) {
-      // Drive tools
-      case "search":
-        return handleSearch(drive!, args);
-      case "createTextFile":
-        return handleCreateTextFile(drive!, args);
-      case "updateTextFile":
-        return handleUpdateTextFile(drive!, args);
-      case "createFolder":
-        return handleCreateFolder(drive!, args);
-      case "listFolder":
-        return handleListFolder(drive!, args);
-      case "deleteItem":
-        return handleDeleteItem(drive!, args);
-      case "renameItem":
-        return handleRenameItem(drive!, args);
-      case "moveItem":
-        return handleMoveItem(drive!, args);
-      case "copyFile":
-        return handleCopyFile(drive!, args);
-      case "getFileMetadata":
-        return handleGetFileMetadata(drive!, args);
-      case "exportFile":
-        return handleExportFile(drive!, args);
-      case "shareFile":
-        return handleShareFile(drive!, args);
-      case "getSharing":
-        return handleGetSharing(drive!, args);
-      case "listRevisions":
-        return handleListRevisions(drive!, args);
-      case "restoreRevision":
-        return handleRestoreRevision(drive!, args);
-      case "downloadFile":
-        return handleDownloadFile(drive!, args);
-      case "uploadFile":
-        return handleUploadFile(drive!, args);
-      case "getStorageQuota":
-        return handleGetStorageQuota(drive!, args);
-      case "starFile":
-        return handleStarFile(drive!, args);
-      case "resolveFilePath":
-        return handleResolveFilePath(drive!, args, context);
-      case "batchDelete":
-        return handleBatchDelete(drive!, args, context);
-      case "batchRestore":
-        return handleBatchRestore(drive!, args, context);
-      case "batchMove":
-        return handleBatchMove(drive!, args, context);
-      case "batchShare":
-        return handleBatchShare(drive!, args, context);
-      case "removePermission":
-        return handleRemovePermission(drive!, args);
-      case "listTrash":
-        return handleListTrash(drive!, args);
-      case "restoreFromTrash":
-        return handleRestoreFromTrash(drive!, args);
-      case "emptyTrash":
-        return handleEmptyTrash(drive!, args, context);
-      case "getFolderTree":
-        return handleGetFolderTree(drive!, args);
-
-      // Docs tools
-      case "createGoogleDoc":
-        return handleCreateGoogleDoc(drive!, docs, args);
-      case "updateGoogleDoc":
-        return handleUpdateGoogleDoc(docs, args);
-      case "getGoogleDocContent":
-        return handleGetGoogleDocContent(drive!, docs, args);
-      case "appendToDoc":
-        return handleAppendToDoc(docs, args);
-      case "insertTextInDoc":
-        return handleInsertTextInDoc(docs, args);
-      case "deleteTextInDoc":
-        return handleDeleteTextInDoc(docs, args);
-      case "replaceTextInDoc":
-        return handleReplaceTextInDoc(docs, args);
-      case "formatGoogleDocRange":
-        return handleFormatGoogleDocRange(docs, args);
-
-      // Sheets tools
-      case "createGoogleSheet":
-        return handleCreateGoogleSheet(drive!, sheets, args);
-      case "updateGoogleSheet":
-        return handleUpdateGoogleSheet(sheets, args);
-      case "getGoogleSheetContent":
-        return handleGetGoogleSheetContent(drive!, sheets, args);
-      case "formatGoogleSheetCells":
-        return handleFormatGoogleSheetCells(sheets, args);
-      case "mergeGoogleSheetCells":
-        return handleMergeGoogleSheetCells(sheets, args);
-      case "addGoogleSheetConditionalFormat":
-        return handleAddGoogleSheetConditionalFormat(sheets, args);
-      case "createSheetTab":
-        return handleCreateSheetTab(sheets, args);
-      case "deleteSheetTab":
-        return handleDeleteSheetTab(sheets, args);
-      case "renameSheetTab":
-        return handleRenameSheetTab(sheets, args);
-      case "listSheetTabs":
-        return handleListSheetTabs(sheets, args);
-
-      // Slides tools
-      case "createGoogleSlides":
-        return handleCreateGoogleSlides(drive!, slides, args);
-      case "updateGoogleSlides":
-        return handleUpdateGoogleSlides(slides, args);
-      case "getGoogleSlidesContent":
-        return handleGetGoogleSlidesContent(drive!, slides, args);
-      case "createGoogleSlidesTextBox":
-        return handleCreateGoogleSlidesTextBox(slides, args);
-      case "createGoogleSlidesShape":
-        return handleCreateGoogleSlidesShape(slides, args);
-      case "getGoogleSlidesSpeakerNotes":
-        return handleGetGoogleSlidesSpeakerNotes(slides, args);
-      case "updateGoogleSlidesSpeakerNotes":
-        return handleUpdateGoogleSlidesSpeakerNotes(slides, args);
-      case "formatGoogleSlidesElement":
-        return handleFormatGoogleSlidesElement(slides, args);
-      case "listSlidePages":
-        return handleListSlidePages(slides, args);
-
-      // Unified smart tools
-      case "createFile":
-        return handleCreateFile(drive!, docs, sheets, slides, args);
-      case "updateFile":
-        return handleUpdateFile(drive!, docs, sheets, slides, args);
-      case "getFileContent":
-        return handleGetFileContent(drive!, docs, sheets, slides, args);
-
-      // Calendar tools
-      case "listCalendars":
-        return handleListCalendars(calendar, args);
-      case "listEvents":
-        return handleListEvents(calendar, args);
-      case "getEvent":
-        return handleGetEvent(calendar, args);
-      case "createEvent":
-        return handleCreateEvent(calendar, args);
-      case "updateEvent":
-        return handleUpdateEvent(calendar, args);
-      case "deleteEvent":
-        return handleDeleteEvent(calendar, args);
-      case "findFreeTime":
-        return handleFindFreeTime(calendar, args);
-
-      default:
-        return errorResponse(`Unknown tool: ${request.params.name}`);
+    const handler = toolRegistry[request.params.name];
+    if (!handler) {
+      return errorResponse(`Unknown tool: ${request.params.name}`);
     }
+
+    return handler(services, args);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     log("Tool error", { error: message });

@@ -112,7 +112,7 @@ export async function elicitFileSelection(
 
     return { selectedFileId: null, cancelled: true };
   } catch (error) {
-    log("Elicitation failed", { error: (error as Error).message });
+    log("Elicitation failed", { error: error instanceof Error ? error.message : String(error) });
     return {
       selectedFileId: null,
       cancelled: false,
@@ -166,7 +166,9 @@ export async function elicitConfirmation(
 
     return { confirmed: false, cancelled: true };
   } catch (error) {
-    log("Confirmation elicitation failed", { error: (error as Error).message });
+    log("Confirmation elicitation failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { confirmed: false, cancelled: false };
   }
 }

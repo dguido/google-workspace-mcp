@@ -53,6 +53,7 @@ export async function handleCreateGoogleDoc(
     return errorResponse(
       `A document named "${data.name}" already exists in this location. ` +
         `To update it, use updateGoogleDoc with documentId: ${existingFileId}`,
+      { code: "ALREADY_EXISTS", context: { existingFileId } },
     );
   }
 
@@ -436,6 +437,102 @@ export async function handleReplaceTextInDoc(
   );
 }
 
+// -----------------------------------------------------------------------------
+// DOC FORMATTING HELPERS
+// -----------------------------------------------------------------------------
+
+interface DocTextFormatOptions {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
+  foregroundColor?: { red?: number; green?: number; blue?: number };
+}
+
+function buildDocTextStyle(data: DocTextFormatOptions): {
+  style: Record<string, unknown>;
+  fields: string[];
+} {
+  const style: Record<string, unknown> = {};
+  const fields: string[] = [];
+
+  if (data.bold !== undefined) {
+    style.bold = data.bold;
+    fields.push("bold");
+  }
+  if (data.italic !== undefined) {
+    style.italic = data.italic;
+    fields.push("italic");
+  }
+  if (data.underline !== undefined) {
+    style.underline = data.underline;
+    fields.push("underline");
+  }
+  if (data.strikethrough !== undefined) {
+    style.strikethrough = data.strikethrough;
+    fields.push("strikethrough");
+  }
+  if (data.fontSize !== undefined) {
+    style.fontSize = { magnitude: data.fontSize, unit: "PT" };
+    fields.push("fontSize");
+  }
+  if (data.fontFamily !== undefined) {
+    style.weightedFontFamily = { fontFamily: data.fontFamily };
+    fields.push("weightedFontFamily");
+  }
+  if (data.foregroundColor) {
+    style.foregroundColor = toDocsColorStyle(data.foregroundColor);
+    fields.push("foregroundColor");
+  }
+
+  return { style, fields };
+}
+
+interface DocParagraphFormatOptions {
+  namedStyleType?: string;
+  alignment?: string;
+  lineSpacing?: number;
+  spaceAbove?: number;
+  spaceBelow?: number;
+}
+
+function buildDocParagraphStyle(data: DocParagraphFormatOptions): {
+  style: Record<string, unknown>;
+  fields: string[];
+} {
+  const style: Record<string, unknown> = {};
+  const fields: string[] = [];
+
+  if (data.namedStyleType !== undefined) {
+    style.namedStyleType = data.namedStyleType;
+    fields.push("namedStyleType");
+  }
+  if (data.alignment !== undefined) {
+    style.alignment = data.alignment;
+    fields.push("alignment");
+  }
+  if (data.lineSpacing !== undefined) {
+    style.lineSpacing = data.lineSpacing;
+    fields.push("lineSpacing");
+  }
+  if (data.spaceAbove !== undefined) {
+    style.spaceAbove = { magnitude: data.spaceAbove, unit: "PT" };
+    fields.push("spaceAbove");
+  }
+  if (data.spaceBelow !== undefined) {
+    style.spaceBelow = { magnitude: data.spaceBelow, unit: "PT" };
+    fields.push("spaceBelow");
+  }
+
+  return { style, fields };
+}
+
+// -----------------------------------------------------------------------------
+// DOC FORMATTING HANDLER
+// -----------------------------------------------------------------------------
+
 export async function handleFormatGoogleDocRange(
   docs: docs_v1.Docs,
   args: unknown,
@@ -444,101 +541,38 @@ export async function handleFormatGoogleDocRange(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  // Get document to determine range if not provided
   const document = await docs.documents.get({ documentId: data.documentId });
   const docEndIndex = getDocumentEndIndex(document.data);
-
-  // Default to entire document if no range specified
   const startIndex = data.startIndex ?? 1;
   const endIndex = data.endIndex ?? docEndIndex;
 
-  // Build requests array for batch update
   const requests: docs_v1.Schema$Request[] = [];
   const formatsApplied: string[] = [];
 
-  // Check for text formatting options
-  const textStyle: Record<string, unknown> = {};
-  const textFields: string[] = [];
-
-  if (data.bold !== undefined) {
-    textStyle.bold = data.bold;
-    textFields.push("bold");
-  }
-  if (data.italic !== undefined) {
-    textStyle.italic = data.italic;
-    textFields.push("italic");
-  }
-  if (data.underline !== undefined) {
-    textStyle.underline = data.underline;
-    textFields.push("underline");
-  }
-  if (data.strikethrough !== undefined) {
-    textStyle.strikethrough = data.strikethrough;
-    textFields.push("strikethrough");
-  }
-  if (data.fontSize !== undefined) {
-    textStyle.fontSize = { magnitude: data.fontSize, unit: "PT" };
-    textFields.push("fontSize");
-  }
-  if (data.fontFamily !== undefined) {
-    textStyle.weightedFontFamily = { fontFamily: data.fontFamily };
-    textFields.push("weightedFontFamily");
-  }
-  if (data.foregroundColor) {
-    textStyle.foregroundColor = toDocsColorStyle(data.foregroundColor);
-    textFields.push("foregroundColor");
-  }
-
-  // Add text style request if any text options provided
-  if (textFields.length > 0) {
+  const textResult = buildDocTextStyle(data);
+  if (textResult.fields.length > 0) {
     requests.push({
       updateTextStyle: {
         range: { startIndex, endIndex },
-        textStyle,
-        fields: textFields.join(","),
+        textStyle: textResult.style,
+        fields: textResult.fields.join(","),
       },
     });
-    formatsApplied.push(...textFields);
+    formatsApplied.push(...textResult.fields);
   }
 
-  // Check for paragraph formatting options
-  const paragraphStyle: Record<string, unknown> = {};
-  const paragraphFields: string[] = [];
-
-  if (data.namedStyleType !== undefined) {
-    paragraphStyle.namedStyleType = data.namedStyleType;
-    paragraphFields.push("namedStyleType");
-  }
-  if (data.alignment !== undefined) {
-    paragraphStyle.alignment = data.alignment;
-    paragraphFields.push("alignment");
-  }
-  if (data.lineSpacing !== undefined) {
-    paragraphStyle.lineSpacing = data.lineSpacing;
-    paragraphFields.push("lineSpacing");
-  }
-  if (data.spaceAbove !== undefined) {
-    paragraphStyle.spaceAbove = { magnitude: data.spaceAbove, unit: "PT" };
-    paragraphFields.push("spaceAbove");
-  }
-  if (data.spaceBelow !== undefined) {
-    paragraphStyle.spaceBelow = { magnitude: data.spaceBelow, unit: "PT" };
-    paragraphFields.push("spaceBelow");
-  }
-
-  // Add paragraph style request if any paragraph options provided
-  if (paragraphFields.length > 0) {
+  const paragraphResult = buildDocParagraphStyle(data);
+  if (paragraphResult.fields.length > 0) {
     requests.push({
       updateParagraphStyle: {
         range: { startIndex, endIndex },
-        paragraphStyle,
-        fields: paragraphFields.join(","),
+        paragraphStyle: paragraphResult.style,
+        fields: paragraphResult.fields.join(","),
       },
     });
-    formatsApplied.push(...paragraphFields);
+    formatsApplied.push(...paragraphResult.fields);
   }
 
-  // Validate at least one formatting option was provided
   if (requests.length === 0) {
     return errorResponse(
       "No formatting options specified. Provide at least one of: " +
@@ -547,7 +581,6 @@ export async function handleFormatGoogleDocRange(
     );
   }
 
-  // Execute batch update
   await docs.documents.batchUpdate({
     documentId: data.documentId,
     requestBody: { requests },
@@ -559,7 +592,6 @@ export async function handleFormatGoogleDocRange(
     endIndex,
     formatsApplied,
   });
-
   return successResponse(
     `Applied formatting to range ${startIndex}-${endIndex}: ${formatsApplied.join(", ")}`,
   );

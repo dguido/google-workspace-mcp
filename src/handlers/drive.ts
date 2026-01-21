@@ -259,7 +259,7 @@ export async function handleListFolder(
   } catch (error) {
     // Handle 404 error with clearer message including folder ID
     if (error instanceof Error && error.message.includes("not found")) {
-      return errorResponse(`Folder not found: ${targetFolderId}`);
+      return errorResponse(`Folder not found: ${targetFolderId}`, { code: "NOT_FOUND" });
     }
     throw error;
   }
@@ -1094,6 +1094,134 @@ export async function handleStarFile(drive: drive_v3.Drive, args: unknown): Prom
 }
 
 // -----------------------------------------------------------------------------
+// FILE PATH RESOLUTION - HELPERS
+// -----------------------------------------------------------------------------
+
+interface PathSegmentQuery {
+  folderId: string;
+  segmentName: string;
+  isLastSegment: boolean;
+  targetType?: "file" | "folder" | "any";
+}
+
+function buildPathSegmentQuery(params: PathSegmentQuery): string {
+  const { folderId, segmentName, isLastSegment, targetType } = params;
+  const escapedName = escapeQueryString(segmentName);
+
+  let query = combineQueries(
+    `'${folderId}' in parents`,
+    `name = '${escapedName}'`,
+    "trashed = false",
+  );
+
+  if (isLastSegment && targetType !== "any") {
+    if (targetType === "folder") {
+      query += ` and mimeType = '${FOLDER_MIME_TYPE}'`;
+    } else if (targetType === "file") {
+      query += ` and mimeType != '${FOLDER_MIME_TYPE}'`;
+    }
+  } else if (!isLastSegment) {
+    query += ` and mimeType = '${FOLDER_MIME_TYPE}'`;
+  }
+
+  return query;
+}
+
+async function buildNotFoundError(
+  drive: drive_v3.Drive,
+  segment: string,
+  folderId: string,
+  resolvedPath: string[],
+): Promise<string> {
+  const pathSoFar = "/" + resolvedPath.join("/");
+  const searchedIn =
+    resolvedPath.length > 0 ? `"${resolvedPath[resolvedPath.length - 1]}"` : "root";
+
+  const contentsResponse = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: "files(name, mimeType)",
+    pageSize: 20,
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
+  });
+
+  const contents = (contentsResponse.data.files || [])
+    .map((f) => (f.mimeType === FOLDER_MIME_TYPE ? `📁 ${f.name}` : `📄 ${f.name}`))
+    .slice(0, 10);
+
+  const contentsStr =
+    contents.length > 0
+      ? `\nContents of ${searchedIn}: ${contents.join(", ")}${contents.length >= 10 ? "..." : ""}`
+      : `\n${searchedIn} appears to be empty.`;
+
+  return `Path segment "${segment}" not found at "${pathSoFar || "/"}".${contentsStr}`;
+}
+
+interface ResolvedFileInfo {
+  id: string;
+  name: string;
+  mimeType: string | null | undefined;
+  modifiedTime: string | null | undefined;
+}
+
+function buildResolvedResponse(
+  file: ResolvedFileInfo,
+  originalPath: string,
+  resolvedPath: string[],
+): ToolResponse {
+  const typeLabel = file.mimeType === FOLDER_MIME_TYPE ? "folder" : "file";
+  return structuredResponse(`Resolved "${originalPath}" to ${typeLabel} "${file.name}"`, {
+    id: file.id,
+    name: file.name,
+    path: "/" + resolvedPath.join("/"),
+    mimeType: file.mimeType,
+    modifiedTime: file.modifiedTime,
+  });
+}
+
+async function handleMultipleMatches(
+  files: drive_v3.Schema$File[],
+  segment: string,
+  resolvedPath: string[],
+  context: HandlerContext | undefined,
+): Promise<{ selectedFile?: drive_v3.Schema$File; error?: string }> {
+  if (!context?.server) {
+    const message = formatDisambiguationOptions(
+      files.map((f) => ({
+        id: f.id!,
+        name: f.name!,
+        mimeType: f.mimeType || undefined,
+        modifiedTime: f.modifiedTime,
+      })),
+      `Multiple items named "${segment}" found at "/${resolvedPath.join("/")}".`,
+    );
+    return { error: message };
+  }
+
+  const fileOptions = files.map((f) => ({
+    id: f.id!,
+    name: f.name!,
+    mimeType: f.mimeType || undefined,
+    modifiedTime: f.modifiedTime || undefined,
+    path: "/" + [...resolvedPath, f.name!].join("/"),
+  }));
+
+  const result = await elicitFileSelection(
+    context.server,
+    fileOptions,
+    `Multiple items named "${segment}" found at "/${resolvedPath.join("/")}". Please select one:`,
+  );
+
+  if (result.cancelled) return { error: "File selection cancelled" };
+  if (result.error) return { error: result.error };
+  if (result.selectedFileId) {
+    const selected = files.find((f) => f.id === result.selectedFileId);
+    return { selectedFile: selected };
+  }
+  return { error: "No file selected" };
+}
+
+// -----------------------------------------------------------------------------
 // FILE PATH RESOLUTION
 // -----------------------------------------------------------------------------
 
@@ -1125,25 +1253,12 @@ export async function handleResolveFilePath(
     if (!part) continue;
 
     const isLastPart = i === parts.length - 1;
-    const escapedPart = escapeQueryString(part);
-
-    // Build query based on whether we're looking for the final item or a folder
-    let query = combineQueries(
-      `'${currentFolderId}' in parents`,
-      `name = '${escapedPart}'`,
-      "trashed = false",
-    );
-
-    if (isLastPart && data.type !== "any") {
-      if (data.type === "folder") {
-        query += ` and mimeType = '${FOLDER_MIME_TYPE}'`;
-      } else if (data.type === "file") {
-        query += ` and mimeType != '${FOLDER_MIME_TYPE}'`;
-      }
-    } else if (!isLastPart) {
-      // For intermediate parts, must be a folder
-      query += ` and mimeType = '${FOLDER_MIME_TYPE}'`;
-    }
+    const query = buildPathSegmentQuery({
+      folderId: currentFolderId,
+      segmentName: part,
+      isLastSegment: isLastPart,
+      targetType: data.type,
+    });
 
     const response = await drive.files.list({
       q: query,
@@ -1156,122 +1271,53 @@ export async function handleResolveFilePath(
     const files = response.data.files || [];
 
     if (files.length === 0) {
-      // Build helpful error message
-      const pathSoFar = "/" + resolvedPath.join("/");
-      const searchedIn =
-        resolvedPath.length > 0 ? `"${resolvedPath[resolvedPath.length - 1]}"` : "root";
-
-      // List what's in the current folder for context
-      const contentsResponse = await drive.files.list({
-        q: `'${currentFolderId}' in parents and trashed = false`,
-        fields: "files(name, mimeType)",
-        pageSize: 20,
-        includeItemsFromAllDrives: true,
-        supportsAllDrives: true,
-      });
-
-      const contents = (contentsResponse.data.files || [])
-        .map((f) => (f.mimeType === FOLDER_MIME_TYPE ? `📁 ${f.name}` : `📄 ${f.name}`))
-        .slice(0, 10);
-
-      const contentsStr =
-        contents.length > 0
-          ? `\nContents of ${searchedIn}: ${contents.join(", ")}${contents.length >= 10 ? "..." : ""}`
-          : `\n${searchedIn} appears to be empty.`;
-
-      return errorResponse(
-        `Path segment "${part}" not found at "${pathSoFar || "/"}".${contentsStr}`,
-      );
+      const errorMsg = await buildNotFoundError(drive, part, currentFolderId, resolvedPath);
+      return errorResponse(errorMsg);
     }
 
     if (files.length > 1) {
-      // Multiple matches - try elicitation if context available
-      if (context?.server) {
-        const fileOptions = files.map((f) => ({
-          id: f.id!,
-          name: f.name!,
-          mimeType: f.mimeType || undefined,
-          modifiedTime: f.modifiedTime || undefined,
-          path: "/" + [...resolvedPath, f.name!].join("/"),
-        }));
-
-        const result = await elicitFileSelection(
-          context.server,
-          fileOptions,
-          `Multiple items named "${part}" found at "/${resolvedPath.join("/")}". Please select one:`,
-        );
-
-        if (result.cancelled) {
-          return errorResponse("File selection cancelled");
+      const result = await handleMultipleMatches(files, part, resolvedPath, context);
+      if (result.error) return errorResponse(result.error);
+      if (result.selectedFile) {
+        resolvedPath.push(result.selectedFile.name!);
+        if (isLastPart) {
+          log("Path resolved via elicitation", { path: data.path, fileId: result.selectedFile.id });
+          return buildResolvedResponse(
+            {
+              id: result.selectedFile.id!,
+              name: result.selectedFile.name!,
+              mimeType: result.selectedFile.mimeType,
+              modifiedTime: result.selectedFile.modifiedTime,
+            },
+            data.path,
+            resolvedPath,
+          );
         }
-
-        if (result.error) {
-          // Elicitation not supported or failed - return disambiguation message
-          return errorResponse(result.error);
-        }
-
-        if (result.selectedFileId) {
-          const selectedFile = files.find((f) => f.id === result.selectedFileId)!;
-          resolvedPath.push(selectedFile.name!);
-
-          if (isLastPart) {
-            log("Path resolved via elicitation", {
-              path: data.path,
-              fileId: selectedFile.id,
-            });
-            return structuredResponse(
-              `Resolved "${data.path}" to ${selectedFile.mimeType === FOLDER_MIME_TYPE ? "folder" : "file"} "${selectedFile.name}"`,
-              {
-                id: selectedFile.id,
-                name: selectedFile.name,
-                path: "/" + resolvedPath.join("/"),
-                mimeType: selectedFile.mimeType,
-                modifiedTime: selectedFile.modifiedTime,
-              },
-            );
-          }
-
-          currentFolderId = selectedFile.id!;
-          continue;
-        }
+        currentFolderId = result.selectedFile.id!;
+        continue;
       }
-
-      // Fall back to error with disambiguation options
-      const disambiguationMessage = formatDisambiguationOptions(
-        files.map((f) => ({
-          id: f.id!,
-          name: f.name!,
-          mimeType: f.mimeType || undefined,
-          modifiedTime: f.modifiedTime,
-        })),
-        `Multiple items named "${part}" found at "/${resolvedPath.join("/")}".`,
-      );
-      return errorResponse(disambiguationMessage);
     }
 
     const file = files[0];
     resolvedPath.push(file.name!);
 
     if (isLastPart) {
-      // We found the target
       log("Path resolved successfully", { path: data.path, fileId: file.id });
-      return structuredResponse(
-        `Resolved "${data.path}" to ${file.mimeType === FOLDER_MIME_TYPE ? "folder" : "file"} "${file.name}"`,
+      return buildResolvedResponse(
         {
-          id: file.id,
-          name: file.name,
-          path: "/" + resolvedPath.join("/"),
+          id: file.id!,
+          name: file.name!,
           mimeType: file.mimeType,
           modifiedTime: file.modifiedTime,
         },
+        data.path,
+        resolvedPath,
       );
     }
 
-    // Not the last part - must be a folder
     currentFolderId = file.id!;
   }
 
-  // Should not reach here, but handle edge case
   return errorResponse("Unable to resolve path");
 }
 
@@ -1659,7 +1705,10 @@ export async function handleRestoreFromTrash(
   });
 
   if (!file.data.trashed) {
-    return errorResponse(`File "${file.data.name}" is not in trash`);
+    return errorResponse(`File "${file.data.name}" is not in trash`, {
+      code: "INVALID_INPUT",
+      context: { fileId: data.fileId },
+    });
   }
 
   // First, restore from trash

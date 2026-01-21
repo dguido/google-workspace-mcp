@@ -147,14 +147,14 @@ export async function withRetry<T>(
       // Check if we should retry
       if (attempt >= config.maxRetries) {
         log(`${config.operationName} failed after ${config.maxRetries + 1} attempts`, {
-          error: (error as Error).message || String(error),
+          error: error instanceof Error ? error.message : String(error),
         });
         throw error;
       }
 
       if (!isRetryableError(error)) {
         log(`${config.operationName} failed with non-retryable error`, {
-          error: (error as Error).message || String(error),
+          error: error instanceof Error ? error.message : String(error),
         });
         throw error;
       }
@@ -164,7 +164,7 @@ export async function withRetry<T>(
       log(`${config.operationName} failed, retrying in ${delayMs}ms`, {
         attempt: attempt + 1,
         maxRetries: config.maxRetries,
-        error: (error as Error).message || String(error),
+        error: error instanceof Error ? error.message : String(error),
       });
 
       await sleep(delayMs);
@@ -244,7 +244,7 @@ export async function withRateLimitedBatch<T, R>(
           } catch (error) {
             return {
               success: false,
-              error: (error as Error).message || String(error),
+              error: error instanceof Error ? error.message : String(error),
             };
           }
         },

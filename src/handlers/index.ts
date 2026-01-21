@@ -94,6 +94,7 @@ export {
   resolvePath,
   resolveFolderId,
   checkFileExists,
+  checkFileExistsResult,
   convertA1ToGridRange,
 } from "./helpers.js";
-export type { HandlerContext } from "./helpers.js";
+export type { HandlerContext, FileExistsResult } from "./helpers.js";

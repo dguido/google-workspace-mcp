@@ -79,7 +79,7 @@ export function createProgressReporter(
       } catch (error) {
         // Log but don't fail the operation if progress notification fails
         log("Failed to send progress notification", {
-          error: (error as Error).message,
+          error: error instanceof Error ? error.message : String(error),
           progress,
           total,
           message,
@@ -165,7 +165,7 @@ export async function processBatchWithProgress<T, R>(
           } catch (error) {
             return {
               success: false,
-              error: (error as Error).message || String(error),
+              error: error instanceof Error ? error.message : String(error),
               item,
             };
           }

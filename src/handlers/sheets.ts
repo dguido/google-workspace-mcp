@@ -221,6 +221,148 @@ export async function handleGetGoogleSheetContent(
   });
 }
 
+// -----------------------------------------------------------------------------
+// SHEET FORMATTING HELPERS
+// -----------------------------------------------------------------------------
+
+interface SheetFormatOptions {
+  backgroundColor?: { red?: number; green?: number; blue?: number };
+  horizontalAlignment?: string;
+  verticalAlignment?: string;
+  wrapStrategy?: string;
+  bold?: boolean;
+  italic?: boolean;
+  strikethrough?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
+  foregroundColor?: { red?: number; green?: number; blue?: number };
+  numberFormat?: { pattern: string; type?: string };
+}
+
+interface CellFormatResult {
+  format: sheets_v4.Schema$CellFormat;
+  fields: string[];
+  appliedTypes: string[];
+}
+
+function buildCellFormat(data: SheetFormatOptions): CellFormatResult {
+  const fields: string[] = [];
+  const format: sheets_v4.Schema$CellFormat = {};
+  const appliedTypes: string[] = [];
+
+  if (data.backgroundColor) {
+    format.backgroundColorStyle = toSheetsColorStyle(data.backgroundColor);
+    fields.push("userEnteredFormat.backgroundColorStyle");
+  }
+  if (data.horizontalAlignment) {
+    format.horizontalAlignment = data.horizontalAlignment;
+    fields.push("userEnteredFormat.horizontalAlignment");
+  }
+  if (data.verticalAlignment) {
+    format.verticalAlignment = data.verticalAlignment;
+    fields.push("userEnteredFormat.verticalAlignment");
+  }
+  if (data.wrapStrategy) {
+    format.wrapStrategy = data.wrapStrategy;
+    fields.push("userEnteredFormat.wrapStrategy");
+  }
+
+  const textResult = buildTextFormat(data);
+  if (textResult.fields.length > 0) {
+    format.textFormat = textResult.format;
+    fields.push("userEnteredFormat.textFormat(" + textResult.fields.join(",") + ")");
+    appliedTypes.push("text");
+  }
+
+  if (data.numberFormat) {
+    format.numberFormat = {
+      pattern: data.numberFormat.pattern,
+      ...(data.numberFormat.type && { type: data.numberFormat.type }),
+    };
+    fields.push("userEnteredFormat.numberFormat");
+    appliedTypes.push("number");
+  }
+
+  return { format, fields, appliedTypes };
+}
+
+function buildTextFormat(data: SheetFormatOptions): {
+  format: sheets_v4.Schema$TextFormat;
+  fields: string[];
+} {
+  const fields: string[] = [];
+  const format: sheets_v4.Schema$TextFormat = {};
+
+  if (data.bold !== undefined) {
+    format.bold = data.bold;
+    fields.push("bold");
+  }
+  if (data.italic !== undefined) {
+    format.italic = data.italic;
+    fields.push("italic");
+  }
+  if (data.strikethrough !== undefined) {
+    format.strikethrough = data.strikethrough;
+    fields.push("strikethrough");
+  }
+  if (data.underline !== undefined) {
+    format.underline = data.underline;
+    fields.push("underline");
+  }
+  if (data.fontSize !== undefined) {
+    format.fontSize = data.fontSize;
+    fields.push("fontSize");
+  }
+  if (data.fontFamily !== undefined) {
+    format.fontFamily = data.fontFamily;
+    fields.push("fontFamily");
+  }
+  if (data.foregroundColor) {
+    format.foregroundColorStyle = toSheetsColorStyle(data.foregroundColor);
+    fields.push("foregroundColorStyle");
+  }
+
+  return { format, fields };
+}
+
+interface BorderOptions {
+  style: string;
+  width?: number;
+  color?: { red?: number; green?: number; blue?: number };
+  top?: boolean;
+  bottom?: boolean;
+  left?: boolean;
+  right?: boolean;
+  innerHorizontal?: boolean;
+  innerVertical?: boolean;
+}
+
+function buildBordersRequest(
+  gridRange: sheets_v4.Schema$GridRange,
+  options: BorderOptions,
+): sheets_v4.Schema$UpdateBordersRequest {
+  const border: sheets_v4.Schema$Border = {
+    style: options.style,
+    width: options.width || 1,
+    ...(options.color && { colorStyle: toSheetsColorStyle(options.color) }),
+  };
+
+  const request: sheets_v4.Schema$UpdateBordersRequest = { range: gridRange };
+  if (options.top !== false) request.top = border;
+  if (options.bottom !== false) request.bottom = border;
+  if (options.left !== false) request.left = border;
+  if (options.right !== false) request.right = border;
+  if (options.innerHorizontal) request.innerHorizontal = border;
+  if (options.innerVertical) request.innerVertical = border;
+
+  return request;
+}
+
+// -----------------------------------------------------------------------------
+// SHEET FORMATTING HANDLER
+// -----------------------------------------------------------------------------
+
 export async function handleFormatGoogleSheetCells(
   sheets: sheets_v4.Sheets,
   args: unknown,
@@ -233,122 +375,28 @@ export async function handleFormatGoogleSheetCells(
   try {
     sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
   } catch (err) {
-    return errorResponse((err as Error).message);
+    return errorResponse(err instanceof Error ? err.message : String(err));
   }
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
   const requests: sheets_v4.Schema$Request[] = [];
   const appliedFormats: string[] = [];
 
-  // Build cell format (background, alignment, wrap, text, number)
-  const cellFields: string[] = [];
-  const userEnteredFormat: sheets_v4.Schema$CellFormat = {};
-
-  // Background color
-  if (data.backgroundColor) {
-    userEnteredFormat.backgroundColorStyle = toSheetsColorStyle(data.backgroundColor);
-    cellFields.push("userEnteredFormat.backgroundColorStyle");
-  }
-
-  // Alignment and wrap
-  if (data.horizontalAlignment) {
-    userEnteredFormat.horizontalAlignment = data.horizontalAlignment;
-    cellFields.push("userEnteredFormat.horizontalAlignment");
-  }
-  if (data.verticalAlignment) {
-    userEnteredFormat.verticalAlignment = data.verticalAlignment;
-    cellFields.push("userEnteredFormat.verticalAlignment");
-  }
-  if (data.wrapStrategy) {
-    userEnteredFormat.wrapStrategy = data.wrapStrategy;
-    cellFields.push("userEnteredFormat.wrapStrategy");
-  }
-
-  // Text formatting
-  const textFormatFields: string[] = [];
-  const textFormat: sheets_v4.Schema$TextFormat = {};
-
-  if (data.bold !== undefined) {
-    textFormat.bold = data.bold;
-    textFormatFields.push("bold");
-  }
-  if (data.italic !== undefined) {
-    textFormat.italic = data.italic;
-    textFormatFields.push("italic");
-  }
-  if (data.strikethrough !== undefined) {
-    textFormat.strikethrough = data.strikethrough;
-    textFormatFields.push("strikethrough");
-  }
-  if (data.underline !== undefined) {
-    textFormat.underline = data.underline;
-    textFormatFields.push("underline");
-  }
-  if (data.fontSize !== undefined) {
-    textFormat.fontSize = data.fontSize;
-    textFormatFields.push("fontSize");
-  }
-  if (data.fontFamily !== undefined) {
-    textFormat.fontFamily = data.fontFamily;
-    textFormatFields.push("fontFamily");
-  }
-  if (data.foregroundColor) {
-    textFormat.foregroundColorStyle = toSheetsColorStyle(data.foregroundColor);
-    textFormatFields.push("foregroundColorStyle");
-  }
-
-  if (textFormatFields.length > 0) {
-    userEnteredFormat.textFormat = textFormat;
-    cellFields.push("userEnteredFormat.textFormat(" + textFormatFields.join(",") + ")");
-    appliedFormats.push("text");
-  }
-
-  // Number formatting
-  if (data.numberFormat) {
-    userEnteredFormat.numberFormat = {
-      pattern: data.numberFormat.pattern,
-      ...(data.numberFormat.type && { type: data.numberFormat.type }),
-    };
-    cellFields.push("userEnteredFormat.numberFormat");
-    appliedFormats.push("number");
-  }
-
-  // Add repeatCell request if any cell formatting specified
-  if (cellFields.length > 0) {
+  const cellResult = buildCellFormat(data);
+  if (cellResult.fields.length > 0) {
     requests.push({
       repeatCell: {
         range: gridRange,
-        cell: { userEnteredFormat },
-        fields: cellFields.join(","),
+        cell: { userEnteredFormat: cellResult.format },
+        fields: cellResult.fields.join(","),
       },
     });
-    if (!appliedFormats.includes("text") && !appliedFormats.includes("number")) {
-      appliedFormats.push("cell");
-    }
+    appliedFormats.push(...cellResult.appliedTypes);
+    if (appliedFormats.length === 0) appliedFormats.push("cell");
   }
 
-  // Border formatting (uses separate updateBorders request)
   if (data.borders) {
-    const border: sheets_v4.Schema$Border = {
-      style: data.borders.style,
-      width: data.borders.width || 1,
-      ...(data.borders.color && {
-        colorStyle: toSheetsColorStyle(data.borders.color),
-      }),
-    };
-
-    const updateBordersRequest: sheets_v4.Schema$UpdateBordersRequest = {
-      range: gridRange,
-    };
-
-    if (data.borders.top !== false) updateBordersRequest.top = border;
-    if (data.borders.bottom !== false) updateBordersRequest.bottom = border;
-    if (data.borders.left !== false) updateBordersRequest.left = border;
-    if (data.borders.right !== false) updateBordersRequest.right = border;
-    if (data.borders.innerHorizontal) updateBordersRequest.innerHorizontal = border;
-    if (data.borders.innerVertical) updateBordersRequest.innerVertical = border;
-
-    requests.push({ updateBorders: updateBordersRequest });
+    requests.push({ updateBorders: buildBordersRequest(gridRange, data.borders) });
     appliedFormats.push("borders");
   }
 
@@ -361,8 +409,7 @@ export async function handleFormatGoogleSheetCells(
     requestBody: { requests },
   });
 
-  const formatDesc = appliedFormats.join(", ");
-  return successResponse(`Formatted cells in range ${data.range} (${formatDesc})`);
+  return successResponse(`Formatted cells in range ${data.range} (${appliedFormats.join(", ")})`);
 }
 
 export async function handleMergeGoogleSheetCells(
@@ -377,7 +424,7 @@ export async function handleMergeGoogleSheetCells(
   try {
     sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
   } catch (err) {
-    return errorResponse((err as Error).message);
+    return errorResponse(err instanceof Error ? err.message : String(err));
   }
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
@@ -411,7 +458,7 @@ export async function handleAddGoogleSheetConditionalFormat(
   try {
     sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
   } catch (err) {
-    return errorResponse((err as Error).message);
+    return errorResponse(err instanceof Error ? err.message : String(err));
   }
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
@@ -510,7 +557,9 @@ export async function handleCreateSheetTab(
   // Check if sheet name already exists
   const existingSheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.title);
   if (existingSheetId !== null) {
-    return errorResponse(`A sheet tab named "${data.title}" already exists in this spreadsheet.`);
+    return errorResponse(`A sheet tab named "${data.title}" already exists in this spreadsheet.`, {
+      code: "ALREADY_EXISTS",
+    });
   }
 
   // Create the new sheet

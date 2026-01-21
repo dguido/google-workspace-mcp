@@ -1,6 +1,6 @@
 export { log } from "./logging.js";
 export { successResponse, structuredResponse, errorResponse } from "./responses.js";
-export type { ToolResponse } from "./responses.js";
+export type { ToolResponse, ErrorCode, ErrorOptions } from "./responses.js";
 export { validateArgs } from "./validation.js";
 export type { ValidationResult } from "./validation.js";
 export {
@@ -30,3 +30,11 @@ export {
   withProgressReporting,
 } from "./progress.js";
 export type { ProgressReporter, BatchWithProgressOptions } from "./progress.js";
+export {
+  getCachedPath,
+  setCachedPath,
+  getCachedSegment,
+  setCachedSegment,
+  clearPathCache,
+  getPathCacheStats,
+} from "./pathCache.js";

@@ -8,6 +8,12 @@ import {
   getMimeTypeFromExtension,
 } from "../utils/mimeTypes.js";
 import { escapeQueryString, combineQueries } from "../utils/gdrive-query.js";
+import {
+  getCachedPath,
+  setCachedPath,
+  getCachedSegment,
+  setCachedSegment,
+} from "../utils/pathCache.js";
 
 /**
  * Context passed to handlers for access to MCP features like progress and elicitation
@@ -46,35 +52,74 @@ export function validateTextFileExtension(name: string): void {
   }
 }
 
+interface ResolvePathOptions {
+  /** Create intermediate folders if they don't exist (default: true) */
+  createIfMissing?: boolean;
+}
+
 /**
- * Resolve a slash-delimited path (e.g. "/some/folder") within Google Drive
- * into a folder ID. Creates folders if they don't exist.
+ * Core path resolution function. Resolves a slash-delimited path to a folder ID.
+ *
+ * @param drive - Google Drive API instance
+ * @param pathStr - Path to resolve (e.g., "/some/folder")
+ * @param options - Resolution options
+ * @returns The resolved folder ID
  */
-export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promise<string> {
+async function resolvePathCore(
+  drive: drive_v3.Drive,
+  pathStr: string,
+  options: ResolvePathOptions = {},
+): Promise<string> {
+  const { createIfMissing = true } = options;
+
   if (!pathStr || pathStr === "/") return "root";
+
+  // Check full path cache first
+  const cachedPath = getCachedPath(pathStr);
+  if (cachedPath) {
+    log("Path cache hit", { path: pathStr, fileId: cachedPath });
+    return cachedPath;
+  }
 
   const parts = pathStr.replace(/^\/+|\/+$/g, "").split("/");
   let currentFolderId: string = "root";
 
   for (const part of parts) {
     if (!part) continue;
+
+    // Check segment cache
+    const cachedSegment = getCachedSegment(currentFolderId, part);
+    if (cachedSegment) {
+      currentFolderId = cachedSegment;
+      continue;
+    }
+
+    const escapedPart = escapeQueryString(part);
     const response = await drive.files.list({
-      q: `'${currentFolderId}' in parents and name = '${part}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
+      q: combineQueries(
+        `'${currentFolderId}' in parents`,
+        `name = '${escapedPart}'`,
+        `mimeType = '${FOLDER_MIME_TYPE}'`,
+        "trashed = false",
+      ),
       fields: "files(id)",
       spaces: "drive",
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
     });
 
-    // If the folder segment doesn't exist, create it
     if (!response.data.files?.length) {
-      const folderMetadata = {
-        name: part,
-        mimeType: FOLDER_MIME_TYPE,
-        parents: [currentFolderId],
-      };
+      if (!createIfMissing) {
+        throw new Error(`Folder not found: ${part} in path ${pathStr}`);
+      }
+
+      // Create the missing folder
       const folder = await drive.files.create({
-        requestBody: folderMetadata,
+        requestBody: {
+          name: part,
+          mimeType: FOLDER_MIME_TYPE,
+          parents: [currentFolderId],
+        },
         fields: "id",
         supportsAllDrives: true,
       });
@@ -83,14 +128,25 @@ export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promi
         throw new Error(`Failed to create intermediate folder: ${part}`);
       }
 
+      setCachedSegment(currentFolderId, part, folder.data.id);
       currentFolderId = folder.data.id;
     } else {
-      // Folder exists, proceed deeper
-      currentFolderId = response.data.files[0].id!;
+      const foundId = response.data.files[0].id!;
+      setCachedSegment(currentFolderId, part, foundId);
+      currentFolderId = foundId;
     }
   }
 
+  setCachedPath(pathStr, currentFolderId);
   return currentFolderId;
+}
+
+/**
+ * Resolve a slash-delimited path (e.g. "/some/folder") within Google Drive
+ * into a folder ID. Creates folders if they don't exist.
+ */
+export async function resolvePath(drive: drive_v3.Drive, pathStr: string): Promise<string> {
+  return resolvePathCore(drive, pathStr, { createIfMissing: true });
 }
 
 /**
@@ -189,46 +245,28 @@ export async function resolveFileIdFromPath(
  * Resolve a path without creating folders. Throws if any folder doesn't exist.
  */
 async function resolvePathWithoutCreate(drive: drive_v3.Drive, pathStr: string): Promise<string> {
-  if (!pathStr || pathStr === "/") return "root";
-
-  const parts = pathStr.replace(/^\/+|\/+$/g, "").split("/");
-  let currentFolderId: string = "root";
-
-  for (const part of parts) {
-    if (!part) continue;
-    const escapedPart = escapeQueryString(part);
-    const response = await drive.files.list({
-      q: combineQueries(
-        `'${currentFolderId}' in parents`,
-        `name = '${escapedPart}'`,
-        `mimeType = '${FOLDER_MIME_TYPE}'`,
-        "trashed = false",
-      ),
-      fields: "files(id)",
-      spaces: "drive",
-      includeItemsFromAllDrives: true,
-      supportsAllDrives: true,
-    });
-
-    if (!response.data.files?.length) {
-      throw new Error(`Folder not found: ${part} in path ${pathStr}`);
-    }
-
-    currentFolderId = response.data.files[0].id!;
-  }
-
-  return currentFolderId;
+  return resolvePathCore(drive, pathStr, { createIfMissing: false });
 }
 
 /**
- * Check if a file with the given name already exists in the specified folder.
- * Returns the file ID if it exists, null otherwise.
+ * Result of checking file existence. Discriminated union allows callers to
+ * distinguish "file not found" from "API error".
  */
-export async function checkFileExists(
+export type FileExistsResult =
+  | { status: "found"; id: string }
+  | { status: "not_found" }
+  | { status: "error"; error: Error };
+
+/**
+ * Check if a file with the given name already exists in the specified folder.
+ * Returns a discriminated union allowing callers to distinguish between
+ * "file found", "file not found", and "API error" cases.
+ */
+export async function checkFileExistsResult(
   drive: drive_v3.Drive,
   name: string,
   parentFolderId: string = "root",
-): Promise<string | null> {
+): Promise<FileExistsResult> {
   try {
     const escapedName = escapeQueryString(name);
     const query = combineQueries(
@@ -245,14 +283,33 @@ export async function checkFileExists(
       supportsAllDrives: true,
     });
 
-    if (res.data.files && res.data.files.length > 0) {
-      return res.data.files[0].id || null;
+    if (res.data.files && res.data.files.length > 0 && res.data.files[0].id) {
+      return { status: "found", id: res.data.files[0].id };
     }
-    return null;
+    return { status: "not_found" };
   } catch (error) {
     log("Error checking file existence:", error);
-    return null;
+    return { status: "error", error: error instanceof Error ? error : new Error(String(error)) };
   }
+}
+
+/**
+ * Check if a file with the given name already exists in the specified folder.
+ * Returns the file ID if it exists, null otherwise.
+ *
+ * @deprecated Use checkFileExistsResult() for better error handling.
+ * This function cannot distinguish "file not found" from "API error".
+ */
+export async function checkFileExists(
+  drive: drive_v3.Drive,
+  name: string,
+  parentFolderId: string = "root",
+): Promise<string | null> {
+  const result = await checkFileExistsResult(drive, name, parentFolderId);
+  if (result.status === "found") {
+    return result.id;
+  }
+  return null;
 }
 
 /**

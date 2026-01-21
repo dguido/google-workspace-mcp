@@ -297,10 +297,7 @@ describe("handleCreateEvent", () => {
       summary: "Team Meeting",
       start: { dateTime: "2024-01-15T10:00:00-05:00" },
       end: { dateTime: "2024-01-15T11:00:00-05:00" },
-      attendees: [
-        { email: "user1@example.com" },
-        { email: "user2@example.com", optional: true },
-      ],
+      attendees: [{ email: "user1@example.com" }, { email: "user2@example.com", optional: true }],
     });
 
     expect(mockCalendar.events.insert).toHaveBeenCalledWith(
