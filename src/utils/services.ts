@@ -1,10 +1,11 @@
-import { google, docs_v1, sheets_v4, slides_v1 } from "googleapis";
+import { google, docs_v1, sheets_v4, slides_v1, calendar_v3 } from "googleapis";
 import type { OAuth2Client } from "google-auth-library";
 
 // Cached service instances
 let docsService: docs_v1.Docs | null = null;
 let sheetsService: sheets_v4.Sheets | null = null;
 let slidesService: slides_v1.Slides | null = null;
+let calendarService: calendar_v3.Calendar | null = null;
 let lastAuthClient: OAuth2Client | null = null;
 
 /**
@@ -14,6 +15,7 @@ export function clearServiceCache(): void {
   docsService = null;
   sheetsService = null;
   slidesService = null;
+  calendarService = null;
   lastAuthClient = null;
 }
 
@@ -58,4 +60,15 @@ export function getSlidesService(authClient: OAuth2Client): slides_v1.Slides {
     slidesService = google.slides({ version: "v1", auth: authClient });
   }
   return slidesService;
+}
+
+/**
+ * Get or create a cached Google Calendar service instance.
+ */
+export function getCalendarService(authClient: OAuth2Client): calendar_v3.Calendar {
+  checkAuthClient(authClient);
+  if (!calendarService) {
+    calendarService = google.calendar({ version: "v3", auth: authClient });
+  }
+  return calendarService;
 }

@@ -8,7 +8,7 @@ import open from "open";
 import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
 
-// OAuth scopes for Google Drive, Docs, Sheets, and Slides
+// OAuth scopes for Google Drive, Docs, Sheets, Slides, and Calendar
 const SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/drive.file",
@@ -16,6 +16,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/documents",
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/presentations",
+  "https://www.googleapis.com/auth/calendar.events",
 ];
 
 export class AuthServer {
@@ -114,8 +115,7 @@ export class AuthServer {
           `);
         } catch (error: unknown) {
           this.authCompletedSuccessfully = false;
-          const message =
-            error instanceof Error ? error.message : "Unknown error";
+          const message = error instanceof Error ? error.message : "Unknown error";
           // Send an HTML error response
           res.writeHead(500, { "Content-Type": "text/html" });
           res.end(`
@@ -206,9 +206,7 @@ export class AuthServer {
           const testServer = this.createServer();
           testServer.listen(port, () => {
             this.server = testServer; // Assign to class property *only* if successful
-            console.error(
-              `Authentication server listening on http://localhost:${port}`,
-            );
+            console.error(`Authentication server listening on http://localhost:${port}`);
             resolve();
           });
           testServer.on("error", (err: NodeJS.ErrnoException) => {

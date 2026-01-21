@@ -71,11 +71,18 @@ export {
 } from "./slides.js";
 
 // Unified handlers
+export { handleCreateFile, handleUpdateFile, handleGetFileContent } from "./unified.js";
+
+// Calendar handlers
 export {
-  handleCreateFile,
-  handleUpdateFile,
-  handleGetFileContent,
-} from "./unified.js";
+  handleListCalendars,
+  handleListEvents,
+  handleGetEvent,
+  handleCreateEvent,
+  handleUpdateEvent,
+  handleDeleteEvent,
+  handleFindFreeTime,
+} from "./calendar.js";
 
 // Helper utilities
 export {

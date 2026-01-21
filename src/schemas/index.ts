@@ -139,14 +139,33 @@ export type {
 } from "./slides.js";
 
 // Unified schemas
+export { CreateFileSchema, UpdateFileSchema, GetFileContentSchema } from "./unified.js";
+
+export type { CreateFileInput, UpdateFileInput, GetFileContentInput } from "./unified.js";
+
+// Calendar schemas
 export {
-  CreateFileSchema,
-  UpdateFileSchema,
-  GetFileContentSchema,
-} from "./unified.js";
+  EventDateTimeSchema,
+  AttendeeSchema,
+  ReminderSchema,
+  ListCalendarsSchema,
+  ListEventsSchema,
+  GetEventSchema,
+  CreateEventSchema,
+  UpdateEventSchema,
+  DeleteEventSchema,
+  FindFreeTimeSchema,
+} from "./calendar.js";
 
 export type {
-  CreateFileInput,
-  UpdateFileInput,
-  GetFileContentInput,
-} from "./unified.js";
+  EventDateTimeInput,
+  AttendeeInput,
+  ReminderInput,
+  ListCalendarsInput,
+  ListEventsInput,
+  GetEventInput,
+  CreateEventInput,
+  UpdateEventInput,
+  DeleteEventInput,
+  FindFreeTimeInput,
+} from "./calendar.js";

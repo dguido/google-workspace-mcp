@@ -25,6 +25,7 @@ import {
   getDocsService,
   getSheetsService,
   getSlidesService,
+  getCalendarService,
 } from "./utils/index.js";
 
 // Import all tool definitions
@@ -99,6 +100,14 @@ import {
   handleCreateFile,
   handleUpdateFile,
   handleGetFileContent,
+  // Calendar handlers
+  handleListCalendars,
+  handleListEvents,
+  handleGetEvent,
+  handleCreateEvent,
+  handleUpdateEvent,
+  handleDeleteEvent,
+  handleFindFreeTime,
 } from "./handlers/index.js";
 import type { HandlerContext } from "./handlers/index.js";
 
@@ -182,7 +191,7 @@ function ensureDriveService() {
 
 const server = new Server(
   {
-    name: "google-drive-mcp",
+    name: "google-workspace-mcp",
     version: VERSION,
   },
   {
@@ -409,9 +418,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = request.params.arguments;
 
     // Create handler context for MCP features (progress, elicitation)
-    const meta = (
-      request.params as { _meta?: { progressToken?: string | number } }
-    )._meta;
+    const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
     const context: HandlerContext = {
       server,
       progressToken: meta?.progressToken,
@@ -421,6 +428,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const docs = getDocsService(authClient!);
     const sheets = getSheetsService(authClient!);
     const slides = getSlidesService(authClient!);
+    const calendar = getCalendarService(authClient!);
 
     switch (request.params.name) {
       // Drive tools
@@ -551,6 +559,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "getFileContent":
         return handleGetFileContent(drive!, docs, sheets, slides, args);
 
+      // Calendar tools
+      case "listCalendars":
+        return handleListCalendars(calendar, args);
+      case "listEvents":
+        return handleListEvents(calendar, args);
+      case "getEvent":
+        return handleGetEvent(calendar, args);
+      case "createEvent":
+        return handleCreateEvent(calendar, args);
+      case "updateEvent":
+        return handleUpdateEvent(calendar, args);
+      case "deleteEvent":
+        return handleDeleteEvent(calendar, args);
+      case "findFreeTime":
+        return handleFindFreeTime(calendar, args);
+
       default:
         return errorResponse(`Unknown tool: ${request.params.name}`);
     }
@@ -567,10 +591,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 function showHelp(): void {
   console.log(`
-Google Drive MCP Server v${VERSION}
+Google Workspace MCP Server v${VERSION}
 
 Usage:
-  npx @dguido/google-drive-mcp [command] [options]
+  npx @dguido/google-workspace-mcp [command] [options]
 
 Commands:
   auth     Run the authentication flow
@@ -583,17 +607,17 @@ Auth Options:
   --credentials-path <path>  Use custom OAuth credentials file
 
 Examples:
-  npx @dguido/google-drive-mcp auth
-  npx @dguido/google-drive-mcp auth --token-path .credentials/tokens.json
-  npx @dguido/google-drive-mcp auth \\
+  npx @dguido/google-workspace-mcp auth
+  npx @dguido/google-workspace-mcp auth --token-path .credentials/tokens.json
+  npx @dguido/google-workspace-mcp auth \\
     --credentials-path .credentials/gcp-oauth.keys.json \\
     --token-path .credentials/tokens.json
-  npx @dguido/google-drive-mcp start
-  npx @dguido/google-drive-mcp
+  npx @dguido/google-workspace-mcp start
+  npx @dguido/google-workspace-mcp
 
 Environment Variables:
   GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file
-  GOOGLE_DRIVE_MCP_TOKEN_PATH      Path to store authentication tokens
+  GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens
 
 Multi-Account Setup:
   For project-level credential storage (useful with multiple Google accounts):
@@ -604,17 +628,14 @@ Multi-Account Setup:
 }
 
 function showVersion(): void {
-  console.log(`Google Drive MCP Server v${VERSION}`);
+  console.log(`Google Workspace MCP Server v${VERSION}`);
 }
 
-async function runAuthServer(
-  tokenPath?: string,
-  credentialsPath?: string,
-): Promise<void> {
+async function runAuthServer(tokenPath?: string, credentialsPath?: string): Promise<void> {
   try {
     // Set env vars from CLI flags (CLI takes precedence over existing env vars)
     if (tokenPath) {
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = tokenPath;
+      process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = tokenPath;
     }
     if (credentialsPath) {
       process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = credentialsPath;
@@ -672,12 +693,7 @@ function parseCliArgs(): CliArgs {
     }
 
     // Handle special version/help flags as commands
-    if (
-      arg === "--version" ||
-      arg === "-v" ||
-      arg === "--help" ||
-      arg === "-h"
-    ) {
+    if (arg === "--version" || arg === "-v" || arg === "--help" || arg === "-h") {
       command = arg;
       continue;
     }
@@ -703,7 +719,7 @@ async function main() {
     case undefined:
       try {
         // Start the MCP server
-        log("Starting Google Drive MCP server...");
+        log("Starting Google Workspace MCP server...");
         const transport = new StdioServerTransport();
         await server.connect(transport);
         log("Server started successfully");

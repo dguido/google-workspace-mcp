@@ -21,8 +21,7 @@ export interface ToolDefinition {
 export const driveTools: ToolDefinition[] = [
   {
     name: "search",
-    description:
-      "Search and find files and folders in Google Drive by name, type, or content",
+    description: "Search and find files and folders in Google Drive by name, type, or content",
     inputSchema: {
       type: "object",
       properties: {
@@ -67,8 +66,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "createTextFile",
-    description:
-      "Create a plain text (.txt) or markdown (.md) file in Google Drive",
+    description: "Create a plain text (.txt) or markdown (.md) file in Google Drive",
     inputSchema: {
       type: "object",
       properties: {
@@ -149,8 +147,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "listFolder",
-    description:
-      "List files and subfolders in a Google Drive folder (defaults to root)",
+    description: "List files and subfolders in a Google Drive folder (defaults to root)",
     inputSchema: {
       type: "object",
       properties: {
@@ -194,8 +191,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "deleteItem",
-    description:
-      "Move a file or folder to trash (can be restored from Google Drive trash)",
+    description: "Move a file or folder to trash (can be restored from Google Drive trash)",
     inputSchema: {
       type: "object",
       properties: {
@@ -242,8 +238,7 @@ export const driveTools: ToolDefinition[] = [
         itemId: { type: "string", description: "ID of the item to move" },
         destinationFolderId: {
           type: "string",
-          description:
-            "Destination folder ID (mutually exclusive with destinationPath)",
+          description: "Destination folder ID (mutually exclusive with destinationPath)",
         },
         destinationPath: {
           type: "string",
@@ -266,21 +261,18 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "copyFile",
-    description:
-      "Copy a file to a new Google Drive location with optional new name",
+    description: "Copy a file to a new Google Drive location with optional new name",
     inputSchema: {
       type: "object",
       properties: {
         sourceFileId: { type: "string", description: "ID of the file to copy" },
         destinationName: {
           type: "string",
-          description:
-            "Name for the copied file (defaults to 'Copy of <original>')",
+          description: "Name for the copied file (defaults to 'Copy of <original>')",
         },
         destinationFolderId: {
           type: "string",
-          description:
-            "Destination folder ID (defaults to same folder as source)",
+          description: "Destination folder ID (defaults to same folder as source)",
         },
       },
       required: ["sourceFileId"],
@@ -299,8 +291,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "getFileMetadata",
-    description:
-      "Get detailed metadata for a file or folder (size, owner, dates, etc.)",
+    description: "Get detailed metadata for a file or folder (size, owner, dates, etc.)",
     inputSchema: {
       type: "object",
       properties: {
@@ -354,8 +345,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "exportFile",
-    description:
-      "Export a Google Doc/Sheet/Slides to PDF, DOCX, XLSX, PPTX, CSV, or other formats",
+    description: "Export a Google Doc/Sheet/Slides to PDF, DOCX, XLSX, PPTX, CSV, or other formats",
     inputSchema: {
       type: "object",
       properties: {
@@ -365,24 +355,12 @@ export const driveTools: ToolDefinition[] = [
         },
         format: {
           type: "string",
-          description:
-            "Export format: pdf, docx (Docs), xlsx/csv/tsv (Sheets), pptx (Slides)",
-          enum: [
-            "pdf",
-            "docx",
-            "xlsx",
-            "pptx",
-            "csv",
-            "tsv",
-            "odt",
-            "ods",
-            "odp",
-          ],
+          description: "Export format: pdf, docx (Docs), xlsx/csv/tsv (Sheets), pptx (Slides)",
+          enum: ["pdf", "docx", "xlsx", "pptx", "csv", "tsv", "odt", "ods", "odp"],
         },
         outputPath: {
           type: "string",
-          description:
-            "Optional directory path to save the file (returns base64 if not provided)",
+          description: "Optional directory path to save the file (returns base64 if not provided)",
         },
       },
       required: ["fileId", "format"],
@@ -479,14 +457,7 @@ export const driveTools: ToolDefinition[] = [
               role: {
                 type: "string",
                 description: "Permission role",
-                enum: [
-                  "owner",
-                  "organizer",
-                  "fileOrganizer",
-                  "writer",
-                  "commenter",
-                  "reader",
-                ],
+                enum: ["owner", "organizer", "fileOrganizer", "writer", "commenter", "reader"],
               },
               type: {
                 type: "string",
@@ -566,8 +537,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "restoreRevision",
-    description:
-      "Restore a Google Drive file to a previous revision (binary files only)",
+    description: "Restore a Google Drive file to a previous revision (binary files only)",
     inputSchema: {
       type: "object",
       properties: {
@@ -598,8 +568,7 @@ export const driveTools: ToolDefinition[] = [
         fileId: { type: "string", description: "File ID" },
         outputPath: {
           type: "string",
-          description:
-            "Directory to save file (optional, returns base64 if not provided)",
+          description: "Directory to save file (optional, returns base64 if not provided)",
         },
       },
       required: ["fileId"],
@@ -642,8 +611,7 @@ export const driveTools: ToolDefinition[] = [
         },
         folderId: {
           type: "string",
-          description:
-            "Destination folder ID (mutually exclusive with folderPath)",
+          description: "Destination folder ID (mutually exclusive with folderPath)",
         },
         folderPath: {
           type: "string",
@@ -741,8 +709,7 @@ export const driveTools: ToolDefinition[] = [
         },
         type: {
           type: "string",
-          description:
-            "Type of item to find: 'file', 'folder', or 'any' (default)",
+          description: "Type of item to find: 'file', 'folder', or 'any' (default)",
           enum: ["file", "folder", "any"],
         },
       },
@@ -863,8 +830,7 @@ export const driveTools: ToolDefinition[] = [
         },
         destinationFolderId: {
           type: "string",
-          description:
-            "Destination folder ID (mutually exclusive with destinationPath)",
+          description: "Destination folder ID (mutually exclusive with destinationPath)",
         },
         destinationPath: {
           type: "string",
@@ -1123,8 +1089,7 @@ export const driveTools: ToolDefinition[] = [
         },
         folderPath: {
           type: "string",
-          description:
-            "Folder path like '/Documents/Projects' (mutually exclusive with folderId)",
+          description: "Folder path like '/Documents/Projects' (mutually exclusive with folderId)",
         },
         depth: {
           type: "number",
@@ -1156,16 +1121,14 @@ export const driveTools: ToolDefinition[] = [
               },
               truncated: {
                 type: "boolean",
-                description:
-                  "True if folder contents were truncated at 100 items",
+                description: "True if folder contents were truncated at 100 items",
               },
             },
           },
         },
         truncated: {
           type: "boolean",
-          description:
-            "True if root folder contents were truncated at 100 items",
+          description: "True if root folder contents were truncated at 100 items",
         },
       },
     },
@@ -1176,8 +1139,7 @@ export const driveTools: ToolDefinition[] = [
 export const docsTools: ToolDefinition[] = [
   {
     name: "createGoogleDoc",
-    description:
-      "Create a new Google Document with optional initial text content",
+    description: "Create a new Google Document with optional initial text content",
     inputSchema: {
       type: "object",
       properties: {
@@ -1391,13 +1353,11 @@ export const docsTools: ToolDefinition[] = [
         documentId: { type: "string", description: "Document ID" },
         startIndex: {
           type: "number",
-          description:
-            "Start index (1-based, optional - defaults to document start)",
+          description: "Start index (1-based, optional - defaults to document start)",
         },
         endIndex: {
           type: "number",
-          description:
-            "End index (1-based, optional - defaults to document end)",
+          description: "End index (1-based, optional - defaults to document end)",
         },
         // Text formatting
         bold: { type: "boolean", description: "Make text bold" },
@@ -1638,21 +1598,12 @@ export const sheetsTools: ToolDefinition[] = [
           properties: {
             pattern: {
               type: "string",
-              description:
-                "Format pattern (e.g., '#,##0.00', 'yyyy-mm-dd', '$#,##0.00', '0.00%')",
+              description: "Format pattern (e.g., '#,##0.00', 'yyyy-mm-dd', '$#,##0.00', '0.00%')",
             },
             type: {
               type: "string",
               description: "Format type",
-              enum: [
-                "NUMBER",
-                "CURRENCY",
-                "PERCENT",
-                "DATE",
-                "TIME",
-                "DATE_TIME",
-                "SCIENTIFIC",
-              ],
+              enum: ["NUMBER", "CURRENCY", "PERCENT", "DATE", "TIME", "DATE_TIME", "SCIENTIFIC"],
             },
           },
         },
@@ -1917,13 +1868,11 @@ export const sheetsTools: ToolDefinition[] = [
             properties: {
               sheetId: {
                 type: "number",
-                description:
-                  "Numeric sheet ID (used for formatting operations)",
+                description: "Numeric sheet ID (used for formatting operations)",
               },
               title: {
                 type: "string",
-                description:
-                  "Sheet tab name (used in A1 notation like 'Sheet1!A1:C10')",
+                description: "Sheet tab name (used in A1 notation like 'Sheet1!A1:C10')",
               },
               index: {
                 type: "number",
@@ -2163,15 +2112,7 @@ export const slidesTools: ToolDefinition[] = [
         bulletStyle: {
           type: "string",
           description: "Bullet style (text targetType)",
-          enum: [
-            "NONE",
-            "DISC",
-            "ARROW",
-            "SQUARE",
-            "DIAMOND",
-            "STAR",
-            "NUMBERED",
-          ],
+          enum: ["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"],
         },
         // Shape styling
         backgroundColor: {
@@ -2200,14 +2141,7 @@ export const slidesTools: ToolDefinition[] = [
         outlineDashStyle: {
           type: "string",
           description: "Outline dash style (shape targetType)",
-          enum: [
-            "SOLID",
-            "DOT",
-            "DASH",
-            "DASH_DOT",
-            "LONG_DASH",
-            "LONG_DASH_DOT",
-          ],
+          enum: ["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"],
         },
         // Slide background
         slideBackgroundColor: {
@@ -2259,15 +2193,7 @@ export const slidesTools: ToolDefinition[] = [
         bold: { type: "boolean", description: "Make text bold" },
         italic: { type: "boolean", description: "Make text italic" },
       },
-      required: [
-        "presentationId",
-        "pageObjectId",
-        "text",
-        "x",
-        "y",
-        "width",
-        "height",
-      ],
+      required: ["presentationId", "pageObjectId", "text", "x", "y", "width", "height"],
     },
     outputSchema: {
       type: "object",
@@ -2292,15 +2218,7 @@ export const slidesTools: ToolDefinition[] = [
         shapeType: {
           type: "string",
           description: "Shape type",
-          enum: [
-            "RECTANGLE",
-            "ELLIPSE",
-            "DIAMOND",
-            "TRIANGLE",
-            "STAR",
-            "ROUND_RECTANGLE",
-            "ARROW",
-          ],
+          enum: ["RECTANGLE", "ELLIPSE", "DIAMOND", "TRIANGLE", "STAR", "ROUND_RECTANGLE", "ARROW"],
         },
         x: {
           type: "number",
@@ -2320,15 +2238,7 @@ export const slidesTools: ToolDefinition[] = [
           },
         },
       },
-      required: [
-        "presentationId",
-        "pageObjectId",
-        "shapeType",
-        "x",
-        "y",
-        "width",
-        "height",
-      ],
+      required: ["presentationId", "pageObjectId", "shapeType", "x", "y", "width", "height"],
     },
     outputSchema: {
       type: "object",
@@ -2511,8 +2421,7 @@ export const unifiedTools: ToolDefinition[] = [
         },
         filePath: {
           type: "string",
-          description:
-            "File path like '/Documents/report.docx' (mutually exclusive with fileId)",
+          description: "File path like '/Documents/report.docx' (mutually exclusive with fileId)",
         },
         content: {
           description: "New content: string for docs/text, 2D array for sheets",
@@ -2556,8 +2465,7 @@ export const unifiedTools: ToolDefinition[] = [
         },
         filePath: {
           type: "string",
-          description:
-            "File path like '/Documents/report.docx' (mutually exclusive with fileId)",
+          description: "File path like '/Documents/report.docx' (mutually exclusive with fileId)",
         },
         range: {
           type: "string",
@@ -2597,6 +2505,436 @@ export const unifiedTools: ToolDefinition[] = [
   },
 ];
 
+// Calendar tools
+export const calendarTools: ToolDefinition[] = [
+  {
+    name: "listCalendars",
+    description: "List all calendars accessible to the user",
+    inputSchema: {
+      type: "object",
+      properties: {
+        showHidden: {
+          type: "boolean",
+          description: "Include hidden calendars (default: false)",
+        },
+        showDeleted: {
+          type: "boolean",
+          description: "Include deleted calendars (default: false)",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        calendars: {
+          type: "array",
+          description: "List of calendars",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Calendar ID" },
+              summary: { type: "string", description: "Calendar name" },
+              description: { type: "string", description: "Calendar description" },
+              primary: { type: "boolean", description: "Whether this is the primary calendar" },
+              accessRole: {
+                type: "string",
+                description: "Access role (owner, writer, reader, freeBusyReader)",
+              },
+              timeZone: { type: "string", description: "Calendar timezone" },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "listEvents",
+    description: "List events from a calendar within a date range. Supports search and pagination.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calendarId: {
+          type: "string",
+          description: "Calendar ID (defaults to 'primary')",
+        },
+        timeMin: {
+          type: "string",
+          description: "Start of time range (RFC3339 timestamp, e.g., 2024-01-15T00:00:00Z)",
+        },
+        timeMax: {
+          type: "string",
+          description: "End of time range (RFC3339 timestamp)",
+        },
+        query: {
+          type: "string",
+          description: "Free text search terms to filter events",
+        },
+        maxResults: {
+          type: "number",
+          description: "Maximum events to return (default 250, max 2500)",
+        },
+        pageToken: {
+          type: "string",
+          description: "Token for pagination",
+        },
+        singleEvents: {
+          type: "boolean",
+          description: "Expand recurring events into instances (default: true)",
+        },
+        orderBy: {
+          type: "string",
+          enum: ["startTime", "updated"],
+          description: "Sort order (startTime requires singleEvents=true)",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        events: {
+          type: "array",
+          description: "List of events",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Event ID" },
+              summary: { type: "string", description: "Event title" },
+              description: { type: "string", description: "Event description" },
+              location: { type: "string", description: "Event location" },
+              start: { type: "object", description: "Start time object" },
+              end: { type: "object", description: "End time object" },
+              status: { type: "string", description: "Event status" },
+              htmlLink: { type: "string", description: "Link to event in Google Calendar" },
+              hangoutLink: { type: "string", description: "Google Meet link if present" },
+            },
+          },
+        },
+        nextPageToken: {
+          type: "string",
+          description: "Token for fetching next page",
+        },
+      },
+    },
+  },
+  {
+    name: "getEvent",
+    description: "Get detailed information about a specific calendar event",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calendarId: {
+          type: "string",
+          description: "Calendar ID (defaults to 'primary')",
+        },
+        eventId: {
+          type: "string",
+          description: "Event ID",
+        },
+      },
+      required: ["eventId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Event ID" },
+        summary: { type: "string", description: "Event title" },
+        description: { type: "string", description: "Event description" },
+        location: { type: "string", description: "Event location" },
+        start: { type: "object", description: "Start time" },
+        end: { type: "object", description: "End time" },
+        status: { type: "string", description: "Event status" },
+        htmlLink: { type: "string", description: "Link to event" },
+        hangoutLink: { type: "string", description: "Google Meet link" },
+        attendees: {
+          type: "array",
+          description: "Event attendees",
+          items: {
+            type: "object",
+            properties: {
+              email: { type: "string" },
+              displayName: { type: "string" },
+              responseStatus: { type: "string" },
+            },
+          },
+        },
+        organizer: { type: "object", description: "Event organizer" },
+        recurrence: { type: "array", description: "Recurrence rules" },
+      },
+    },
+  },
+  {
+    name: "createEvent",
+    description: "Create a new calendar event with optional attendees, Google Meet, and reminders",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calendarId: {
+          type: "string",
+          description: "Calendar ID (defaults to 'primary')",
+        },
+        summary: {
+          type: "string",
+          description: "Event title",
+        },
+        description: {
+          type: "string",
+          description: "Event description",
+        },
+        location: {
+          type: "string",
+          description: "Event location",
+        },
+        start: {
+          type: "object",
+          description:
+            "Start time. Use dateTime for timed events (RFC3339) or date for all-day (YYYY-MM-DD)",
+          properties: {
+            dateTime: {
+              type: "string",
+              description: "RFC3339 timestamp (e.g., 2024-01-15T09:00:00-05:00)",
+            },
+            date: { type: "string", description: "All-day date (YYYY-MM-DD)" },
+            timeZone: { type: "string", description: "IANA timezone" },
+          },
+        },
+        end: {
+          type: "object",
+          description: "End time (same format as start)",
+          properties: {
+            dateTime: { type: "string" },
+            date: { type: "string" },
+            timeZone: { type: "string" },
+          },
+        },
+        attendees: {
+          type: "array",
+          description: "List of attendee email addresses",
+          items: {
+            type: "object",
+            properties: {
+              email: { type: "string" },
+              displayName: { type: "string" },
+              optional: { type: "boolean" },
+            },
+            required: ["email"],
+          },
+        },
+        addGoogleMeet: {
+          type: "boolean",
+          description: "Add Google Meet video conference (default: false)",
+        },
+        reminders: {
+          type: "array",
+          description: "Custom reminders (overrides calendar defaults)",
+          items: {
+            type: "object",
+            properties: {
+              method: { type: "string", enum: ["email", "popup"] },
+              minutes: { type: "number", description: "Minutes before event" },
+            },
+          },
+        },
+        colorId: {
+          type: "string",
+          description: "Event color ID (1-11)",
+        },
+        recurrence: {
+          type: "array",
+          description: "RRULE strings for recurring events",
+          items: { type: "string" },
+        },
+        sendUpdates: {
+          type: "string",
+          enum: ["all", "externalOnly", "none"],
+          description: "Who to send notifications to (default: all)",
+        },
+      },
+      required: ["summary", "start", "end"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Created event ID" },
+        summary: { type: "string", description: "Event title" },
+        htmlLink: { type: "string", description: "Link to event" },
+        hangoutLink: { type: "string", description: "Google Meet link if created" },
+      },
+    },
+  },
+  {
+    name: "updateEvent",
+    description: "Update an existing calendar event",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calendarId: {
+          type: "string",
+          description: "Calendar ID (defaults to 'primary')",
+        },
+        eventId: {
+          type: "string",
+          description: "Event ID to update",
+        },
+        summary: { type: "string", description: "New event title" },
+        description: { type: "string", description: "New description" },
+        location: { type: "string", description: "New location" },
+        start: {
+          type: "object",
+          description: "New start time",
+          properties: {
+            dateTime: { type: "string" },
+            date: { type: "string" },
+            timeZone: { type: "string" },
+          },
+        },
+        end: {
+          type: "object",
+          description: "New end time",
+          properties: {
+            dateTime: { type: "string" },
+            date: { type: "string" },
+            timeZone: { type: "string" },
+          },
+        },
+        attendees: {
+          type: "array",
+          description: "Replace attendee list",
+          items: {
+            type: "object",
+            properties: {
+              email: { type: "string" },
+              displayName: { type: "string" },
+              optional: { type: "boolean" },
+            },
+          },
+        },
+        addGoogleMeet: {
+          type: "boolean",
+          description: "Add Google Meet if not present",
+        },
+        reminders: {
+          type: "array",
+          description: "New custom reminders",
+          items: {
+            type: "object",
+            properties: {
+              method: { type: "string", enum: ["email", "popup"] },
+              minutes: { type: "number" },
+            },
+          },
+        },
+        colorId: { type: "string", description: "New color ID (1-11)" },
+        sendUpdates: {
+          type: "string",
+          enum: ["all", "externalOnly", "none"],
+          description: "Who to notify of changes",
+        },
+      },
+      required: ["eventId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Updated event ID" },
+        summary: { type: "string", description: "Event title" },
+        htmlLink: { type: "string", description: "Link to event" },
+        hangoutLink: { type: "string", description: "Google Meet link" },
+      },
+    },
+  },
+  {
+    name: "deleteEvent",
+    description: "Delete a calendar event",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calendarId: {
+          type: "string",
+          description: "Calendar ID (defaults to 'primary')",
+        },
+        eventId: {
+          type: "string",
+          description: "Event ID to delete",
+        },
+        sendUpdates: {
+          type: "string",
+          enum: ["all", "externalOnly", "none"],
+          description: "Who to send cancellation notices to (default: all)",
+        },
+      },
+      required: ["eventId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        deleted: { type: "boolean", description: "Whether deletion succeeded" },
+        eventId: { type: "string", description: "Deleted event ID" },
+      },
+    },
+  },
+  {
+    name: "findFreeTime",
+    description:
+      "Find available time slots across one or more calendars. Returns free periods of at least the specified duration.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        calendarIds: {
+          type: "array",
+          description:
+            "Calendar IDs to check (e.g., ['primary', 'user@example.com']). Max 50 calendars.",
+          items: { type: "string" },
+        },
+        timeMin: {
+          type: "string",
+          description: "Start of search range (RFC3339 timestamp)",
+        },
+        timeMax: {
+          type: "string",
+          description: "End of search range (RFC3339 timestamp)",
+        },
+        duration: {
+          type: "number",
+          description: "Minimum free slot duration in minutes",
+        },
+        timeZone: {
+          type: "string",
+          description: "Timezone for results (default: UTC)",
+        },
+      },
+      required: ["calendarIds", "timeMin", "timeMax", "duration"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        freeSlots: {
+          type: "array",
+          description: "Available time slots",
+          items: {
+            type: "object",
+            properties: {
+              start: { type: "string", description: "Slot start (ISO 8601)" },
+              end: { type: "string", description: "Slot end (ISO 8601)" },
+              durationMinutes: { type: "number", description: "Slot duration in minutes" },
+            },
+          },
+        },
+        busyPeriods: {
+          type: "array",
+          description: "Busy periods found",
+          items: {
+            type: "object",
+            properties: {
+              start: { type: "string" },
+              end: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  },
+];
+
 /**
  * Get all tool definitions combined into a single array.
  */
@@ -2607,5 +2945,6 @@ export function getAllTools(): ToolDefinition[] {
     ...sheetsTools,
     ...slidesTools,
     ...unifiedTools,
+    ...calendarTools,
   ];
 }
