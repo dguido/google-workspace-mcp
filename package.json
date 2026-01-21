@@ -1,0 +1,74 @@
+{
+  "name": "@dguido/google-workspace-mcp",
+  "version": "1.0.2",
+  "description": "Google Workspace MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, Slides, Calendar, and Gmail through MCP clients e.g. Claude Desktop",
+  "keywords": [
+    "ai",
+    "claude",
+    "document-automation",
+    "file-management",
+    "google-calendar",
+    "google-docs",
+    "google-drive",
+    "google-gmail",
+    "google-sheets",
+    "google-slides",
+    "google-workspace",
+    "integration",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "oauth2"
+  ],
+  "homepage": "https://github.com/dguido/google-workspace-mcp",
+  "bugs": "https://github.com/dguido/google-workspace-mcp/issues",
+  "license": "MIT",
+  "author": "Dan Guido <dan@trailofbits.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dguido/google-workspace-mcp.git"
+  },
+  "bin": {
+    "google-workspace-mcp": "./dist/index.js"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && node scripts/build.js",
+    "start": "node dist/index.js",
+    "auth": "node dist/index.js auth",
+    "watch": "node scripts/build.js --watch",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "oxlint .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "check": "npm run typecheck && npm run lint && npm run format:check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.25.2",
+    "google-auth-library": "10.5.0",
+    "googleapis": "170.1.0",
+    "open": "11.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "25.0.7",
+    "@vitest/coverage-v8": "4.0.17",
+    "esbuild": "0.27.2",
+    "oxfmt": "^0.24.0",
+    "oxlint": "1.39.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.17"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
