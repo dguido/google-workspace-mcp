@@ -12,7 +12,12 @@ import {
   validateArgs,
 } from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
-import { escapeQueryString, combineQueries, buildFullTextQuery } from "../utils/gdrive-query.js";
+import {
+  escapeQueryString,
+  combineQueries,
+  buildFullTextQuery,
+  buildNameQuery,
+} from "../utils/gdrive-query.js";
 import { formatBytes, formatBytesCompact } from "../utils/format.js";
 import {
   GetFolderTreeSchema,
@@ -60,9 +65,21 @@ import type { HandlerContext } from "./helpers.js";
 export async function handleSearch(drive: drive_v3.Drive, args: unknown): Promise<ToolResponse> {
   const validation = validateArgs(SearchSchema, args);
   if (!validation.success) return validation.response;
-  const { query: userQuery, pageSize, pageToken } = validation.data;
+  const { query: userQuery, searchType, pageSize, pageToken } = validation.data;
 
-  const formattedQuery = combineQueries(buildFullTextQuery(userQuery), "trashed = false");
+  // Build base query based on searchType
+  let baseQuery: string;
+  switch (searchType) {
+    case "name_exact":
+      baseQuery = buildNameQuery(userQuery, true); // name = 'query'
+      break;
+    case "name":
+      baseQuery = buildNameQuery(userQuery, false); // name contains 'query'
+      break;
+    default:
+      baseQuery = buildFullTextQuery(userQuery); // fullText contains 'query'
+  }
+  const formattedQuery = combineQueries(baseQuery, "trashed = false");
 
   const res = await drive.files.list({
     q: formattedQuery,

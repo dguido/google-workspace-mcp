@@ -203,7 +203,7 @@ export async function handleDraftEmail(
 export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Promise<ToolResponse> {
   const validation = validateArgs(ReadEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { messageId, format } = validation.data;
+  const { messageId, format, contentFormat } = validation.data;
 
   const response = await gmail.users.messages.get({
     userId: "me",
@@ -213,10 +213,19 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
 
   const message = response.data;
   const headers = parseEmailHeaders(message.payload?.headers || []);
-  const { text, html } = extractEmailBody(message.payload);
   const attachments = extractAttachments(message.payload);
 
-  const textOutput = [
+  // Extract body based on contentFormat
+  let text = "";
+  let html = "";
+  if (contentFormat !== "headers") {
+    const body = extractEmailBody(message.payload);
+    text = body.text;
+    html = contentFormat === "full" ? body.html : "";
+  }
+
+  // Build text output based on contentFormat
+  const textOutputParts = [
     `From: ${headers.from || "Unknown"}`,
     `To: ${headers.to || "Unknown"}`,
     headers.cc ? `Cc: ${headers.cc}` : null,
@@ -226,16 +235,21 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
     attachments.length > 0
       ? `Attachments: ${attachments.map((a) => `${a.filename} (${a.size} bytes)`).join(", ")}`
       : null,
-    "",
-    "--- Body ---",
-    text || html || "(No content)",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ];
 
+  // Only include body section if contentFormat is not "headers"
+  if (contentFormat !== "headers") {
+    textOutputParts.push("", "--- Body ---", text || html || "(No content)");
+  }
+
+  const textOutput = textOutputParts.filter(Boolean).join("\n");
   const { content: truncatedContent, truncated } = truncateResponse(textOutput);
 
-  log("Read email", { messageId, truncated });
+  log("Read email", { messageId, contentFormat, truncated });
+
+  // Build response body based on contentFormat
+  const responseBody =
+    contentFormat === "headers" ? undefined : contentFormat === "text" ? { text } : { text, html };
 
   return structuredResponse(truncatedContent, {
     id: message.id,
@@ -243,7 +257,7 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
     labelIds: message.labelIds,
     snippet: message.snippet,
     headers,
-    body: { text, html },
+    body: responseBody,
     attachments,
     internalDate: message.internalDate,
     sizeEstimate: message.sizeEstimate,
@@ -465,7 +479,6 @@ export async function handleDownloadAttachment(
     },
   );
 }
-
 
 // ============================================================================
 // Label Management

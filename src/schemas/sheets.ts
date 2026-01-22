@@ -147,7 +147,6 @@ export const AddGoogleSheetConditionalFormatSchema = z.object({
   }),
 });
 
-
 // Type exports
 export type CreateGoogleSheetInput = z.infer<typeof CreateGoogleSheetSchema>;
 export type UpdateGoogleSheetInput = z.infer<typeof UpdateGoogleSheetSchema>;

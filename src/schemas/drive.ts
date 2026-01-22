@@ -14,6 +14,13 @@ export type GetFolderTreeInput = z.infer<typeof GetFolderTreeSchema>;
 
 export const SearchSchema = z.object({
   query: z.string().min(1, "Search query is required"),
+  searchType: z
+    .enum(["fulltext", "name", "name_exact"])
+    .optional()
+    .default("fulltext")
+    .describe(
+      "Search type: 'fulltext' (default, searches content), 'name' (filename contains), 'name_exact' (exact filename match)",
+    ),
   pageSize: z.number().int().min(1).max(100).optional(),
   pageToken: z.string().optional(),
 });

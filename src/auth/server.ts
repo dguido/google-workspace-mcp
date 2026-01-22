@@ -16,8 +16,9 @@ const SCOPES = [
   "https://www.googleapis.com/auth/documents",
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/presentations",
-  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/gmail.modify",
+  "https://mail.google.com/", // Required for message deletion
   "https://www.googleapis.com/auth/gmail.settings.basic",
 ];
 

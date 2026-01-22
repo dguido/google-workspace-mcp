@@ -912,9 +912,7 @@ export async function handleFormatSlideBackground(
     requestBody: { requests },
   });
 
-  return successResponse(
-    `Set background color for ${data.pageObjectIds.length} slide(s)`,
-  );
+  return successResponse(`Set background color for ${data.pageObjectIds.length} slide(s)`);
 }
 
 export async function handleListSlidePages(

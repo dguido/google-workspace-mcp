@@ -36,6 +36,12 @@ export const driveTools: ToolDefinition[] = [
       type: "object",
       properties: {
         query: { type: "string", description: "Search query" },
+        searchType: {
+          type: "string",
+          enum: ["fulltext", "name", "name_exact"],
+          description:
+            "Search type: 'fulltext' (default, searches file content), 'name' (filename contains query), 'name_exact' (exact filename match)",
+        },
         pageSize: {
           type: "number",
           description: "(optional, default: 50) Results per page (max 100)",
@@ -2403,7 +2409,8 @@ export const calendarTools: ToolDefinition[] = [
         },
         timeMin: {
           type: "string",
-          description: "(optional) Start of time range (RFC3339 timestamp, e.g., 2024-01-15T00:00:00Z)",
+          description:
+            "(optional) Start of time range (RFC3339 timestamp, e.g., 2024-01-15T00:00:00Z)",
         },
         timeMax: {
           type: "string",
@@ -2915,6 +2922,12 @@ export const gmailTools: ToolDefinition[] = [
           enum: ["full", "metadata", "minimal", "raw"],
           description: "Response format (default: full)",
         },
+        contentFormat: {
+          type: "string",
+          enum: ["full", "text", "headers"],
+          description:
+            "Content format: 'full' (default, includes HTML), 'text' (plain text only, smaller), 'headers' (metadata only, no body)",
+        },
       },
       required: ["messageId"],
     },
@@ -3216,7 +3229,11 @@ export const gmailTools: ToolDefinition[] = [
           enum: ["fromSender", "withSubject", "withAttachments", "largeEmails", "mailingList"],
           description: "Use pre-built template instead of criteria/action",
         },
-        labelIds: { type: "array", items: { type: "string" }, description: "Labels (template mode)" },
+        labelIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Labels (template mode)",
+        },
         archive: { type: "boolean", description: "Archive matching emails (template mode)" },
         email: { type: "string", description: "Email for fromSender/mailingList template" },
         subject: { type: "string", description: "Subject for withSubject template" },
