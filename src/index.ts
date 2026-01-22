@@ -26,7 +26,11 @@ import {
   getSheetsService,
   getSlidesService,
   getCalendarService,
+  getGmailService,
 } from "./utils/index.js";
+
+// Import service configuration
+import { isServiceEnabled, areUnifiedToolsEnabled } from "./config/index.js";
 
 // Import all tool definitions
 import { getAllTools } from "./tools/index.js";
@@ -82,19 +86,17 @@ import {
   handleFormatGoogleSheetCells,
   handleMergeGoogleSheetCells,
   handleAddGoogleSheetConditionalFormat,
-  handleCreateSheetTab,
-  handleDeleteSheetTab,
-  handleRenameSheetTab,
-  handleListSheetTabs,
+  handleSheetTabs,
   // Slides handlers
   handleCreateGoogleSlides,
   handleUpdateGoogleSlides,
   handleGetGoogleSlidesContent,
   handleCreateGoogleSlidesTextBox,
   handleCreateGoogleSlidesShape,
-  handleGetGoogleSlidesSpeakerNotes,
-  handleUpdateGoogleSlidesSpeakerNotes,
-  handleFormatGoogleSlidesElement,
+  handleSlidesSpeakerNotes,
+  handleFormatSlidesText,
+  handleFormatSlidesShape,
+  handleFormatSlideBackground,
   handleListSlidePages,
   // Unified handlers
   handleCreateFile,
@@ -108,6 +110,24 @@ import {
   handleUpdateEvent,
   handleDeleteEvent,
   handleFindFreeTime,
+  // Gmail handlers
+  handleSendEmail,
+  handleDraftEmail,
+  handleReadEmail,
+  handleSearchEmails,
+  handleDeleteEmail,
+  handleModifyEmail,
+  handleDownloadAttachment,
+  handleCreateLabel,
+  handleUpdateLabel,
+  handleDeleteLabel,
+  handleListLabels,
+  handleGetOrCreateLabel,
+  handleCreateFilter,
+  handleListFilters,
+  handleDeleteFilter,
+  // Discovery handlers
+  handleListTools,
 } from "./handlers/index.js";
 import type { HandlerContext } from "./handlers/index.js";
 
@@ -426,7 +446,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 // -----------------------------------------------------------------------------
 
 import type { ToolResponse } from "./utils/index.js";
-import type { docs_v1, sheets_v4, slides_v1, calendar_v3 } from "googleapis";
+import type { docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1 } from "googleapis";
 
 interface ToolServices {
   drive: drive_v3.Drive;
@@ -434,99 +454,152 @@ interface ToolServices {
   sheets: sheets_v4.Sheets;
   slides: slides_v1.Slides;
   calendar: calendar_v3.Calendar;
+  gmail: gmail_v1.Gmail;
   context: HandlerContext;
 }
 
 type ToolHandler = (services: ToolServices, args: unknown) => Promise<ToolResponse>;
 
 function createToolRegistry(): Record<string, ToolHandler> {
-  return {
-    // Drive tools
-    search: ({ drive }, args) => handleSearch(drive, args),
-    createTextFile: ({ drive }, args) => handleCreateTextFile(drive, args),
-    updateTextFile: ({ drive }, args) => handleUpdateTextFile(drive, args),
-    createFolder: ({ drive }, args) => handleCreateFolder(drive, args),
-    listFolder: ({ drive }, args) => handleListFolder(drive, args),
-    deleteItem: ({ drive }, args) => handleDeleteItem(drive, args),
-    renameItem: ({ drive }, args) => handleRenameItem(drive, args),
-    moveItem: ({ drive }, args) => handleMoveItem(drive, args),
-    copyFile: ({ drive }, args) => handleCopyFile(drive, args),
-    getFileMetadata: ({ drive }, args) => handleGetFileMetadata(drive, args),
-    exportFile: ({ drive }, args) => handleExportFile(drive, args),
-    shareFile: ({ drive }, args) => handleShareFile(drive, args),
-    getSharing: ({ drive }, args) => handleGetSharing(drive, args),
-    listRevisions: ({ drive }, args) => handleListRevisions(drive, args),
-    restoreRevision: ({ drive }, args) => handleRestoreRevision(drive, args),
-    downloadFile: ({ drive }, args) => handleDownloadFile(drive, args),
-    uploadFile: ({ drive }, args) => handleUploadFile(drive, args),
-    getStorageQuota: ({ drive }, args) => handleGetStorageQuota(drive, args),
-    starFile: ({ drive }, args) => handleStarFile(drive, args),
-    resolveFilePath: ({ drive, context }, args) => handleResolveFilePath(drive, args, context),
-    batchDelete: ({ drive, context }, args) => handleBatchDelete(drive, args, context),
-    batchRestore: ({ drive, context }, args) => handleBatchRestore(drive, args, context),
-    batchMove: ({ drive, context }, args) => handleBatchMove(drive, args, context),
-    batchShare: ({ drive, context }, args) => handleBatchShare(drive, args, context),
-    removePermission: ({ drive }, args) => handleRemovePermission(drive, args),
-    listTrash: ({ drive }, args) => handleListTrash(drive, args),
-    restoreFromTrash: ({ drive }, args) => handleRestoreFromTrash(drive, args),
-    emptyTrash: ({ drive, context }, args) => handleEmptyTrash(drive, args, context),
-    getFolderTree: ({ drive }, args) => handleGetFolderTree(drive, args),
+  const registry: Record<string, ToolHandler> = {};
 
-    // Docs tools
-    createGoogleDoc: ({ drive, docs }, args) => handleCreateGoogleDoc(drive, docs, args),
-    updateGoogleDoc: ({ docs }, args) => handleUpdateGoogleDoc(docs, args),
-    getGoogleDocContent: ({ drive, docs }, args) => handleGetGoogleDocContent(drive, docs, args),
-    appendToDoc: ({ docs }, args) => handleAppendToDoc(docs, args),
-    insertTextInDoc: ({ docs }, args) => handleInsertTextInDoc(docs, args),
-    deleteTextInDoc: ({ docs }, args) => handleDeleteTextInDoc(docs, args),
-    replaceTextInDoc: ({ docs }, args) => handleReplaceTextInDoc(docs, args),
-    formatGoogleDocRange: ({ docs }, args) => handleFormatGoogleDocRange(docs, args),
+  // Discovery tools (always available)
+  Object.assign(registry, {
+    list_tools: (_services, args) => handleListTools(args),
+  } satisfies Record<string, ToolHandler>);
 
-    // Sheets tools
-    createGoogleSheet: ({ drive, sheets }, args) => handleCreateGoogleSheet(drive, sheets, args),
-    updateGoogleSheet: ({ sheets }, args) => handleUpdateGoogleSheet(sheets, args),
-    getGoogleSheetContent: ({ drive, sheets }, args) =>
-      handleGetGoogleSheetContent(drive, sheets, args),
-    formatGoogleSheetCells: ({ sheets }, args) => handleFormatGoogleSheetCells(sheets, args),
-    mergeGoogleSheetCells: ({ sheets }, args) => handleMergeGoogleSheetCells(sheets, args),
-    addGoogleSheetConditionalFormat: ({ sheets }, args) =>
-      handleAddGoogleSheetConditionalFormat(sheets, args),
-    createSheetTab: ({ sheets }, args) => handleCreateSheetTab(sheets, args),
-    deleteSheetTab: ({ sheets }, args) => handleDeleteSheetTab(sheets, args),
-    renameSheetTab: ({ sheets }, args) => handleRenameSheetTab(sheets, args),
-    listSheetTabs: ({ sheets }, args) => handleListSheetTabs(sheets, args),
+  // Drive tools
+  if (isServiceEnabled("drive")) {
+    Object.assign(registry, {
+      search: ({ drive }, args) => handleSearch(drive, args),
+      create_text_file: ({ drive }, args) => handleCreateTextFile(drive, args),
+      update_text_file: ({ drive }, args) => handleUpdateTextFile(drive, args),
+      create_folder: ({ drive }, args) => handleCreateFolder(drive, args),
+      list_folder: ({ drive }, args) => handleListFolder(drive, args),
+      delete_item: ({ drive }, args) => handleDeleteItem(drive, args),
+      rename_item: ({ drive }, args) => handleRenameItem(drive, args),
+      move_item: ({ drive }, args) => handleMoveItem(drive, args),
+      copy_file: ({ drive }, args) => handleCopyFile(drive, args),
+      get_file_metadata: ({ drive }, args) => handleGetFileMetadata(drive, args),
+      export_file: ({ drive }, args) => handleExportFile(drive, args),
+      share_file: ({ drive }, args) => handleShareFile(drive, args),
+      get_sharing: ({ drive }, args) => handleGetSharing(drive, args),
+      list_revisions: ({ drive }, args) => handleListRevisions(drive, args),
+      restore_revision: ({ drive }, args) => handleRestoreRevision(drive, args),
+      download_file: ({ drive }, args) => handleDownloadFile(drive, args),
+      upload_file: ({ drive }, args) => handleUploadFile(drive, args),
+      get_storage_quota: ({ drive }, args) => handleGetStorageQuota(drive, args),
+      star_file: ({ drive }, args) => handleStarFile(drive, args),
+      resolve_file_path: ({ drive, context }, args) => handleResolveFilePath(drive, args, context),
+      batch_delete: ({ drive, context }, args) => handleBatchDelete(drive, args, context),
+      batch_restore: ({ drive, context }, args) => handleBatchRestore(drive, args, context),
+      batch_move: ({ drive, context }, args) => handleBatchMove(drive, args, context),
+      batch_share: ({ drive, context }, args) => handleBatchShare(drive, args, context),
+      remove_permission: ({ drive }, args) => handleRemovePermission(drive, args),
+      list_trash: ({ drive }, args) => handleListTrash(drive, args),
+      restore_from_trash: ({ drive }, args) => handleRestoreFromTrash(drive, args),
+      empty_trash: ({ drive, context }, args) => handleEmptyTrash(drive, args, context),
+      get_folder_tree: ({ drive }, args) => handleGetFolderTree(drive, args),
+    } satisfies Record<string, ToolHandler>);
+  }
 
-    // Slides tools
-    createGoogleSlides: ({ drive, slides }, args) => handleCreateGoogleSlides(drive, slides, args),
-    updateGoogleSlides: ({ slides }, args) => handleUpdateGoogleSlides(slides, args),
-    getGoogleSlidesContent: ({ drive, slides }, args) =>
-      handleGetGoogleSlidesContent(drive, slides, args),
-    createGoogleSlidesTextBox: ({ slides }, args) => handleCreateGoogleSlidesTextBox(slides, args),
-    createGoogleSlidesShape: ({ slides }, args) => handleCreateGoogleSlidesShape(slides, args),
-    getGoogleSlidesSpeakerNotes: ({ slides }, args) =>
-      handleGetGoogleSlidesSpeakerNotes(slides, args),
-    updateGoogleSlidesSpeakerNotes: ({ slides }, args) =>
-      handleUpdateGoogleSlidesSpeakerNotes(slides, args),
-    formatGoogleSlidesElement: ({ slides }, args) => handleFormatGoogleSlidesElement(slides, args),
-    listSlidePages: ({ slides }, args) => handleListSlidePages(slides, args),
+  // Docs tools
+  if (isServiceEnabled("docs")) {
+    Object.assign(registry, {
+      create_google_doc: ({ drive, docs }, args) => handleCreateGoogleDoc(drive, docs, args),
+      update_google_doc: ({ docs }, args) => handleUpdateGoogleDoc(docs, args),
+      get_google_doc_content: ({ drive, docs }, args) =>
+        handleGetGoogleDocContent(drive, docs, args),
+      append_to_doc: ({ docs }, args) => handleAppendToDoc(docs, args),
+      insert_text_in_doc: ({ docs }, args) => handleInsertTextInDoc(docs, args),
+      delete_text_in_doc: ({ docs }, args) => handleDeleteTextInDoc(docs, args),
+      replace_text_in_doc: ({ docs }, args) => handleReplaceTextInDoc(docs, args),
+      format_google_doc_range: ({ docs }, args) => handleFormatGoogleDocRange(docs, args),
+    } satisfies Record<string, ToolHandler>);
+  }
 
-    // Unified smart tools
-    createFile: ({ drive, docs, sheets, slides }, args) =>
-      handleCreateFile(drive, docs, sheets, slides, args),
-    updateFile: ({ drive, docs, sheets, slides }, args) =>
-      handleUpdateFile(drive, docs, sheets, slides, args),
-    getFileContent: ({ drive, docs, sheets, slides }, args) =>
-      handleGetFileContent(drive, docs, sheets, slides, args),
+  // Sheets tools
+  if (isServiceEnabled("sheets")) {
+    Object.assign(registry, {
+      create_google_sheet: ({ drive, sheets }, args) =>
+        handleCreateGoogleSheet(drive, sheets, args),
+      update_google_sheet: ({ sheets }, args) => handleUpdateGoogleSheet(sheets, args),
+      get_google_sheet_content: ({ drive, sheets }, args) =>
+        handleGetGoogleSheetContent(drive, sheets, args),
+      format_google_sheet_cells: ({ sheets }, args) => handleFormatGoogleSheetCells(sheets, args),
+      merge_google_sheet_cells: ({ sheets }, args) => handleMergeGoogleSheetCells(sheets, args),
+      add_google_sheet_conditional_format: ({ sheets }, args) =>
+        handleAddGoogleSheetConditionalFormat(sheets, args),
+      sheet_tabs: ({ sheets }, args) => handleSheetTabs(sheets, args),
+    } satisfies Record<string, ToolHandler>);
+  }
 
-    // Calendar tools
-    listCalendars: ({ calendar }, args) => handleListCalendars(calendar, args),
-    listEvents: ({ calendar }, args) => handleListEvents(calendar, args),
-    getEvent: ({ calendar }, args) => handleGetEvent(calendar, args),
-    createEvent: ({ calendar }, args) => handleCreateEvent(calendar, args),
-    updateEvent: ({ calendar }, args) => handleUpdateEvent(calendar, args),
-    deleteEvent: ({ calendar }, args) => handleDeleteEvent(calendar, args),
-    findFreeTime: ({ calendar }, args) => handleFindFreeTime(calendar, args),
-  };
+  // Slides tools
+  if (isServiceEnabled("slides")) {
+    Object.assign(registry, {
+      create_google_slides: ({ drive, slides }, args) =>
+        handleCreateGoogleSlides(drive, slides, args),
+      update_google_slides: ({ slides }, args) => handleUpdateGoogleSlides(slides, args),
+      get_google_slides_content: ({ drive, slides }, args) =>
+        handleGetGoogleSlidesContent(drive, slides, args),
+      create_google_slides_text_box: ({ slides }, args) =>
+        handleCreateGoogleSlidesTextBox(slides, args),
+      create_google_slides_shape: ({ slides }, args) => handleCreateGoogleSlidesShape(slides, args),
+      slides_speaker_notes: ({ slides }, args) => handleSlidesSpeakerNotes(slides, args),
+      format_slides_text: ({ slides }, args) => handleFormatSlidesText(slides, args),
+      format_slides_shape: ({ slides }, args) => handleFormatSlidesShape(slides, args),
+      format_slide_background: ({ slides }, args) => handleFormatSlideBackground(slides, args),
+      list_slide_pages: ({ slides }, args) => handleListSlidePages(slides, args),
+    } satisfies Record<string, ToolHandler>);
+  }
+
+  // Unified smart tools (require drive+docs+sheets+slides)
+  if (areUnifiedToolsEnabled()) {
+    Object.assign(registry, {
+      create_file: ({ drive, docs, sheets, slides }, args) =>
+        handleCreateFile(drive, docs, sheets, slides, args),
+      update_file: ({ drive, docs, sheets, slides }, args) =>
+        handleUpdateFile(drive, docs, sheets, slides, args),
+      get_file_content: ({ drive, docs, sheets, slides }, args) =>
+        handleGetFileContent(drive, docs, sheets, slides, args),
+    } satisfies Record<string, ToolHandler>);
+  }
+
+  // Calendar tools
+  if (isServiceEnabled("calendar")) {
+    Object.assign(registry, {
+      list_calendars: ({ calendar }, args) => handleListCalendars(calendar, args),
+      list_events: ({ calendar }, args) => handleListEvents(calendar, args),
+      get_event: ({ calendar }, args) => handleGetEvent(calendar, args),
+      create_event: ({ calendar }, args) => handleCreateEvent(calendar, args),
+      update_event: ({ calendar }, args) => handleUpdateEvent(calendar, args),
+      delete_event: ({ calendar }, args) => handleDeleteEvent(calendar, args),
+      find_free_time: ({ calendar }, args) => handleFindFreeTime(calendar, args),
+    } satisfies Record<string, ToolHandler>);
+  }
+
+  // Gmail tools
+  if (isServiceEnabled("gmail")) {
+    Object.assign(registry, {
+      send_email: ({ gmail }, args) => handleSendEmail(gmail, args),
+      draft_email: ({ gmail }, args) => handleDraftEmail(gmail, args),
+      read_email: ({ gmail }, args) => handleReadEmail(gmail, args),
+      search_emails: ({ gmail }, args) => handleSearchEmails(gmail, args),
+      delete_email: ({ gmail }, args) => handleDeleteEmail(gmail, args),
+      modify_email: ({ gmail }, args) => handleModifyEmail(gmail, args),
+      download_attachment: ({ gmail }, args) => handleDownloadAttachment(gmail, args),
+      create_label: ({ gmail }, args) => handleCreateLabel(gmail, args),
+      update_label: ({ gmail }, args) => handleUpdateLabel(gmail, args),
+      delete_label: ({ gmail }, args) => handleDeleteLabel(gmail, args),
+      list_labels: ({ gmail }, args) => handleListLabels(gmail, args),
+      get_or_create_label: ({ gmail }, args) => handleGetOrCreateLabel(gmail, args),
+      create_filter: ({ gmail }, args) => handleCreateFilter(gmail, args),
+      list_filters: ({ gmail }, args) => handleListFilters(gmail, args),
+      delete_filter: ({ gmail }, args) => handleDeleteFilter(gmail, args),
+    } satisfies Record<string, ToolHandler>);
+  }
+
+  return registry;
 }
 
 const toolRegistry = createToolRegistry();
@@ -549,6 +622,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       sheets: getSheetsService(authClient!),
       slides: getSlidesService(authClient!),
       calendar: getCalendarService(authClient!),
+      gmail: getGmailService(authClient!),
       context: { server, progressToken: meta?.progressToken },
     };
 

@@ -51,10 +51,7 @@ export {
   handleFormatGoogleSheetCells,
   handleMergeGoogleSheetCells,
   handleAddGoogleSheetConditionalFormat,
-  handleCreateSheetTab,
-  handleDeleteSheetTab,
-  handleRenameSheetTab,
-  handleListSheetTabs,
+  handleSheetTabs,
 } from "./sheets.js";
 
 // Slides handlers
@@ -64,9 +61,10 @@ export {
   handleGetGoogleSlidesContent,
   handleCreateGoogleSlidesTextBox,
   handleCreateGoogleSlidesShape,
-  handleGetGoogleSlidesSpeakerNotes,
-  handleUpdateGoogleSlidesSpeakerNotes,
-  handleFormatGoogleSlidesElement,
+  handleSlidesSpeakerNotes,
+  handleFormatSlidesText,
+  handleFormatSlidesShape,
+  handleFormatSlideBackground,
   handleListSlidePages,
 } from "./slides.js";
 
@@ -83,6 +81,28 @@ export {
   handleDeleteEvent,
   handleFindFreeTime,
 } from "./calendar.js";
+
+// Gmail handlers
+export {
+  handleSendEmail,
+  handleDraftEmail,
+  handleReadEmail,
+  handleSearchEmails,
+  handleDeleteEmail,
+  handleModifyEmail,
+  handleDownloadAttachment,
+  handleCreateLabel,
+  handleUpdateLabel,
+  handleDeleteLabel,
+  handleListLabels,
+  handleGetOrCreateLabel,
+  handleCreateFilter,
+  handleListFilters,
+  handleDeleteFilter,
+} from "./gmail.js";
+
+// Discovery handlers
+export { handleListTools } from "./discovery.js";
 
 // Helper utilities
 export {

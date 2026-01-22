@@ -3,6 +3,12 @@
  * Each tool definition includes name, description, inputSchema, and optionally outputSchema.
  */
 
+// JSON Schema conditional keywords for machine-parseable requirements
+interface JsonSchemaConditional {
+  if?: { properties: Record<string, unknown> };
+  then?: { required: string[] };
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -10,6 +16,10 @@ export interface ToolDefinition {
     type: "object";
     properties: Record<string, unknown>;
     required?: string[];
+    // JSON Schema conditional keywords for action-based requirements
+    if?: { properties: Record<string, unknown> };
+    then?: { required: string[] };
+    allOf?: JsonSchemaConditional[];
   };
   outputSchema?: {
     type: "object";
@@ -21,18 +31,18 @@ export interface ToolDefinition {
 export const driveTools: ToolDefinition[] = [
   {
     name: "search",
-    description: "Search and find files and folders in Google Drive by name, type, or content",
+    description: "Search files and folders in Drive (max 100 results per page)",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string", description: "Search query" },
         pageSize: {
           type: "number",
-          description: "Results per page (default 50, max 100)",
+          description: "(optional, default: 50) Results per page (max 100)",
         },
         pageToken: {
           type: "string",
-          description: "Token for next page of results",
+          description: "(optional) Token for next page of results",
         },
       },
       required: ["query"],
@@ -65,8 +75,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "createTextFile",
-    description: "Create a plain text (.txt) or markdown (.md) file in Google Drive",
+    name: "create_text_file",
+    description: "Create a text or markdown file",
     inputSchema: {
       type: "object",
       properties: {
@@ -93,7 +103,7 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "updateTextFile",
+    name: "update_text_file",
     description: "Update content of a text or markdown file in Google Drive",
     inputSchema: {
       type: "object",
@@ -119,7 +129,7 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "createFolder",
+    name: "create_folder",
     description: "Create a new folder in Google Drive",
     inputSchema: {
       type: "object",
@@ -146,17 +156,17 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "listFolder",
-    description: "List files and subfolders in a Google Drive folder (defaults to root)",
+    name: "list_folder",
+    description: "List folder contents (max 100 items per page)",
     inputSchema: {
       type: "object",
       properties: {
-        folderId: { type: "string", description: "Folder ID" },
+        folderId: { type: "string", description: "(optional) Folder ID (defaults to root)" },
         pageSize: {
           type: "number",
-          description: "Items to return (default 50, max 100)",
+          description: "(optional, default: 50) Items to return (max 100)",
         },
-        pageToken: { type: "string", description: "Token for next page" },
+        pageToken: { type: "string", description: "(optional) Token for next page" },
       },
     },
     outputSchema: {
@@ -190,8 +200,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "deleteItem",
-    description: "Move a file or folder to trash (can be restored from Google Drive trash)",
+    name: "delete_item",
+    description: "Move items to trash",
     inputSchema: {
       type: "object",
       properties: {
@@ -202,17 +212,14 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Name of the trashed item" },
-        success: {
-          type: "boolean",
-          description: "Whether the operation succeeded",
-        },
+        success: { type: "boolean", description: "Whether the deletion succeeded" },
+        itemId: { type: "string", description: "ID of the deleted item" },
       },
     },
   },
   {
-    name: "renameItem",
-    description: "Rename a file or folder in Google Drive by ID",
+    name: "rename_item",
+    description: "Rename a file or folder",
     inputSchema: {
       type: "object",
       properties: {
@@ -224,14 +231,15 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        oldName: { type: "string", description: "Previous name" },
-        newName: { type: "string", description: "New name" },
+        success: { type: "boolean", description: "Whether the rename succeeded" },
+        id: { type: "string", description: "Item ID" },
+        name: { type: "string", description: "New name" },
       },
     },
   },
   {
-    name: "moveItem",
-    description: "Move a file or folder to a different Google Drive location",
+    name: "move_item",
+    description: "Move items to a new folder",
     inputSchema: {
       type: "object",
       properties: {
@@ -260,8 +268,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "copyFile",
-    description: "Copy a file to a new Google Drive location with optional new name",
+    name: "copy_file",
+    description: "Copy a file with optional new name",
     inputSchema: {
       type: "object",
       properties: {
@@ -290,8 +298,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getFileMetadata",
-    description: "Get detailed metadata for a file or folder (size, owner, dates, etc.)",
+    name: "get_file_metadata",
+    description: "Get file or folder metadata",
     inputSchema: {
       type: "object",
       properties: {
@@ -344,8 +352,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "exportFile",
-    description: "Export a Google Doc/Sheet/Slides to PDF, DOCX, XLSX, PPTX, CSV, or other formats",
+    name: "export_file",
+    description: "Export Workspace files to other formats",
     inputSchema: {
       type: "object",
       properties: {
@@ -384,7 +392,7 @@ export const driveTools: ToolDefinition[] = [
   },
   // Sharing tools
   {
-    name: "shareFile",
+    name: "share_file",
     description: "Share a file with a user, group, domain, or make public",
     inputSchema: {
       type: "object",
@@ -430,7 +438,7 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getSharing",
+    name: "get_sharing",
     description: "Get sharing settings and permissions for a file",
     inputSchema: {
       type: "object",
@@ -484,9 +492,8 @@ export const driveTools: ToolDefinition[] = [
   },
   // Revision tools
   {
-    name: "listRevisions",
-    description:
-      "List version history of a Google Drive file (binary files only, not Workspace files)",
+    name: "list_revisions",
+    description: "List file version history",
     inputSchema: {
       type: "object",
       properties: {
@@ -536,8 +543,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "restoreRevision",
-    description: "Restore a Google Drive file to a previous revision (binary files only)",
+    name: "restore_revision",
+    description: "Restore file to previous revision",
     inputSchema: {
       type: "object",
       properties: {
@@ -559,9 +566,8 @@ export const driveTools: ToolDefinition[] = [
   },
   // Binary file tools
   {
-    name: "downloadFile",
-    description:
-      "Download a Google Drive file (images, PDFs, etc.) as base64 or to disk. For Workspace files, use exportFile",
+    name: "download_file",
+    description: "Download a file as base64 or to disk",
     inputSchema: {
       type: "object",
       properties: {
@@ -594,8 +600,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "uploadFile",
-    description: "Upload a file to Google Drive from disk or base64 content",
+    name: "upload_file",
+    description: "Upload file from disk or base64",
     inputSchema: {
       type: "object",
       properties: {
@@ -632,7 +638,7 @@ export const driveTools: ToolDefinition[] = [
   },
   // Metadata tools
   {
-    name: "getStorageQuota",
+    name: "get_storage_quota",
     description: "Get Google Drive storage quota and usage",
     inputSchema: {
       type: "object",
@@ -673,7 +679,7 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "starFile",
+    name: "star_file",
     description: "Star or unstar a file in Google Drive",
     inputSchema: {
       type: "object",
@@ -689,16 +695,16 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        fileName: { type: "string", description: "Name of the file" },
-        starred: { type: "boolean", description: "New starred status" },
+        success: { type: "boolean", description: "Whether the operation succeeded" },
+        fileId: { type: "string", description: "File ID" },
+        starred: { type: "boolean", description: "Current starred status" },
       },
     },
   },
   // File path resolution
   {
-    name: "resolveFilePath",
-    description:
-      "Resolve a file path like 'Documents/Projects/Budget.xlsx' to a file ID. Returns the file ID and metadata. Use this before operations when you have a path but need an ID.",
+    name: "resolve_file_path",
+    description: "Resolve file path to ID",
     inputSchema: {
       type: "object",
       properties: {
@@ -731,9 +737,8 @@ export const driveTools: ToolDefinition[] = [
   },
   // Batch operations
   {
-    name: "batchDelete",
-    description:
-      "Move multiple files to trash (not permanent deletion). Files can be restored with restoreFromTrash or batchRestore. Use emptyTrash for permanent deletion.",
+    name: "batch_delete",
+    description: "Batch move files to trash (max 100 per batch)",
     inputSchema: {
       type: "object",
       properties: {
@@ -748,20 +753,11 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        deleted: {
+        succeeded: { type: "number", description: "Number of files successfully deleted" },
+        failed: { type: "number", description: "Number of files that failed" },
+        errors: {
           type: "array",
-          description: "Successfully deleted files",
-          items: {
-            type: "object",
-            properties: {
-              fileId: { type: "string" },
-              name: { type: "string" },
-            },
-          },
-        },
-        failed: {
-          type: "array",
-          description: "Files that failed to delete",
+          description: "List of errors for failed operations",
           items: {
             type: "object",
             properties: {
@@ -774,9 +770,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "batchRestore",
-    description:
-      "Restore multiple files from trash in a single operation. More efficient than calling restoreFromTrash multiple times.",
+    name: "batch_restore",
+    description: "Batch restore files from trash (max 100 per batch)",
     inputSchema: {
       type: "object",
       properties: {
@@ -791,20 +786,11 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        restored: {
+        succeeded: { type: "number", description: "Number of files successfully restored" },
+        failed: { type: "number", description: "Number of files that failed" },
+        errors: {
           type: "array",
-          description: "Successfully restored files",
-          items: {
-            type: "object",
-            properties: {
-              fileId: { type: "string" },
-              name: { type: "string" },
-            },
-          },
-        },
-        failed: {
-          type: "array",
-          description: "Files that failed to restore",
+          description: "List of errors for failed operations",
           items: {
             type: "object",
             properties: {
@@ -817,9 +803,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "batchMove",
-    description:
-      "Move multiple files to a folder in a single operation. More efficient than calling moveItem multiple times.",
+    name: "batch_move",
+    description: "Batch move files to folder (max 100 per batch)",
     inputSchema: {
       type: "object",
       properties: {
@@ -843,20 +828,19 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        moved: {
-          type: "array",
-          description: "Successfully moved files",
-          items: {
-            type: "object",
-            properties: {
-              fileId: { type: "string" },
-              name: { type: "string" },
-            },
+        succeeded: { type: "number", description: "Number of files successfully moved" },
+        failed: { type: "number", description: "Number of files that failed" },
+        destinationFolder: {
+          type: "object",
+          description: "Destination folder info",
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
           },
         },
-        failed: {
+        errors: {
           type: "array",
-          description: "Files that failed to move",
+          description: "List of errors for failed operations",
           items: {
             type: "object",
             properties: {
@@ -865,20 +849,12 @@ export const driveTools: ToolDefinition[] = [
             },
           },
         },
-        destinationFolder: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            name: { type: "string" },
-          },
-        },
       },
     },
   },
   {
-    name: "batchShare",
-    description:
-      "Share multiple files with a user in a single operation. More efficient than calling shareFile multiple times.",
+    name: "batch_share",
+    description: "Batch share files with a user (max 100 per batch)",
     inputSchema: {
       type: "object",
       properties: {
@@ -895,7 +871,7 @@ export const driveTools: ToolDefinition[] = [
         },
         sendNotification: {
           type: "boolean",
-          description: "Send email notification (default: true)",
+          description: "(optional, default: true) Send email notification",
         },
       },
       required: ["fileIds", "email", "role"],
@@ -903,20 +879,13 @@ export const driveTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        shared: {
+        succeeded: { type: "number", description: "Number of files successfully shared" },
+        failed: { type: "number", description: "Number of files that failed" },
+        sharedWith: { type: "string", description: "Email address files were shared with" },
+        role: { type: "string", description: "Permission role granted" },
+        errors: {
           type: "array",
-          description: "Successfully shared files",
-          items: {
-            type: "object",
-            properties: {
-              fileId: { type: "string" },
-              name: { type: "string" },
-            },
-          },
-        },
-        failed: {
-          type: "array",
-          description: "Files that failed to share",
+          description: "List of errors for failed operations",
           items: {
             type: "object",
             properties: {
@@ -925,21 +894,13 @@ export const driveTools: ToolDefinition[] = [
             },
           },
         },
-        shareDetails: {
-          type: "object",
-          properties: {
-            email: { type: "string" },
-            role: { type: "string" },
-          },
-        },
       },
     },
   },
   // Permission management
   {
-    name: "removePermission",
-    description:
-      "Remove sharing permission from a file. Can specify either permissionId or email address.",
+    name: "remove_permission",
+    description: "Remove sharing permission from a file",
     inputSchema: {
       type: "object",
       properties: {
@@ -968,9 +929,8 @@ export const driveTools: ToolDefinition[] = [
   },
   // Trash management
   {
-    name: "listTrash",
-    description:
-      "List files in the trash. Use restoreFromTrash to recover files or emptyTrash to permanently delete all.",
+    name: "list_trash",
+    description: "List files in trash",
     inputSchema: {
       type: "object",
       properties: {
@@ -1003,9 +963,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "restoreFromTrash",
-    description:
-      "Restore a file from trash. By default restores to original location, or optionally move to a different folder.",
+    name: "restore_from_trash",
+    description: "Restore a file from trash",
     inputSchema: {
       type: "object",
       properties: {
@@ -1043,9 +1002,8 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "emptyTrash",
-    description:
-      "Permanently delete all files in trash. This action cannot be undone. Use driveId for shared drives.",
+    name: "empty_trash",
+    description: "Permanently delete all files in trash",
     inputSchema: {
       type: "object",
       properties: {
@@ -1076,25 +1034,25 @@ export const driveTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getFolderTree",
-    description:
-      "Get a hierarchical tree view of a folder's contents. Useful for discovering folder structure without making multiple listFolder calls. Returns files and subfolders up to the specified depth.",
+    name: "get_folder_tree",
+    description: "Get folder tree structure (max depth 5, truncates at 100 items per folder)",
     inputSchema: {
       type: "object",
       properties: {
         folderId: {
           type: "string",
           description:
-            "Folder ID to start from (defaults to root, mutually exclusive with folderPath)",
+            "(optional) Folder ID to start from (defaults to root, mutually exclusive with folderPath)",
         },
         folderPath: {
           type: "string",
-          description: "Folder path like '/Documents/Projects' (mutually exclusive with folderId)",
+          description:
+            "(optional) Folder path like '/Documents/Projects' (mutually exclusive with folderId)",
         },
         depth: {
           type: "number",
           description:
-            "Maximum depth to traverse (1-5, default: 2). Higher values make more API calls.",
+            "(optional, default: 2) Maximum depth to traverse (1-5). Higher values make more API calls.",
         },
       },
       required: [],
@@ -1138,8 +1096,8 @@ export const driveTools: ToolDefinition[] = [
 // Docs tools
 export const docsTools: ToolDefinition[] = [
   {
-    name: "createGoogleDoc",
-    description: "Create a new Google Document with optional initial text content",
+    name: "create_google_doc",
+    description: "Create a new Google Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1170,8 +1128,8 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "updateGoogleDoc",
-    description: "Replace or overwrite content in an existing Google Document",
+    name: "update_google_doc",
+    description: "Replace content in a Google Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1192,9 +1150,8 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getGoogleDocContent",
-    description:
-      "Read and retrieve text content from a Google Document including character positions for formatting",
+    name: "get_google_doc_content",
+    description: "Read content from a Google Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1227,7 +1184,7 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "appendToDoc",
+    name: "append_to_doc",
     description: "Append text to the end of a Google Doc",
     inputSchema: {
       type: "object",
@@ -1253,9 +1210,8 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "insertTextInDoc",
-    description:
-      "Insert text at a specific position in a Google Doc. Use getGoogleDocContent to find the correct index. Index 1 is the beginning of document content.",
+    name: "insert_text_in_doc",
+    description: "Insert text at a position in a Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1282,9 +1238,8 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "deleteTextInDoc",
-    description:
-      "Delete text in a range from a Google Doc. Use getGoogleDocContent to find the correct indices.",
+    name: "delete_text_in_doc",
+    description: "Delete text range from a Google Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1314,8 +1269,8 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "replaceTextInDoc",
-    description: "Find and replace all occurrences of text in a Google Doc",
+    name: "replace_text_in_doc",
+    description: "Find and replace text in a Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1344,9 +1299,8 @@ export const docsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "formatGoogleDocRange",
-    description:
-      "Unified formatting tool for Google Docs. Apply text styling (bold, italic, font, color) and paragraph formatting (alignment, spacing, headings) in a single call. If no range is specified, applies to entire document.",
+    name: "format_google_doc_range",
+    description: "Format text and paragraphs in a Doc",
     inputSchema: {
       type: "object",
       properties: {
@@ -1426,9 +1380,8 @@ export const docsTools: ToolDefinition[] = [
 // Sheets tools
 export const sheetsTools: ToolDefinition[] = [
   {
-    name: "createGoogleSheet",
-    description:
-      "Create a new Google Sheet. By default uses RAW mode which stores values as-is. Set valueInputOption to 'USER_ENTERED' only when you need formulas to be evaluated.",
+    name: "create_google_sheet",
+    description: "Create a new Google Sheet",
     inputSchema: {
       type: "object",
       properties: {
@@ -1465,9 +1418,8 @@ export const sheetsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "updateGoogleSheet",
-    description:
-      "Update an existing Google Sheet. By default uses RAW mode which stores values as-is. Set valueInputOption to 'USER_ENTERED' only when you need formulas to be evaluated.",
+    name: "update_google_sheet",
+    description: "Update a Google Sheet range",
     inputSchema: {
       type: "object",
       properties: {
@@ -1502,9 +1454,8 @@ export const sheetsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getGoogleSheetContent",
-    description:
-      'Get content of a Google Sheet with cell information. Note: The first tab is not always named "Sheet1" - user-created spreadsheets may have custom names. Use listSheetTabs to discover actual tab names, or omit range to get all data from the first tab.',
+    name: "get_google_sheet_content",
+    description: "Read content from a Google Sheet",
     inputSchema: {
       type: "object",
       properties: {
@@ -1539,9 +1490,8 @@ export const sheetsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "formatGoogleSheetCells",
-    description:
-      "Format cells in a Google Sheet. Combines all formatting in a single call: background color, alignment, text styling (bold/italic/font), number formatting, and borders.",
+    name: "format_google_sheet_cells",
+    description: "Format cells in a Google Sheet",
     inputSchema: {
       type: "object",
       properties: {
@@ -1668,7 +1618,7 @@ export const sheetsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "mergeGoogleSheetCells",
+    name: "merge_google_sheet_cells",
     description: "Merge cells in a Google Sheet",
     inputSchema: {
       type: "object",
@@ -1695,8 +1645,8 @@ export const sheetsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "addGoogleSheetConditionalFormat",
-    description: "Add conditional formatting to a Google Sheet",
+    name: "add_google_sheet_conditional_format",
+    description: "Add conditional formatting to a Sheet",
     inputSchema: {
       type: "object",
       properties: {
@@ -1773,122 +1723,56 @@ export const sheetsTools: ToolDefinition[] = [
     },
   },
   {
-    name: "createSheetTab",
-    description: "Create a new tab (sheet) in a Google Sheets spreadsheet",
+    name: "sheet_tabs",
+    description: "Manage tabs in a spreadsheet: list, create, delete, or rename",
     inputSchema: {
       type: "object",
       properties: {
         spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-        title: { type: "string", description: "Name for the new tab" },
-        index: {
-          type: "number",
-          description: "Position for the new tab (0-based, optional)",
-        },
-      },
-      required: ["spreadsheetId", "title"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-        title: { type: "string", description: "Created tab name" },
-        sheetId: { type: "number", description: "Created sheet ID" },
-      },
-    },
-  },
-  {
-    name: "deleteSheetTab",
-    description: "Delete a tab (sheet) from a Google Sheets spreadsheet",
-    inputSchema: {
-      type: "object",
-      properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-        sheetTitle: {
+        action: {
           type: "string",
-          description: "Name of the tab to delete",
+          enum: ["list", "create", "delete", "rename"],
+          description: "Action to perform",
         },
+        title: { type: "string", description: "Tab title (required for create/delete)" },
+        index: { type: "number", description: "(optional) Position for new tab (create only)" },
+        currentTitle: { type: "string", description: "Current title (required for rename)" },
+        newTitle: { type: "string", description: "New title (required for rename)" },
       },
-      required: ["spreadsheetId", "sheetTitle"],
+      required: ["spreadsheetId", "action"],
+      allOf: [
+        {
+          if: { properties: { action: { const: "create" } } },
+          then: { required: ["title"] },
+        },
+        {
+          if: { properties: { action: { const: "delete" } } },
+          then: { required: ["title"] },
+        },
+        {
+          if: { properties: { action: { const: "rename" } } },
+          then: { required: ["currentTitle", "newTitle"] },
+        },
+      ],
     },
     outputSchema: {
       type: "object",
       properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-        deletedTitle: {
-          type: "string",
-          description: "Name of the deleted tab",
-        },
-      },
-    },
-  },
-  {
-    name: "renameSheetTab",
-    description: "Rename a tab (sheet) in a Google Sheets spreadsheet",
-    inputSchema: {
-      type: "object",
-      properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-        currentTitle: {
-          type: "string",
-          description: "Current name of the tab",
-        },
-        newTitle: { type: "string", description: "New name for the tab" },
-      },
-      required: ["spreadsheetId", "currentTitle", "newTitle"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-        oldTitle: { type: "string", description: "Previous tab name" },
-        newTitle: { type: "string", description: "New tab name" },
-      },
-    },
-  },
-  {
-    name: "listSheetTabs",
-    description:
-      "List all tabs (sheets) in a Google Sheets spreadsheet with their metadata. Use this to discover available sheets before reading or formatting data.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
-      },
-      required: ["spreadsheetId"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: {
-        spreadsheetId: { type: "string", description: "Spreadsheet ID" },
+        action: { type: "string", description: "Action performed" },
         tabs: {
           type: "array",
-          description: "List of sheet tabs with metadata",
+          description: "List of tabs (for list action)",
           items: {
             type: "object",
             properties: {
-              sheetId: {
-                type: "number",
-                description: "Numeric sheet ID (used for formatting operations)",
-              },
-              title: {
-                type: "string",
-                description: "Sheet tab name (used in A1 notation like 'Sheet1!A1:C10')",
-              },
-              index: {
-                type: "number",
-                description: "Tab position (0-indexed)",
-              },
-              rowCount: {
-                type: "number",
-                description: "Number of rows in the sheet",
-              },
-              columnCount: {
-                type: "number",
-                description: "Number of columns in the sheet",
-              },
+              sheetId: { type: "number", description: "Sheet ID" },
+              title: { type: "string", description: "Tab title" },
+              index: { type: "number", description: "Tab position" },
             },
           },
         },
+        sheetId: { type: "number", description: "Sheet ID (for create/delete/rename)" },
+        title: { type: "string", description: "Tab title" },
       },
     },
   },
@@ -1897,8 +1781,8 @@ export const sheetsTools: ToolDefinition[] = [
 // Slides tools
 export const slidesTools: ToolDefinition[] = [
   {
-    name: "createGoogleSlides",
-    description: "Create a new Google Slides presentation with initial slides",
+    name: "create_google_slides",
+    description: "Create a new Google Slides presentation",
     inputSchema: {
       type: "object",
       properties: {
@@ -1939,8 +1823,8 @@ export const slidesTools: ToolDefinition[] = [
     },
   },
   {
-    name: "updateGoogleSlides",
-    description: "Update an existing Google Slides presentation",
+    name: "update_google_slides",
+    description: "Update a Google Slides presentation",
     inputSchema: {
       type: "object",
       properties: {
@@ -1974,8 +1858,8 @@ export const slidesTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getGoogleSlidesContent",
-    description: "Get content of Google Slides with element IDs for formatting",
+    name: "get_google_slides_content",
+    description: "Read content from Google Slides",
     inputSchema: {
       type: "object",
       properties: {
@@ -2034,136 +1918,48 @@ export const slidesTools: ToolDefinition[] = [
     },
   },
   {
-    name: "formatGoogleSlidesElement",
-    description:
-      "Unified formatting tool for Google Slides. Format text (styling + paragraph), shapes (background + outline), or slide backgrounds in a single call. Use targetType to specify what you're formatting.",
+    name: "format_slides_text",
+    description: "Format text styling in Google Slides",
     inputSchema: {
       type: "object",
       properties: {
         presentationId: { type: "string", description: "Presentation ID" },
-        targetType: {
-          type: "string",
-          description:
-            "What to format: 'text' for text styling/paragraphs, 'shape' for shape styling, 'slide' for slide background",
-          enum: ["text", "shape", "slide"],
-        },
-        objectId: {
-          type: "string",
-          description: "Object ID (required for text/shape targetType)",
-        },
-        pageObjectIds: {
-          type: "array",
-          description: "Array of slide IDs (required for slide targetType)",
-          items: { type: "string" },
-        },
-        // Text range
-        startIndex: {
-          type: "number",
-          description: "Start index for text range (0-based)",
-        },
-        endIndex: {
-          type: "number",
-          description: "End index for text range (0-based)",
-        },
-        // Text formatting
-        bold: {
-          type: "boolean",
-          description: "Make text bold (text targetType)",
-        },
-        italic: {
-          type: "boolean",
-          description: "Make text italic (text targetType)",
-        },
-        underline: {
-          type: "boolean",
-          description: "Underline text (text targetType)",
-        },
-        strikethrough: {
-          type: "boolean",
-          description: "Strikethrough text (text targetType)",
-        },
-        fontSize: {
-          type: "number",
-          description: "Font size in points (text targetType)",
-        },
-        fontFamily: {
-          type: "string",
-          description: "Font family name (text targetType)",
-        },
+        objectId: { type: "string", description: "Text element object ID" },
+        startIndex: { type: "number", description: "Start index (0-based, optional)" },
+        endIndex: { type: "number", description: "End index (0-based, optional)" },
+        bold: { type: "boolean", description: "Make text bold" },
+        italic: { type: "boolean", description: "Make text italic" },
+        underline: { type: "boolean", description: "Underline text" },
+        strikethrough: { type: "boolean", description: "Strikethrough text" },
+        fontSize: { type: "number", description: "Font size in points" },
+        fontFamily: { type: "string", description: "Font family name" },
         foregroundColor: {
           type: "object",
-          description: "Text color RGB (0-1) (text targetType)",
+          description: "Text color RGB (values 0-1)",
           properties: {
             red: { type: "number" },
             green: { type: "number" },
             blue: { type: "number" },
           },
         },
-        // Paragraph formatting
         alignment: {
           type: "string",
-          description: "Text alignment (text targetType)",
+          description: "Text alignment",
           enum: ["START", "CENTER", "END", "JUSTIFIED"],
         },
-        lineSpacing: {
-          type: "number",
-          description: "Line spacing multiplier (text targetType)",
-        },
+        lineSpacing: { type: "number", description: "Line spacing multiplier" },
         bulletStyle: {
           type: "string",
-          description: "Bullet style (text targetType)",
+          description: "Bullet style",
           enum: ["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"],
         },
-        // Shape styling
-        backgroundColor: {
-          type: "object",
-          description: "Shape background color RGBA (0-1) (shape targetType)",
-          properties: {
-            red: { type: "number" },
-            green: { type: "number" },
-            blue: { type: "number" },
-            alpha: { type: "number" },
-          },
-        },
-        outlineColor: {
-          type: "object",
-          description: "Shape outline color RGB (0-1) (shape targetType)",
-          properties: {
-            red: { type: "number" },
-            green: { type: "number" },
-            blue: { type: "number" },
-          },
-        },
-        outlineWeight: {
-          type: "number",
-          description: "Outline thickness in points (shape targetType)",
-        },
-        outlineDashStyle: {
-          type: "string",
-          description: "Outline dash style (shape targetType)",
-          enum: ["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"],
-        },
-        // Slide background
-        slideBackgroundColor: {
-          type: "object",
-          description: "Slide background color RGBA (0-1) (slide targetType)",
-          properties: {
-            red: { type: "number" },
-            green: { type: "number" },
-            blue: { type: "number" },
-            alpha: { type: "number" },
-          },
-        },
       },
-      required: ["presentationId", "targetType"],
+      required: ["presentationId", "objectId"],
     },
     outputSchema: {
       type: "object",
       properties: {
-        targetType: {
-          type: "string",
-          description: "Type of element formatted",
-        },
+        objectId: { type: "string", description: "Formatted text object ID" },
         formatsApplied: {
           type: "array",
           items: { type: "string" },
@@ -2173,9 +1969,88 @@ export const slidesTools: ToolDefinition[] = [
     },
   },
   {
-    name: "createGoogleSlidesTextBox",
-    description:
-      'Create a text box in Google Slides. Position values (x, y, width, height) are in EMU units. Conversion: 1 inch = 914400 EMU, 1 point = 12700 EMU. Example: 2 inches = 1828800 EMU. Standard slide is 9144000 x 5143500 EMU (10" x 5.625").',
+    name: "format_slides_shape",
+    description: "Format shape fill and outline in Google Slides",
+    inputSchema: {
+      type: "object",
+      properties: {
+        presentationId: { type: "string", description: "Presentation ID" },
+        objectId: { type: "string", description: "Shape object ID" },
+        backgroundColor: {
+          type: "object",
+          description: "Shape fill color RGBA (values 0-1)",
+          properties: {
+            red: { type: "number" },
+            green: { type: "number" },
+            blue: { type: "number" },
+            alpha: { type: "number" },
+          },
+        },
+        outlineColor: {
+          type: "object",
+          description: "Outline color RGB (values 0-1)",
+          properties: {
+            red: { type: "number" },
+            green: { type: "number" },
+            blue: { type: "number" },
+          },
+        },
+        outlineWeight: { type: "number", description: "Outline thickness in points" },
+        outlineDashStyle: {
+          type: "string",
+          description: "Outline dash style",
+          enum: ["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"],
+        },
+      },
+      required: ["presentationId", "objectId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        objectId: { type: "string", description: "Formatted shape object ID" },
+        formatsApplied: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of formats applied",
+        },
+      },
+    },
+  },
+  {
+    name: "format_slide_background",
+    description: "Set slide background color in Google Slides",
+    inputSchema: {
+      type: "object",
+      properties: {
+        presentationId: { type: "string", description: "Presentation ID" },
+        pageObjectIds: {
+          type: "array",
+          description: "Array of slide IDs to format",
+          items: { type: "string" },
+        },
+        backgroundColor: {
+          type: "object",
+          description: "Background color RGBA (values 0-1)",
+          properties: {
+            red: { type: "number" },
+            green: { type: "number" },
+            blue: { type: "number" },
+            alpha: { type: "number" },
+          },
+        },
+      },
+      required: ["presentationId", "pageObjectIds", "backgroundColor"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        slidesFormatted: { type: "number", description: "Number of slides formatted" },
+      },
+    },
+  },
+  {
+    name: "create_google_slides_text_box",
+    description: "Create a text box in Google Slides",
     inputSchema: {
       type: "object",
       properties: {
@@ -2207,9 +2082,8 @@ export const slidesTools: ToolDefinition[] = [
     },
   },
   {
-    name: "createGoogleSlidesShape",
-    description:
-      'Create a shape in Google Slides. Position values (x, y, width, height) are in EMU units. Conversion: 1 inch = 914400 EMU, 1 point = 12700 EMU. Standard slide is 9144000 x 5143500 EMU (10" x 5.625").',
+    name: "create_google_slides_shape",
+    description: "Create a shape in Google Slides",
     inputSchema: {
       type: "object",
       properties: {
@@ -2253,48 +2127,37 @@ export const slidesTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getGoogleSlidesSpeakerNotes",
-    description: "Get speaker notes from a specific slide in Google Slides",
+    name: "slides_speaker_notes",
+    description: "Get or update speaker notes for a slide",
     inputSchema: {
       type: "object",
       properties: {
         presentationId: { type: "string", description: "Presentation ID" },
         slideIndex: { type: "number", description: "Slide index (0-based)" },
+        action: {
+          type: "string",
+          enum: ["get", "update"],
+          description: "Action to perform",
+        },
+        notes: { type: "string", description: "Notes content (required for update)" },
       },
-      required: ["presentationId", "slideIndex"],
+      required: ["presentationId", "slideIndex", "action"],
+      if: { properties: { action: { const: "update" } } },
+      then: { required: ["notes"] },
     },
     outputSchema: {
       type: "object",
       properties: {
+        action: { type: "string", description: "Action performed" },
         slideIndex: { type: "number", description: "Slide index" },
         notes: { type: "string", description: "Speaker notes content" },
+        updated: { type: "boolean", description: "Whether notes were updated (for update action)" },
       },
     },
   },
   {
-    name: "updateGoogleSlidesSpeakerNotes",
-    description: "Update speaker notes for a specific slide in Google Slides",
-    inputSchema: {
-      type: "object",
-      properties: {
-        presentationId: { type: "string", description: "Presentation ID" },
-        slideIndex: { type: "number", description: "Slide index (0-based)" },
-        notes: { type: "string", description: "Speaker notes content" },
-      },
-      required: ["presentationId", "slideIndex", "notes"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: {
-        slideIndex: { type: "number", description: "Slide index" },
-        updated: { type: "boolean", description: "Whether notes were updated" },
-      },
-    },
-  },
-  {
-    name: "listSlidePages",
-    description:
-      "List all pages (slides) in a Google Slides presentation with their metadata. Use this to discover available slides and their object IDs before formatting or updating.",
+    name: "list_slide_pages",
+    description: "List slides in a presentation",
     inputSchema: {
       type: "object",
       properties: {
@@ -2339,9 +2202,8 @@ export const slidesTools: ToolDefinition[] = [
 // Unified smart tools
 export const unifiedTools: ToolDefinition[] = [
   {
-    name: "createFile",
-    description:
-      "Smart file creation that infers type from name or content. Creates Google Docs, Sheets, Slides, or text files automatically. Routes based on extension (.docx→Doc, .xlsx→Sheet, .pptx→Slides, .txt/.md→text) or content structure (2D array→Sheet, slides array→Slides).",
+    name: "create_file",
+    description: "Create file (auto-detects type from name)",
     inputSchema: {
       type: "object",
       properties: {
@@ -2409,9 +2271,8 @@ export const unifiedTools: ToolDefinition[] = [
     },
   },
   {
-    name: "updateFile",
-    description:
-      "Smart file update that detects file type and routes accordingly. Works with Google Docs, Sheets, and text files. For Slides, use updateGoogleSlides directly.",
+    name: "update_file",
+    description: "Update file (auto-detects type)",
     inputSchema: {
       type: "object",
       properties: {
@@ -2453,9 +2314,8 @@ export const unifiedTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getFileContent",
-    description:
-      "Smart content retrieval that returns appropriate format based on file type. Returns structured data for Sheets/Slides, plain text for Docs/text files.",
+    name: "get_file_content",
+    description: "Get file content (auto-detects type)",
     inputSchema: {
       type: "object",
       properties: {
@@ -2508,7 +2368,7 @@ export const unifiedTools: ToolDefinition[] = [
 // Calendar tools
 export const calendarTools: ToolDefinition[] = [
   {
-    name: "listCalendars",
+    name: "list_calendars",
     description: "List all calendars accessible to the user",
     inputSchema: {
       type: "object",
@@ -2548,43 +2408,43 @@ export const calendarTools: ToolDefinition[] = [
     },
   },
   {
-    name: "listEvents",
-    description: "List events from a calendar within a date range. Supports search and pagination.",
+    name: "list_events",
+    description: "List calendar events (max 2500 per request)",
     inputSchema: {
       type: "object",
       properties: {
         calendarId: {
           type: "string",
-          description: "Calendar ID (defaults to 'primary')",
+          description: "(optional, default: 'primary') Calendar ID",
         },
         timeMin: {
           type: "string",
-          description: "Start of time range (RFC3339 timestamp, e.g., 2024-01-15T00:00:00Z)",
+          description: "(optional) Start of time range (RFC3339 timestamp, e.g., 2024-01-15T00:00:00Z)",
         },
         timeMax: {
           type: "string",
-          description: "End of time range (RFC3339 timestamp)",
+          description: "(optional) End of time range (RFC3339 timestamp)",
         },
         query: {
           type: "string",
-          description: "Free text search terms to filter events",
+          description: "(optional) Free text search terms to filter events",
         },
         maxResults: {
           type: "number",
-          description: "Maximum events to return (default 250, max 2500)",
+          description: "(optional, default: 250) Maximum events to return (max 2500)",
         },
         pageToken: {
           type: "string",
-          description: "Token for pagination",
+          description: "(optional) Token for pagination",
         },
         singleEvents: {
           type: "boolean",
-          description: "Expand recurring events into instances (default: true)",
+          description: "(optional, default: true) Expand recurring events into instances",
         },
         orderBy: {
           type: "string",
           enum: ["startTime", "updated"],
-          description: "Sort order (startTime requires singleEvents=true)",
+          description: "(optional) Sort order (startTime requires singleEvents=true)",
         },
       },
     },
@@ -2601,8 +2461,24 @@ export const calendarTools: ToolDefinition[] = [
               summary: { type: "string", description: "Event title" },
               description: { type: "string", description: "Event description" },
               location: { type: "string", description: "Event location" },
-              start: { type: "object", description: "Start time object" },
-              end: { type: "object", description: "End time object" },
+              start: {
+                type: "object",
+                description: "Start time",
+                properties: {
+                  dateTime: { type: "string", description: "RFC3339 timestamp (timed events)" },
+                  date: { type: "string", description: "YYYY-MM-DD (all-day events)" },
+                  timeZone: { type: "string", description: "IANA timezone" },
+                },
+              },
+              end: {
+                type: "object",
+                description: "End time",
+                properties: {
+                  dateTime: { type: "string", description: "RFC3339 timestamp (timed events)" },
+                  date: { type: "string", description: "YYYY-MM-DD (all-day events)" },
+                  timeZone: { type: "string", description: "IANA timezone" },
+                },
+              },
               status: { type: "string", description: "Event status" },
               htmlLink: { type: "string", description: "Link to event in Google Calendar" },
               hangoutLink: { type: "string", description: "Google Meet link if present" },
@@ -2617,8 +2493,8 @@ export const calendarTools: ToolDefinition[] = [
     },
   },
   {
-    name: "getEvent",
-    description: "Get detailed information about a specific calendar event",
+    name: "get_event",
+    description: "Get details of a calendar event",
     inputSchema: {
       type: "object",
       properties: {
@@ -2640,8 +2516,24 @@ export const calendarTools: ToolDefinition[] = [
         summary: { type: "string", description: "Event title" },
         description: { type: "string", description: "Event description" },
         location: { type: "string", description: "Event location" },
-        start: { type: "object", description: "Start time" },
-        end: { type: "object", description: "End time" },
+        start: {
+          type: "object",
+          description: "Start time",
+          properties: {
+            dateTime: { type: "string", description: "RFC3339 timestamp (timed events)" },
+            date: { type: "string", description: "YYYY-MM-DD (all-day events)" },
+            timeZone: { type: "string", description: "IANA timezone" },
+          },
+        },
+        end: {
+          type: "object",
+          description: "End time",
+          properties: {
+            dateTime: { type: "string", description: "RFC3339 timestamp (timed events)" },
+            date: { type: "string", description: "YYYY-MM-DD (all-day events)" },
+            timeZone: { type: "string", description: "IANA timezone" },
+          },
+        },
         status: { type: "string", description: "Event status" },
         htmlLink: { type: "string", description: "Link to event" },
         hangoutLink: { type: "string", description: "Google Meet link" },
@@ -2657,14 +2549,26 @@ export const calendarTools: ToolDefinition[] = [
             },
           },
         },
-        organizer: { type: "object", description: "Event organizer" },
-        recurrence: { type: "array", description: "Recurrence rules" },
+        organizer: {
+          type: "object",
+          description: "Event organizer",
+          properties: {
+            email: { type: "string", description: "Organizer email" },
+            displayName: { type: "string", description: "Organizer name" },
+            self: { type: "boolean", description: "Whether you are the organizer" },
+          },
+        },
+        recurrence: {
+          type: "array",
+          description: "Recurrence rules (RRULE format)",
+          items: { type: "string" },
+        },
       },
     },
   },
   {
-    name: "createEvent",
-    description: "Create a new calendar event with optional attendees, Google Meet, and reminders",
+    name: "create_event",
+    description: "Create a new calendar event",
     inputSchema: {
       type: "object",
       properties: {
@@ -2762,7 +2666,7 @@ export const calendarTools: ToolDefinition[] = [
     },
   },
   {
-    name: "updateEvent",
+    name: "update_event",
     description: "Update an existing calendar event",
     inputSchema: {
       type: "object",
@@ -2843,7 +2747,7 @@ export const calendarTools: ToolDefinition[] = [
     },
   },
   {
-    name: "deleteEvent",
+    name: "delete_event",
     description: "Delete a calendar event",
     inputSchema: {
       type: "object",
@@ -2873,9 +2777,8 @@ export const calendarTools: ToolDefinition[] = [
     },
   },
   {
-    name: "findFreeTime",
-    description:
-      "Find available time slots across one or more calendars. Returns free periods of at least the specified duration.",
+    name: "find_free_time",
+    description: "Find free time slots across calendars (max 50 calendars)",
     inputSchema: {
       type: "object",
       properties: {
@@ -2899,7 +2802,7 @@ export const calendarTools: ToolDefinition[] = [
         },
         timeZone: {
           type: "string",
-          description: "Timezone for results (default: UTC)",
+          description: "(optional, default: UTC) Timezone for results",
         },
       },
       required: ["calendarIds", "timeMin", "timeMax", "duration"],
@@ -2935,16 +2838,554 @@ export const calendarTools: ToolDefinition[] = [
   },
 ];
 
+// Gmail tools
+export const gmailTools: ToolDefinition[] = [
+  // Core Email Operations
+  {
+    name: "send_email",
+    description: "Send an email",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description: "Recipient email addresses",
+        },
+        subject: { type: "string", description: "Email subject" },
+        body: { type: "string", description: "Plain text email body" },
+        html: { type: "string", description: "HTML email body (optional)" },
+        cc: {
+          type: "array",
+          items: { type: "string" },
+          description: "CC recipients",
+        },
+        bcc: {
+          type: "array",
+          items: { type: "string" },
+          description: "BCC recipients",
+        },
+        replyTo: { type: "string", description: "Reply-to address" },
+        attachments: {
+          type: "array",
+          description: "File attachments",
+          items: {
+            type: "object",
+            properties: {
+              filename: { type: "string" },
+              content: { type: "string", description: "Base64-encoded content" },
+              mimeType: { type: "string" },
+            },
+            required: ["filename", "content"],
+          },
+        },
+        threadId: { type: "string", description: "Thread ID to reply to" },
+        inReplyTo: { type: "string", description: "Message-ID for threading" },
+      },
+      required: ["to", "subject", "body"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Sent message ID" },
+        threadId: { type: "string", description: "Thread ID" },
+        labelIds: { type: "array", items: { type: "string" } },
+      },
+    },
+  },
+  {
+    name: "draft_email",
+    description: "Create a draft email (can be completed later)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: { type: "array", items: { type: "string" }, description: "Recipients" },
+        subject: { type: "string", description: "Subject" },
+        body: { type: "string", description: "Plain text body" },
+        html: { type: "string", description: "HTML body" },
+        cc: { type: "array", items: { type: "string" } },
+        bcc: { type: "array", items: { type: "string" } },
+        replyTo: { type: "string" },
+        attachments: { type: "array" },
+        threadId: { type: "string" },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Draft ID" },
+        messageId: { type: "string", description: "Message ID" },
+        threadId: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "read_email",
+    description: "Read email content and metadata",
+    inputSchema: {
+      type: "object",
+      properties: {
+        messageId: { type: "string", description: "Email message ID" },
+        format: {
+          type: "string",
+          enum: ["full", "metadata", "minimal", "raw"],
+          description: "Response format (default: full)",
+        },
+      },
+      required: ["messageId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        threadId: { type: "string" },
+        labelIds: { type: "array", items: { type: "string" } },
+        headers: {
+          type: "object",
+          description: "Email headers",
+          properties: {
+            from: { type: "string", description: "Sender email address" },
+            to: { type: "string", description: "Recipient(s) email addresses" },
+            cc: { type: "string", description: "CC recipients" },
+            subject: { type: "string", description: "Email subject line" },
+            date: { type: "string", description: "Send date (RFC 2822 format)" },
+            messageId: { type: "string", description: "Email Message-ID header" },
+          },
+        },
+        body: {
+          type: "object",
+          properties: {
+            text: { type: "string" },
+            html: { type: "string" },
+          },
+        },
+        attachments: { type: "array" },
+      },
+    },
+  },
+  {
+    name: "search_emails",
+    description: "Search emails using Gmail query syntax (max 500 per request)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Gmail search query" },
+        maxResults: {
+          type: "number",
+          description: "(optional, default: 50) Maximum results (max 500)",
+        },
+        pageToken: { type: "string", description: "(optional) Pagination token" },
+        labelIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "(optional) Filter by label IDs",
+        },
+        includeSpamTrash: {
+          type: "boolean",
+          description: "(optional, default: false) Include spam and trash",
+        },
+      },
+      required: ["query"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        messages: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              threadId: { type: "string" },
+              from: { type: "string" },
+              subject: { type: "string" },
+              date: { type: "string" },
+              snippet: { type: "string" },
+            },
+          },
+        },
+        nextPageToken: { type: "string" },
+        resultSizeEstimate: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "delete_email",
+    description: "Delete emails permanently (max 1000 IDs per request)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        messageId: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 1000 }],
+          description: "Message ID or array of IDs (max 1000)",
+        },
+      },
+      required: ["messageId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        deleted: { type: "number", description: "Number of messages deleted" },
+        messageIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "IDs of deleted messages",
+        },
+      },
+    },
+  },
+  {
+    name: "modify_email",
+    description: "Add/remove labels (max 1000 IDs per request)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        messageId: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 1000 }],
+          description: "Message ID or array of IDs (max 1000)",
+        },
+        addLabelIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "(optional) Label IDs to add",
+        },
+        removeLabelIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "(optional) Label IDs to remove",
+        },
+      },
+      required: ["messageId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        modified: { type: "number", description: "Number of messages modified" },
+        addedLabels: { type: "array", items: { type: "string" }, description: "Labels added" },
+        removedLabels: { type: "array", items: { type: "string" }, description: "Labels removed" },
+      },
+    },
+  },
+  {
+    name: "download_attachment",
+    description: "Download an email attachment to disk",
+    inputSchema: {
+      type: "object",
+      properties: {
+        messageId: { type: "string", description: "Email message ID" },
+        attachmentId: { type: "string", description: "Attachment ID from readEmail" },
+        filename: { type: "string", description: "Save filename (optional)" },
+        outputPath: { type: "string", description: "Output directory (optional)" },
+      },
+      required: ["messageId", "attachmentId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Saved file path" },
+        size: { type: "number", description: "File size in bytes" },
+      },
+    },
+  },
+  // Label Management
+  {
+    name: "update_label",
+    description: "Update an existing Gmail label",
+    inputSchema: {
+      type: "object",
+      properties: {
+        labelId: { type: "string", description: "Label ID to update" },
+        name: { type: "string", description: "(optional) New name" },
+        messageListVisibility: {
+          type: "string",
+          enum: ["show", "hide"],
+          description: "(optional) Show/hide in message list",
+        },
+        labelListVisibility: {
+          type: "string",
+          enum: ["labelShow", "labelShowIfUnread", "labelHide"],
+          description: "(optional) Label list visibility",
+        },
+        backgroundColor: { type: "string", description: "(optional) Background color" },
+        textColor: { type: "string", description: "(optional) Text color" },
+      },
+      required: ["labelId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Label ID" },
+        name: { type: "string", description: "Label name" },
+        updated: { type: "boolean", description: "Whether the update succeeded" },
+      },
+    },
+  },
+  {
+    name: "delete_label",
+    description: "Delete a user-created label",
+    inputSchema: {
+      type: "object",
+      properties: {
+        labelId: { type: "string", description: "Label ID to delete" },
+      },
+      required: ["labelId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        deleted: { type: "boolean", description: "Whether the deletion succeeded" },
+        labelId: { type: "string", description: "Deleted label ID" },
+      },
+    },
+  },
+  {
+    name: "list_labels",
+    description: "List all Gmail labels (system and user-created)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        includeSystemLabels: {
+          type: "boolean",
+          description: "Include INBOX, SENT, etc. (default: true)",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        labels: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              type: { type: "string" },
+              messagesTotal: { type: "number" },
+              messagesUnread: { type: "number" },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "get_or_create_label",
+    description: "Get or create a Gmail label",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Label name" },
+        messageListVisibility: { type: "string", enum: ["show", "hide"] },
+        labelListVisibility: {
+          type: "string",
+          enum: ["labelShow", "labelShowIfUnread", "labelHide"],
+        },
+        backgroundColor: { type: "string" },
+        textColor: { type: "string" },
+      },
+      required: ["name"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        name: { type: "string" },
+        created: { type: "boolean", description: "True if newly created" },
+      },
+    },
+  },
+  // Filter Management
+  {
+    name: "create_filter",
+    description: "Create an email filter",
+    inputSchema: {
+      type: "object",
+      properties: {
+        // Direct mode
+        criteria: {
+          type: "object",
+          description: "Filter criteria (direct mode)",
+          properties: {
+            from: { type: "string" },
+            to: { type: "string" },
+            subject: { type: "string" },
+            query: { type: "string" },
+            hasAttachment: { type: "boolean" },
+            excludeChats: { type: "boolean" },
+            size: { type: "number" },
+            sizeComparison: { type: "string", enum: ["larger", "smaller"] },
+          },
+        },
+        action: {
+          type: "object",
+          description: "Actions (direct mode)",
+          properties: {
+            addLabelIds: { type: "array", items: { type: "string" } },
+            removeLabelIds: { type: "array", items: { type: "string" } },
+            forward: { type: "string" },
+          },
+        },
+        // Template mode
+        template: {
+          type: "string",
+          enum: ["fromSender", "withSubject", "withAttachments", "largeEmails", "mailingList"],
+          description: "Use pre-built template instead of criteria/action",
+        },
+        labelIds: { type: "array", items: { type: "string" }, description: "Labels (template mode)" },
+        archive: { type: "boolean", description: "Archive matching emails (template mode)" },
+        email: { type: "string", description: "Email for fromSender/mailingList template" },
+        subject: { type: "string", description: "Subject for withSubject template" },
+        sizeBytes: { type: "number", description: "Size for largeEmails template" },
+        listAddress: { type: "string", description: "List address for mailingList template" },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        template: { type: "string" },
+        criteria: { type: "object" },
+        action: { type: "object" },
+      },
+    },
+  },
+  {
+    name: "list_filters",
+    description: "List filters or get specific filter details",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filterId: { type: "string", description: "Optional: get specific filter" },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        filters: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              criteria: { type: "object" },
+              action: { type: "object" },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "delete_filter",
+    description: "Delete an email filter",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filterId: { type: "string", description: "Filter ID to delete" },
+      },
+      required: ["filterId"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        deleted: { type: "boolean", description: "Whether the deletion succeeded" },
+        filterId: { type: "string", description: "Deleted filter ID" },
+      },
+    },
+  },
+];
+
+import { isServiceEnabled, areUnifiedToolsEnabled, type ServiceName } from "../config/index.js";
+
+/** Map of service names to their tool definitions */
+export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
+  drive: driveTools,
+  docs: docsTools,
+  sheets: sheetsTools,
+  slides: slidesTools,
+  calendar: calendarTools,
+  gmail: gmailTools,
+};
+
+/** Discovery tool for listing available tools */
+export const discoveryTools: ToolDefinition[] = [
+  {
+    name: "list_tools",
+    description: "List available tools, optionally filtered by service or keyword",
+    inputSchema: {
+      type: "object",
+      properties: {
+        service: {
+          type: "string",
+          enum: ["drive", "docs", "sheets", "slides", "calendar", "gmail", "unified"],
+          description: "(optional) Filter by service name",
+        },
+        keyword: {
+          type: "string",
+          description: "(optional) Filter by keyword in tool name or description",
+        },
+        includeSchemas: {
+          type: "boolean",
+          description: "(optional, default: false) Include full input/output schemas in response",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        tools: {
+          type: "array",
+          description: "List of matching tools",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Tool name" },
+              description: { type: "string", description: "Tool description" },
+              service: { type: "string", description: "Service the tool belongs to" },
+              inputSchema: {
+                type: "object",
+                description: "Input schema (if includeSchemas=true)",
+              },
+              outputSchema: {
+                type: "object",
+                description: "Output schema (if includeSchemas=true)",
+              },
+            },
+          },
+        },
+        totalCount: { type: "number", description: "Total number of matching tools" },
+        services: {
+          type: "array",
+          items: { type: "string" },
+          description: "Available services",
+        },
+      },
+    },
+  },
+];
+
 /**
  * Get all tool definitions combined into a single array.
+ * Filters by enabled services (GOOGLE_WORKSPACE_SERVICES env var).
+ * If not set, all services are enabled (backward compatible).
  */
 export function getAllTools(): ToolDefinition[] {
-  return [
-    ...driveTools,
-    ...docsTools,
-    ...sheetsTools,
-    ...slidesTools,
-    ...unifiedTools,
-    ...calendarTools,
-  ];
+  const tools: ToolDefinition[] = [];
+
+  // Always include discovery tools
+  tools.push(...discoveryTools);
+
+  for (const [service, serviceTools] of Object.entries(SERVICE_TOOL_MAP)) {
+    if (isServiceEnabled(service as ServiceName)) {
+      tools.push(...serviceTools);
+    }
+  }
+
+  // Unified tools require drive+docs+sheets+slides to all be enabled
+  if (areUnifiedToolsEnabled()) {
+    tools.push(...unifiedTools);
+  }
+
+  return tools;
 }
