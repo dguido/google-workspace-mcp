@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: format check
+        entry: npm run format:check
+        language: system
+        pass_filenames: false
+
+      - id: lint
+        name: lint
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+
+      - id: typecheck
+        name: typecheck
+        entry: npm run typecheck
+        language: system
+        pass_filenames: false
+
+      - id: test
+        name: test
+        entry: npm run test
+        language: system
+        pass_filenames: false
