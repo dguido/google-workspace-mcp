@@ -634,13 +634,21 @@ export async function handleShareFile(drive: drive_v3.Drive, args: unknown): Pro
     permissionBody.domain = data.domain;
   }
 
-  const permission = await drive.permissions.create({
+  const createParams: drive_v3.Params$Resource$Permissions$Create = {
     fileId: data.fileId,
     requestBody: permissionBody,
-    sendNotificationEmail: data.sendNotificationEmail,
-    emailMessage: data.emailMessage,
     supportsAllDrives: true,
-  });
+  };
+
+  // Only include notification params for user/group types (Google rejects for anyone/domain)
+  if (data.type === "user" || data.type === "group") {
+    createParams.sendNotificationEmail = data.sendNotificationEmail;
+    if (data.emailMessage) {
+      createParams.emailMessage = data.emailMessage;
+    }
+  }
+
+  const permission = await drive.permissions.create(createParams);
 
   log("File shared successfully", {
     fileId: data.fileId,
