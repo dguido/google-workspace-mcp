@@ -90,8 +90,34 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 | `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Environment variable pointing to credentials file |
 | `gcp-oauth.keys.json`             | Default file in project root                      |
 | `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                     |
+| `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable        |
 
 Tokens are stored at `~/.config/google-workspace-mcp/tokens.json` by default.
+
+### Service Filtering
+
+Enable only specific Google Workspace services with `GOOGLE_WORKSPACE_SERVICES`:
+
+```json
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "npx",
+      "args": ["@dguido/google-workspace-mcp"],
+      "env": {
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/gcp-oauth.keys.json",
+        "GOOGLE_WORKSPACE_SERVICES": "drive,gmail"
+      }
+    }
+  }
+}
+```
+
+**Valid services:** `drive`, `docs`, `sheets`, `slides`, `calendar`, `gmail`
+
+- Not set → all services enabled (default, backward compatible)
+- Empty → no services enabled
+- Unified tools (`create_file`, `update_file`, `get_file_content`) require `drive`, `docs`, `sheets`, and `slides`
 
 See [Advanced Configuration](docs/ADVANCED.md) for multi-account setup and environment variables.
 

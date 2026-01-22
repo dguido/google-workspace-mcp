@@ -16,9 +16,10 @@ import {
   GetGoogleSlidesContentSchema,
   CreateGoogleSlidesTextBoxSchema,
   CreateGoogleSlidesShapeSchema,
-  GetGoogleSlidesSpeakerNotesSchema,
-  UpdateGoogleSlidesSpeakerNotesSchema,
-  FormatGoogleSlidesElementSchema,
+  SlidesSpeakerNotesSchema,
+  FormatSlidesTextSchema,
+  FormatSlidesShapeSchema,
+  FormatSlideBackgroundSchema,
 } from "../schemas/index.js";
 import { resolveOptionalFolderPath, checkFileExists } from "./helpers.js";
 import { toSlidesColorStyle, toSlidesSolidFill } from "../utils/colors.js";
@@ -567,11 +568,14 @@ export async function handleCreateGoogleSlidesShape(
   return successResponse(`Created ${data.shapeType} shape with ID: ${elementId}`);
 }
 
-export async function handleGetGoogleSlidesSpeakerNotes(
+/**
+ * Unified speaker notes handler - get or update notes
+ */
+export async function handleSlidesSpeakerNotes(
   slides: slides_v1.Slides,
   args: unknown,
 ): Promise<ToolResponse> {
-  const validation = validateArgs(GetGoogleSlidesSpeakerNotesSchema, args);
+  const validation = validateArgs(SlidesSpeakerNotesSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
@@ -588,22 +592,28 @@ export async function handleGetGoogleSlidesSpeakerNotes(
   }
 
   const slide = presentation.data.slides[data.slideIndex];
-
-  // Get the notes page object ID from the slide properties
   const notesObjectId = slide.slideProperties?.notesPage?.notesProperties?.speakerNotesObjectId;
 
+  if (data.action === "get") {
+    return getSpeakerNotes(slide, notesObjectId);
+  } else {
+    return updateSpeakerNotes(slides, data.presentationId, slide, notesObjectId, data.notes!);
+  }
+}
+
+function getSpeakerNotes(
+  slide: slides_v1.Schema$Page,
+  notesObjectId: string | null | undefined,
+): ToolResponse {
   if (!notesObjectId) {
     return successResponse("No speaker notes found for this slide");
   }
 
-  // Find the notes page for this slide (already fetched in presentation)
   const notesPage = slide.slideProperties?.notesPage;
-
   if (!notesPage || !notesPage.pageElements) {
     return successResponse("No speaker notes found for this slide");
   }
 
-  // Find the speaker notes shape
   const speakerNotesElement = notesPage.pageElements.find(
     (element) => element.objectId === notesObjectId,
   );
@@ -612,7 +622,6 @@ export async function handleGetGoogleSlidesSpeakerNotes(
     return successResponse("No speaker notes found for this slide");
   }
 
-  // Extract the text from the speaker notes
   let notesText = "";
   const textElements = speakerNotesElement.shape.text.textElements || [];
   textElements.forEach((textElement) => {
@@ -624,31 +633,13 @@ export async function handleGetGoogleSlidesSpeakerNotes(
   return successResponse(notesText.trim() || "No speaker notes found for this slide");
 }
 
-export async function handleUpdateGoogleSlidesSpeakerNotes(
-  slides: slides_v1.Slides,
-  args: unknown,
+async function updateSpeakerNotes(
+  slidesApi: slides_v1.Slides,
+  presentationId: string,
+  slide: slides_v1.Schema$Page,
+  notesObjectId: string | null | undefined,
+  notes: string,
 ): Promise<ToolResponse> {
-  const validation = validateArgs(UpdateGoogleSlidesSpeakerNotesSchema, args);
-  if (!validation.success) return validation.response;
-  const data = validation.data;
-
-  // Get the presentation to access the slide
-  const presentation = await slides.presentations.get({
-    presentationId: data.presentationId,
-  });
-
-  const slideCount = presentation.data.slides?.length || 0;
-  if (!presentation.data.slides || data.slideIndex < 0 || data.slideIndex >= slideCount) {
-    return errorResponse(
-      `Slide index ${data.slideIndex} is invalid. Valid range: 0 to ${slideCount - 1} (presentation has ${slideCount} slides)`,
-    );
-  }
-
-  const slide = presentation.data.slides[data.slideIndex];
-
-  // Get the notes page object ID from the slide properties
-  const notesObjectId = slide.slideProperties?.notesPage?.notesProperties?.speakerNotesObjectId;
-
   if (!notesObjectId) {
     return errorResponse(
       "This slide does not have a speaker notes object. " +
@@ -656,8 +647,6 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
     );
   }
 
-  // Check if notes have existing content before attempting to delete
-  // (deleteText fails with "startIndex 0 must be less than endIndex 0" on empty notes)
   const notesPage = slide.slideProperties?.notesPage;
   const speakerNotesElement = notesPage?.pageElements?.find(
     (element) => element.objectId === notesObjectId,
@@ -667,7 +656,6 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
     (el) => el.textRun?.content && el.textRun.content.trim().length > 0,
   );
 
-  // Build requests: only delete if there's existing text
   const requests: slides_v1.Schema$Request[] = [];
 
   if (hasExistingText) {
@@ -682,199 +670,135 @@ export async function handleUpdateGoogleSlidesSpeakerNotes(
   requests.push({
     insertText: {
       objectId: notesObjectId,
-      text: data.notes,
+      text: notes,
       insertionIndex: 0,
     },
   });
 
-  await slides.presentations.batchUpdate({
-    presentationId: data.presentationId,
+  await slidesApi.presentations.batchUpdate({
+    presentationId,
     requestBody: { requests },
   });
 
-  return successResponse(`Successfully updated speaker notes for slide ${data.slideIndex}`);
+  return successResponse(`Successfully updated speaker notes for slide`);
 }
 
-export async function handleFormatGoogleSlidesElement(
+/**
+ * Format text in a slides element (character and paragraph styling)
+ */
+export async function handleFormatSlidesText(
   slides: slides_v1.Slides,
   args: unknown,
 ): Promise<ToolResponse> {
-  const validation = validateArgs(FormatGoogleSlidesElementSchema, args);
+  const validation = validateArgs(FormatSlidesTextSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
   const requests: slides_v1.Schema$Request[] = [];
   const appliedFormats: string[] = [];
 
-  if (data.targetType === "text") {
-    // Text formatting (style)
-    const textStyle: Record<string, unknown> = {};
-    const textFields: string[] = [];
+  // Character formatting
+  const textStyle: Record<string, unknown> = {};
+  const textFields: string[] = [];
 
-    if (data.bold !== undefined) {
-      textStyle.bold = data.bold;
-      textFields.push("bold");
-    }
-    if (data.italic !== undefined) {
-      textStyle.italic = data.italic;
-      textFields.push("italic");
-    }
-    if (data.underline !== undefined) {
-      textStyle.underline = data.underline;
-      textFields.push("underline");
-    }
-    if (data.strikethrough !== undefined) {
-      textStyle.strikethrough = data.strikethrough;
-      textFields.push("strikethrough");
-    }
-    if (data.fontSize !== undefined) {
-      textStyle.fontSize = { magnitude: data.fontSize, unit: "PT" };
-      textFields.push("fontSize");
-    }
-    if (data.fontFamily !== undefined) {
-      textStyle.fontFamily = data.fontFamily;
-      textFields.push("fontFamily");
-    }
-    if (data.foregroundColor) {
-      textStyle.foregroundColor = {
-        opaqueColor: toSlidesColorStyle(data.foregroundColor),
-      };
-      textFields.push("foregroundColor");
-    }
+  if (data.bold !== undefined) {
+    textStyle.bold = data.bold;
+    textFields.push("bold");
+  }
+  if (data.italic !== undefined) {
+    textStyle.italic = data.italic;
+    textFields.push("italic");
+  }
+  if (data.underline !== undefined) {
+    textStyle.underline = data.underline;
+    textFields.push("underline");
+  }
+  if (data.strikethrough !== undefined) {
+    textStyle.strikethrough = data.strikethrough;
+    textFields.push("strikethrough");
+  }
+  if (data.fontSize !== undefined) {
+    textStyle.fontSize = { magnitude: data.fontSize, unit: "PT" };
+    textFields.push("fontSize");
+  }
+  if (data.fontFamily !== undefined) {
+    textStyle.fontFamily = data.fontFamily;
+    textFields.push("fontFamily");
+  }
+  if (data.foregroundColor) {
+    textStyle.foregroundColor = {
+      opaqueColor: toSlidesColorStyle(data.foregroundColor),
+    };
+    textFields.push("foregroundColor");
+  }
 
-    if (textFields.length > 0) {
+  if (textFields.length > 0) {
+    requests.push({
+      updateTextStyle: {
+        objectId: data.objectId,
+        style: textStyle,
+        fields: textFields.join(","),
+        textRange:
+          data.startIndex !== undefined && data.endIndex !== undefined
+            ? {
+                type: "FIXED_RANGE",
+                startIndex: data.startIndex,
+                endIndex: data.endIndex,
+              }
+            : { type: "ALL" },
+      },
+    });
+    appliedFormats.push("text style");
+  }
+
+  // Paragraph formatting
+  if (data.alignment) {
+    requests.push({
+      updateParagraphStyle: {
+        objectId: data.objectId,
+        style: { alignment: data.alignment },
+        fields: "alignment",
+      },
+    });
+    appliedFormats.push("alignment");
+  }
+
+  if (data.lineSpacing !== undefined) {
+    requests.push({
+      updateParagraphStyle: {
+        objectId: data.objectId,
+        style: { lineSpacing: data.lineSpacing },
+        fields: "lineSpacing",
+      },
+    });
+    appliedFormats.push("line spacing");
+  }
+
+  if (data.bulletStyle) {
+    if (data.bulletStyle === "NONE") {
+      requests.push({ deleteParagraphBullets: { objectId: data.objectId } });
+    } else if (data.bulletStyle === "NUMBERED") {
       requests.push({
-        updateTextStyle: {
-          objectId: data.objectId!,
-          style: textStyle,
-          fields: textFields.join(","),
-          textRange:
-            data.startIndex !== undefined && data.endIndex !== undefined
-              ? {
-                  type: "FIXED_RANGE",
-                  startIndex: data.startIndex,
-                  endIndex: data.endIndex,
-                }
-              : { type: "ALL" },
+        createParagraphBullets: {
+          objectId: data.objectId,
+          bulletPreset: "NUMBERED_DIGIT_ALPHA_ROMAN",
         },
       });
-      appliedFormats.push("text style");
-    }
-
-    // Paragraph formatting
-    if (data.alignment) {
+    } else {
       requests.push({
-        updateParagraphStyle: {
-          objectId: data.objectId!,
-          style: { alignment: data.alignment },
-          fields: "alignment",
-        },
-      });
-      appliedFormats.push("alignment");
-    }
-
-    if (data.lineSpacing !== undefined) {
-      requests.push({
-        updateParagraphStyle: {
-          objectId: data.objectId!,
-          style: { lineSpacing: data.lineSpacing },
-          fields: "lineSpacing",
-        },
-      });
-      appliedFormats.push("line spacing");
-    }
-
-    if (data.bulletStyle) {
-      if (data.bulletStyle === "NONE") {
-        requests.push({ deleteParagraphBullets: { objectId: data.objectId! } });
-      } else if (data.bulletStyle === "NUMBERED") {
-        requests.push({
-          createParagraphBullets: {
-            objectId: data.objectId!,
-            bulletPreset: "NUMBERED_DIGIT_ALPHA_ROMAN",
-          },
-        });
-      } else {
-        requests.push({
-          createParagraphBullets: {
-            objectId: data.objectId!,
-            bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`,
-          },
-        });
-      }
-      appliedFormats.push("bullet style");
-    }
-  } else if (data.targetType === "shape") {
-    const shapeProperties: Record<string, unknown> = {};
-    const fields: string[] = [];
-
-    if (data.backgroundColor) {
-      shapeProperties.shapeBackgroundFill = toSlidesSolidFill(data.backgroundColor);
-      fields.push("shapeBackgroundFill");
-      appliedFormats.push("background color");
-    }
-
-    const outline: Record<string, unknown> = {};
-    let hasOutlineChanges = false;
-
-    if (data.outlineColor) {
-      outline.outlineFill = {
-        solidFill: {
-          color: toSlidesColorStyle(data.outlineColor),
-        },
-      };
-      hasOutlineChanges = true;
-      appliedFormats.push("outline color");
-    }
-
-    if (data.outlineWeight !== undefined) {
-      outline.weight = { magnitude: data.outlineWeight, unit: "PT" };
-      hasOutlineChanges = true;
-      appliedFormats.push("outline weight");
-    }
-
-    if (data.outlineDashStyle !== undefined) {
-      outline.dashStyle = data.outlineDashStyle;
-      hasOutlineChanges = true;
-      appliedFormats.push("outline dash style");
-    }
-
-    if (hasOutlineChanges) {
-      shapeProperties.outline = outline;
-      fields.push("outline");
-    }
-
-    if (fields.length > 0) {
-      requests.push({
-        updateShapeProperties: {
-          objectId: data.objectId!,
-          shapeProperties,
-          fields: fields.join(","),
+        createParagraphBullets: {
+          objectId: data.objectId,
+          bulletPreset: `BULLET_${data.bulletStyle}_CIRCLE_SQUARE`,
         },
       });
     }
-  } else if (data.targetType === "slide") {
-    if (data.slideBackgroundColor) {
-      const bgRequests = data.pageObjectIds!.map((pageObjectId) => ({
-        updatePageProperties: {
-          objectId: pageObjectId,
-          pageProperties: {
-            pageBackgroundFill: toSlidesSolidFill(data.slideBackgroundColor!),
-          },
-          fields: "pageBackgroundFill",
-        },
-      }));
-      requests.push(...bgRequests);
-      appliedFormats.push(`slide background (${data.pageObjectIds!.length} slide(s))`);
-    }
+    appliedFormats.push("bullet style");
   }
 
   if (requests.length === 0) {
     return errorResponse(
-      "No formatting options specified. For text: provide bold, italic, underline, strikethrough, " +
-        "fontSize, fontFamily, foregroundColor, alignment, lineSpacing, or bulletStyle. " +
-        "For shape: provide backgroundColor, outlineColor, outlineWeight, or outlineDashStyle. " +
-        "For slide: provide slideBackgroundColor.",
+      "No formatting options specified. Provide bold, italic, underline, strikethrough, " +
+        "fontSize, fontFamily, foregroundColor, alignment, lineSpacing, or bulletStyle.",
     );
   }
 
@@ -883,12 +807,114 @@ export async function handleFormatGoogleSlidesElement(
     requestBody: { requests },
   });
 
-  const targetDesc =
-    data.targetType === "slide"
-      ? `${data.pageObjectIds!.length} slide(s)`
-      : `${data.targetType} ${data.objectId}`;
+  return successResponse(`Formatted text ${data.objectId}: ${appliedFormats.join(", ")}`);
+}
 
-  return successResponse(`Applied formatting to ${targetDesc}: ${appliedFormats.join(", ")}`);
+/**
+ * Format shape styling (fill and outline)
+ */
+export async function handleFormatSlidesShape(
+  slides: slides_v1.Slides,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(FormatSlidesShapeSchema, args);
+  if (!validation.success) return validation.response;
+  const data = validation.data;
+
+  const shapeProperties: Record<string, unknown> = {};
+  const fields: string[] = [];
+  const appliedFormats: string[] = [];
+
+  if (data.backgroundColor) {
+    shapeProperties.shapeBackgroundFill = toSlidesSolidFill(data.backgroundColor);
+    fields.push("shapeBackgroundFill");
+    appliedFormats.push("background color");
+  }
+
+  const outline: Record<string, unknown> = {};
+  let hasOutlineChanges = false;
+
+  if (data.outlineColor) {
+    outline.outlineFill = {
+      solidFill: {
+        color: toSlidesColorStyle(data.outlineColor),
+      },
+    };
+    hasOutlineChanges = true;
+    appliedFormats.push("outline color");
+  }
+
+  if (data.outlineWeight !== undefined) {
+    outline.weight = { magnitude: data.outlineWeight, unit: "PT" };
+    hasOutlineChanges = true;
+    appliedFormats.push("outline weight");
+  }
+
+  if (data.outlineDashStyle !== undefined) {
+    outline.dashStyle = data.outlineDashStyle;
+    hasOutlineChanges = true;
+    appliedFormats.push("outline dash style");
+  }
+
+  if (hasOutlineChanges) {
+    shapeProperties.outline = outline;
+    fields.push("outline");
+  }
+
+  if (fields.length === 0) {
+    return errorResponse(
+      "No formatting options specified. Provide backgroundColor, outlineColor, " +
+        "outlineWeight, or outlineDashStyle.",
+    );
+  }
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: {
+      requests: [
+        {
+          updateShapeProperties: {
+            objectId: data.objectId,
+            shapeProperties,
+            fields: fields.join(","),
+          },
+        },
+      ],
+    },
+  });
+
+  return successResponse(`Formatted shape ${data.objectId}: ${appliedFormats.join(", ")}`);
+}
+
+/**
+ * Set slide background color
+ */
+export async function handleFormatSlideBackground(
+  slides: slides_v1.Slides,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(FormatSlideBackgroundSchema, args);
+  if (!validation.success) return validation.response;
+  const data = validation.data;
+
+  const requests = data.pageObjectIds.map((pageObjectId) => ({
+    updatePageProperties: {
+      objectId: pageObjectId,
+      pageProperties: {
+        pageBackgroundFill: toSlidesSolidFill(data.backgroundColor),
+      },
+      fields: "pageBackgroundFill",
+    },
+  }));
+
+  await slides.presentations.batchUpdate({
+    presentationId: data.presentationId,
+    requestBody: { requests },
+  });
+
+  return successResponse(
+    `Set background color for ${data.pageObjectIds.length} slide(s)`,
+  );
 }
 
 export async function handleListSlidePages(

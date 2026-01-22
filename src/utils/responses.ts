@@ -1,5 +1,35 @@
 import { log } from "./logging.js";
 
+/**
+ * Maximum character limit for response content.
+ * Large responses can overwhelm agent context windows.
+ */
+const CHARACTER_LIMIT = 25000;
+
+export interface TruncationResult {
+  content: string;
+  truncated: boolean;
+  originalLength: number;
+}
+
+/**
+ * Truncate response content if it exceeds the character limit.
+ * Helps prevent overwhelming agent context windows with large API responses.
+ */
+export function truncateResponse(content: string): TruncationResult {
+  if (content.length <= CHARACTER_LIMIT) {
+    return { content, truncated: false, originalLength: content.length };
+  }
+  return {
+    content:
+      content.slice(0, CHARACTER_LIMIT) +
+      `\n\n[TRUNCATED: Response exceeded ${CHARACTER_LIMIT} characters. ` +
+      `Original length: ${content.length}. Consider using more specific queries.]`,
+    truncated: true,
+    originalLength: content.length,
+  };
+}
+
 export interface ToolResponse {
   content: Array<{ type: string; text: string }>;
   isError: boolean;
@@ -10,15 +40,18 @@ export interface ToolResponse {
 /**
  * Standard error codes for categorizing errors.
  * Clients can use these to handle specific error types programmatically.
+ * Aligned with MCP spec JSON-RPC error codes where applicable.
  */
 export type ErrorCode =
-  | "NOT_FOUND"
+  | "NOT_FOUND" // -30003
   | "ALREADY_EXISTS"
   | "PERMISSION_DENIED"
-  | "INVALID_INPUT"
+  | "INVALID_INPUT" // -32602
   | "RATE_LIMITED"
-  | "QUOTA_EXCEEDED"
-  | "AUTH_REQUIRED"
+  | "QUOTA_EXCEEDED" // -30002
+  | "AUTH_REQUIRED" // -31001
+  | "INVALID_TOKEN" // -31002
+  | "RESOURCE_LOCKED" // -30001
   | "UNSUPPORTED_OPERATION"
   | "INTERNAL_ERROR";
 

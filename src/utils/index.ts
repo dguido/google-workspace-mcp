@@ -1,6 +1,11 @@
 export { log } from "./logging.js";
-export { successResponse, structuredResponse, errorResponse } from "./responses.js";
-export type { ToolResponse, ErrorCode, ErrorOptions } from "./responses.js";
+export {
+  successResponse,
+  structuredResponse,
+  errorResponse,
+  truncateResponse,
+} from "./responses.js";
+export type { ToolResponse, ErrorCode, ErrorOptions, TruncationResult } from "./responses.js";
 export { validateArgs } from "./validation.js";
 export type { ValidationResult } from "./validation.js";
 export {
@@ -8,6 +13,7 @@ export {
   getSheetsService,
   getSlidesService,
   getCalendarService,
+  getGmailService,
   clearServiceCache,
 } from "./services.js";
 export { withTimeout, DEFAULT_API_TIMEOUT_MS } from "./timeout.js";
@@ -37,4 +43,7 @@ export {
   setCachedSegment,
   clearPathCache,
   getPathCacheStats,
+  cleanupExpiredCache,
 } from "./pathCache.js";
+export { buildMimeMessage, parseEmailHeaders, decodeBase64Url } from "./mime.js";
+export type { EmailOptions } from "./mime.js";

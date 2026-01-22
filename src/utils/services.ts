@@ -1,4 +1,4 @@
-import { google, docs_v1, sheets_v4, slides_v1, calendar_v3 } from "googleapis";
+import { google, docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1 } from "googleapis";
 import type { OAuth2Client } from "google-auth-library";
 
 // Cached service instances
@@ -6,6 +6,7 @@ let docsService: docs_v1.Docs | null = null;
 let sheetsService: sheets_v4.Sheets | null = null;
 let slidesService: slides_v1.Slides | null = null;
 let calendarService: calendar_v3.Calendar | null = null;
+let gmailService: gmail_v1.Gmail | null = null;
 let lastAuthClient: OAuth2Client | null = null;
 
 /**
@@ -16,6 +17,7 @@ export function clearServiceCache(): void {
   sheetsService = null;
   slidesService = null;
   calendarService = null;
+  gmailService = null;
   lastAuthClient = null;
 }
 
@@ -71,4 +73,15 @@ export function getCalendarService(authClient: OAuth2Client): calendar_v3.Calend
     calendarService = google.calendar({ version: "v3", auth: authClient });
   }
   return calendarService;
+}
+
+/**
+ * Get or create a cached Gmail service instance.
+ */
+export function getGmailService(authClient: OAuth2Client): gmail_v1.Gmail {
+  checkAuthClient(authClient);
+  if (!gmailService) {
+    gmailService = google.gmail({ version: "v1", auth: authClient });
+  }
+  return gmailService;
 }

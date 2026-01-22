@@ -91,66 +91,72 @@ export const CreateGoogleSlidesShapeSchema = z.object({
     .optional(),
 });
 
-export const GetGoogleSlidesSpeakerNotesSchema = z.object({
-  presentationId: z.string().min(1, "Presentation ID is required"),
-  slideIndex: z.number().min(0, "Slide index must be non-negative"),
-});
-
-export const UpdateGoogleSlidesSpeakerNotesSchema = z.object({
-  presentationId: z.string().min(1, "Presentation ID is required"),
-  slideIndex: z.number().min(0, "Slide index must be non-negative"),
-  notes: z.string(),
-});
-
-// Unified formatting schema that consolidates text, paragraph, shape, and slide background formatting
-export const FormatGoogleSlidesElementSchema = z
+// Unified speaker notes schema - replaces get/update individual schemas
+export const SlidesSpeakerNotesSchema = z
   .object({
     presentationId: z.string().min(1, "Presentation ID is required"),
-    targetType: z.enum(["text", "shape", "slide"]),
-    objectId: z.string().optional(), // Required for text/shape
-    pageObjectIds: z.array(z.string()).optional(), // Required for slide
-
-    // Text range (for text targetType)
-    startIndex: z.number().min(0).optional(),
-    endIndex: z.number().min(0).optional(),
-
-    // Text formatting
-    bold: z.boolean().optional(),
-    italic: z.boolean().optional(),
-    underline: z.boolean().optional(),
-    strikethrough: z.boolean().optional(),
-    fontSize: z.number().optional(),
-    fontFamily: z.string().optional(),
-    foregroundColor: ColorSchema.optional(),
-
-    // Paragraph formatting
-    alignment: z.enum(["START", "CENTER", "END", "JUSTIFIED"]).optional(),
-    lineSpacing: z.number().optional(),
-    bulletStyle: z
-      .enum(["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"])
-      .optional(),
-
-    // Shape styling
-    backgroundColor: ColorWithAlphaSchema.optional(),
-    outlineColor: ColorSchema.optional(),
-    outlineWeight: z.number().optional(),
-    outlineDashStyle: z
-      .enum(["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"])
-      .optional(),
-
-    // Slide background
-    slideBackgroundColor: ColorWithAlphaSchema.optional(),
+    slideIndex: z.number().min(0, "Slide index must be non-negative"),
+    action: z.enum(["get", "update"]),
+    notes: z.string().optional().describe("Notes content (required for update)"),
   })
   .refine(
     (data) => {
-      if (data.targetType === "text" || data.targetType === "shape") return !!data.objectId;
-      if (data.targetType === "slide") return data.pageObjectIds && data.pageObjectIds.length > 0;
+      if (data.action === "update") return data.notes !== undefined;
       return true;
     },
-    {
-      message: "objectId required for text/shape, pageObjectIds required for slide",
-    },
+    { message: "notes is required for update action" },
   );
+
+export type SlidesSpeakerNotesInput = z.infer<typeof SlidesSpeakerNotesSchema>;
+
+// Focused text formatting schema
+export const FormatSlidesTextSchema = z.object({
+  presentationId: z.string().min(1, "Presentation ID is required"),
+  objectId: z.string().min(1, "Object ID is required"),
+
+  // Text range (optional - defaults to all text)
+  startIndex: z.number().min(0).optional(),
+  endIndex: z.number().min(0).optional(),
+
+  // Character formatting
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  underline: z.boolean().optional(),
+  strikethrough: z.boolean().optional(),
+  fontSize: z.number().optional(),
+  fontFamily: z.string().optional(),
+  foregroundColor: ColorSchema.optional(),
+
+  // Paragraph formatting
+  alignment: z.enum(["START", "CENTER", "END", "JUSTIFIED"]).optional(),
+  lineSpacing: z.number().optional(),
+  bulletStyle: z
+    .enum(["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"])
+    .optional(),
+});
+
+// Focused shape styling schema
+export const FormatSlidesShapeSchema = z.object({
+  presentationId: z.string().min(1, "Presentation ID is required"),
+  objectId: z.string().min(1, "Object ID is required"),
+
+  // Shape fill
+  backgroundColor: ColorWithAlphaSchema.optional(),
+
+  // Outline styling
+  outlineColor: ColorSchema.optional(),
+  outlineWeight: z.number().optional(),
+  outlineDashStyle: z
+    .enum(["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"])
+    .optional(),
+});
+
+// Focused slide background schema
+export const FormatSlideBackgroundSchema = z.object({
+  presentationId: z.string().min(1, "Presentation ID is required"),
+  pageObjectIds: z.array(z.string().min(1)).min(1, "At least one slide ID is required"),
+  backgroundColor: ColorWithAlphaSchema,
+});
 
 // Type exports
 export type CreateGoogleSlidesInput = z.infer<typeof CreateGoogleSlidesSchema>;
@@ -158,8 +164,6 @@ export type UpdateGoogleSlidesInput = z.infer<typeof UpdateGoogleSlidesSchema>;
 export type GetGoogleSlidesContentInput = z.infer<typeof GetGoogleSlidesContentSchema>;
 export type CreateGoogleSlidesTextBoxInput = z.infer<typeof CreateGoogleSlidesTextBoxSchema>;
 export type CreateGoogleSlidesShapeInput = z.infer<typeof CreateGoogleSlidesShapeSchema>;
-export type GetGoogleSlidesSpeakerNotesInput = z.infer<typeof GetGoogleSlidesSpeakerNotesSchema>;
-export type UpdateGoogleSlidesSpeakerNotesInput = z.infer<
-  typeof UpdateGoogleSlidesSpeakerNotesSchema
->;
-export type FormatGoogleSlidesElementInput = z.infer<typeof FormatGoogleSlidesElementSchema>;
+export type FormatSlidesTextInput = z.infer<typeof FormatSlidesTextSchema>;
+export type FormatSlidesShapeInput = z.infer<typeof FormatSlidesShapeSchema>;
+export type FormatSlideBackgroundInput = z.infer<typeof FormatSlideBackgroundSchema>;

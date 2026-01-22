@@ -6,9 +6,10 @@ import {
   handleGetGoogleSlidesContent,
   handleCreateGoogleSlidesTextBox,
   handleCreateGoogleSlidesShape,
-  handleGetGoogleSlidesSpeakerNotes,
-  handleUpdateGoogleSlidesSpeakerNotes,
-  handleFormatGoogleSlidesElement,
+  handleSlidesSpeakerNotes,
+  handleFormatSlidesText,
+  handleFormatSlidesShape,
+  handleFormatSlideBackground,
 } from "./slides.js";
 
 vi.mock("../utils/index.js", async (importOriginal) => {
@@ -299,7 +300,7 @@ describe("handleCreateGoogleSlidesShape", () => {
   });
 });
 
-describe("handleGetGoogleSlidesSpeakerNotes", () => {
+describe("handleSlidesSpeakerNotes - get action", () => {
   let mockSlides: slides_v1.Slides;
 
   beforeEach(() => {
@@ -331,9 +332,10 @@ describe("handleGetGoogleSlidesSpeakerNotes", () => {
       },
     } as never);
 
-    const result = await handleGetGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 0,
+      action: "get",
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("Speaker notes here");
@@ -344,15 +346,16 @@ describe("handleGetGoogleSlidesSpeakerNotes", () => {
       data: { slides: [{}] },
     } as never);
 
-    const result = await handleGetGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 5,
+      action: "get",
     });
     expect(result.isError).toBe(true);
   });
 });
 
-describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
+describe("handleSlidesSpeakerNotes - update action", () => {
   let mockSlides: slides_v1.Slides;
 
   beforeEach(() => {
@@ -375,9 +378,10 @@ describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
     } as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-    const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 0,
+      action: "update",
       notes: "New speaker notes",
     });
     expect(result.isError).toBe(false);
@@ -395,9 +399,10 @@ describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
       },
     } as never);
 
-    const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 0,
+      action: "update",
       notes: "Notes",
     });
     expect(result.isError).toBe(true);
@@ -430,9 +435,10 @@ describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
     } as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-    const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 0,
+      action: "update",
       notes: "New speaker notes",
     });
     expect(result.isError).toBe(false);
@@ -473,9 +479,10 @@ describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
     } as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-    const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 0,
+      action: "update",
       notes: "New content",
     });
     expect(result.isError).toBe(false);
@@ -515,9 +522,10 @@ describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
     } as never);
     vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-    const result = await handleUpdateGoogleSlidesSpeakerNotes(mockSlides, {
+    const result = await handleSlidesSpeakerNotes(mockSlides, {
       presentationId: "pres123",
       slideIndex: 0,
+      action: "update",
       notes: "New content",
     });
     expect(result.isError).toBe(false);
@@ -535,224 +543,223 @@ describe("handleUpdateGoogleSlidesSpeakerNotes", () => {
   });
 });
 
-describe("handleFormatGoogleSlidesElement", () => {
+describe("handleFormatSlidesText", () => {
   let mockSlides: slides_v1.Slides;
 
   beforeEach(() => {
     mockSlides = createMockSlides();
   });
 
-  describe("text formatting", () => {
-    it("formats text with style options", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+  it("formats text with style options", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-        bold: true,
-        italic: true,
-        fontSize: 14,
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("Applied formatting");
-      expect(result.content[0].text).toContain("text style");
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+      bold: true,
+      italic: true,
+      fontSize: 14,
     });
-
-    it("formats text with paragraph options", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-        alignment: "CENTER",
-        lineSpacing: 1.5,
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("alignment");
-      expect(result.content[0].text).toContain("line spacing");
-    });
-
-    it("formats text with both style and paragraph options", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-        bold: true,
-        alignment: "CENTER",
-        bulletStyle: "DISC",
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("text style");
-      expect(result.content[0].text).toContain("alignment");
-      expect(result.content[0].text).toContain("bullet style");
-    });
-
-    it("handles text range formatting", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-        startIndex: 0,
-        endIndex: 10,
-        bold: true,
-      });
-      expect(result.isError).toBe(false);
-    });
-
-    it("handles NUMBERED bullet style", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-        bulletStyle: "NUMBERED",
-      });
-      expect(result.isError).toBe(false);
-    });
-
-    it("handles NONE bullet style (removes bullets)", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-        bulletStyle: "NONE",
-      });
-      expect(result.isError).toBe(false);
-    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("Formatted text");
+    expect(result.content[0].text).toContain("text style");
   });
 
-  describe("shape formatting", () => {
-    it("styles shape with background color", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+  it("formats text with paragraph options", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "shape",
-        objectId: "shape123",
-        backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("background color");
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+      alignment: "CENTER",
+      lineSpacing: 1.5,
     });
-
-    it("styles shape with outline options", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "shape",
-        objectId: "shape123",
-        outlineColor: { red: 0, green: 0, blue: 0 },
-        outlineWeight: 2,
-        outlineDashStyle: "DASH",
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("outline color");
-      expect(result.content[0].text).toContain("outline weight");
-      expect(result.content[0].text).toContain("outline dash style");
-    });
-
-    it("styles shape with all options", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "shape",
-        objectId: "shape123",
-        backgroundColor: { red: 1, green: 1, blue: 1 },
-        outlineColor: { red: 0, green: 0, blue: 0 },
-        outlineWeight: 1,
-        outlineDashStyle: "SOLID",
-      });
-      expect(result.isError).toBe(false);
-    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("alignment");
+    expect(result.content[0].text).toContain("line spacing");
   });
 
-  describe("slide background", () => {
-    it("sets slide background color", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+  it("formats text with both style and paragraph options", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "slide",
-        pageObjectIds: ["slide1", "slide2"],
-        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("slide background");
-      expect(result.content[0].text).toContain("2 slide(s)");
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+      bold: true,
+      alignment: "CENTER",
+      bulletStyle: "DISC",
     });
-
-    it("sets background for single slide", async () => {
-      vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
-
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "slide",
-        pageObjectIds: ["slide1"],
-        slideBackgroundColor: { red: 1, green: 1, blue: 1 },
-      });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain("1 slide(s)");
-    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("text style");
+    expect(result.content[0].text).toContain("alignment");
+    expect(result.content[0].text).toContain("bullet style");
   });
 
-  describe("error handling", () => {
-    it("returns error when no formatting options specified for text", async () => {
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj123",
-      });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("No formatting options");
-    });
+  it("handles text range formatting", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-    it("returns error when no formatting options specified for shape", async () => {
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "shape",
-        objectId: "shape123",
-      });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("No formatting options");
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+      startIndex: 0,
+      endIndex: 10,
+      bold: true,
     });
+    expect(result.isError).toBe(false);
+  });
 
-    it("returns error when no background color specified for slide", async () => {
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "slide",
-        pageObjectIds: ["slide1"],
-      });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("No formatting options");
-    });
+  it("handles NUMBERED bullet style", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
 
-    it("returns error when objectId missing for text targetType", async () => {
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "text",
-        bold: true,
-      });
-      expect(result.isError).toBe(true);
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+      bulletStyle: "NUMBERED",
     });
+    expect(result.isError).toBe(false);
+  });
 
-    it("returns error when pageObjectIds missing for slide targetType", async () => {
-      const result = await handleFormatGoogleSlidesElement(mockSlides, {
-        presentationId: "pres123",
-        targetType: "slide",
-        slideBackgroundColor: { red: 1 },
-      });
-      expect(result.isError).toBe(true);
+  it("handles NONE bullet style (removes bullets)", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+      bulletStyle: "NONE",
     });
+    expect(result.isError).toBe(false);
+  });
+
+  it("returns error when no formatting options specified", async () => {
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      objectId: "obj123",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("No formatting options");
+  });
+
+  it("returns error when objectId is missing", async () => {
+    const result = await handleFormatSlidesText(mockSlides, {
+      presentationId: "pres123",
+      bold: true,
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleFormatSlidesShape", () => {
+  let mockSlides: slides_v1.Slides;
+
+  beforeEach(() => {
+    mockSlides = createMockSlides();
+  });
+
+  it("styles shape with background color", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatSlidesShape(mockSlides, {
+      presentationId: "pres123",
+      objectId: "shape123",
+      backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("background color");
+  });
+
+  it("styles shape with outline options", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatSlidesShape(mockSlides, {
+      presentationId: "pres123",
+      objectId: "shape123",
+      outlineColor: { red: 0, green: 0, blue: 0 },
+      outlineWeight: 2,
+      outlineDashStyle: "DASH",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("outline color");
+    expect(result.content[0].text).toContain("outline weight");
+    expect(result.content[0].text).toContain("outline dash style");
+  });
+
+  it("styles shape with all options", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatSlidesShape(mockSlides, {
+      presentationId: "pres123",
+      objectId: "shape123",
+      backgroundColor: { red: 1, green: 1, blue: 1 },
+      outlineColor: { red: 0, green: 0, blue: 0 },
+      outlineWeight: 1,
+      outlineDashStyle: "SOLID",
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it("returns error when no formatting options specified", async () => {
+    const result = await handleFormatSlidesShape(mockSlides, {
+      presentationId: "pres123",
+      objectId: "shape123",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("No formatting options");
+  });
+
+  it("returns error when objectId is missing", async () => {
+    const result = await handleFormatSlidesShape(mockSlides, {
+      presentationId: "pres123",
+      backgroundColor: { red: 1 },
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleFormatSlideBackground", () => {
+  let mockSlides: slides_v1.Slides;
+
+  beforeEach(() => {
+    mockSlides = createMockSlides();
+  });
+
+  it("sets slide background color for multiple slides", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatSlideBackground(mockSlides, {
+      presentationId: "pres123",
+      pageObjectIds: ["slide1", "slide2"],
+      backgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("2 slide(s)");
+  });
+
+  it("sets background for single slide", async () => {
+    vi.mocked(mockSlides.presentations.batchUpdate).mockResolvedValue({} as never);
+
+    const result = await handleFormatSlideBackground(mockSlides, {
+      presentationId: "pres123",
+      pageObjectIds: ["slide1"],
+      backgroundColor: { red: 1, green: 1, blue: 1 },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("1 slide(s)");
+  });
+
+  it("returns error when pageObjectIds is empty", async () => {
+    const result = await handleFormatSlideBackground(mockSlides, {
+      presentationId: "pres123",
+      pageObjectIds: [],
+      backgroundColor: { red: 1 },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("returns error when backgroundColor is missing", async () => {
+    const result = await handleFormatSlideBackground(mockSlides, {
+      presentationId: "pres123",
+      pageObjectIds: ["slide1"],
+    });
+    expect(result.isError).toBe(true);
   });
 });

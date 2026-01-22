@@ -1,10 +1,36 @@
 import { z } from "zod";
 
-export const ListSheetTabsSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-});
+// Unified sheet tabs schema - replaces list/create/delete/rename individual schemas
+export const SheetTabsSchema = z
+  .object({
+    spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
+    action: z.enum(["list", "create", "delete", "rename"]),
+    title: z.string().optional().describe("Tab title (for create/delete)"),
+    index: z.number().int().min(0).optional().describe("Position for new tab (create only)"),
+    currentTitle: z.string().optional().describe("Current title to rename (rename only)"),
+    newTitle: z.string().optional().describe("New title (rename only)"),
+  })
+  .refine(
+    (data) => {
+      switch (data.action) {
+        case "list":
+          return true;
+        case "create":
+        case "delete":
+          return !!data.title;
+        case "rename":
+          return !!(data.currentTitle && data.newTitle);
+        default:
+          return false;
+      }
+    },
+    {
+      message:
+        "Missing required params: create/delete need 'title', rename needs 'currentTitle' and 'newTitle'",
+    },
+  );
 
-export type ListSheetTabsInput = z.infer<typeof ListSheetTabsSchema>;
+export type SheetTabsInput = z.infer<typeof SheetTabsSchema>;
 
 export const CreateGoogleSheetSchema = z
   .object({
@@ -121,22 +147,6 @@ export const AddGoogleSheetConditionalFormatSchema = z.object({
   }),
 });
 
-export const CreateSheetTabSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-  title: z.string().min(1, "Tab title is required"),
-  index: z.number().int().min(0).optional(),
-});
-
-export const DeleteSheetTabSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-  sheetTitle: z.string().min(1, "Sheet title is required"),
-});
-
-export const RenameSheetTabSchema = z.object({
-  spreadsheetId: z.string().min(1, "Spreadsheet ID is required"),
-  currentTitle: z.string().min(1, "Current title is required"),
-  newTitle: z.string().min(1, "New title is required"),
-});
 
 // Type exports
 export type CreateGoogleSheetInput = z.infer<typeof CreateGoogleSheetSchema>;
@@ -147,6 +157,3 @@ export type MergeGoogleSheetCellsInput = z.infer<typeof MergeGoogleSheetCellsSch
 export type AddGoogleSheetConditionalFormatInput = z.infer<
   typeof AddGoogleSheetConditionalFormatSchema
 >;
-export type CreateSheetTabInput = z.infer<typeof CreateSheetTabSchema>;
-export type DeleteSheetTabInput = z.infer<typeof DeleteSheetTabSchema>;
-export type RenameSheetTabInput = z.infer<typeof RenameSheetTabSchema>;

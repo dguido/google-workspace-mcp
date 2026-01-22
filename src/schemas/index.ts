@@ -88,29 +88,23 @@ export type {
 
 // Sheets schemas
 export {
-  ListSheetTabsSchema,
+  SheetTabsSchema,
   CreateGoogleSheetSchema,
   UpdateGoogleSheetSchema,
   GetGoogleSheetContentSchema,
   FormatGoogleSheetCellsSchema,
   MergeGoogleSheetCellsSchema,
   AddGoogleSheetConditionalFormatSchema,
-  CreateSheetTabSchema,
-  DeleteSheetTabSchema,
-  RenameSheetTabSchema,
 } from "./sheets.js";
 
 export type {
-  ListSheetTabsInput,
+  SheetTabsInput,
   CreateGoogleSheetInput,
   UpdateGoogleSheetInput,
   GetGoogleSheetContentInput,
   FormatGoogleSheetCellsInput,
   MergeGoogleSheetCellsInput,
   AddGoogleSheetConditionalFormatInput,
-  CreateSheetTabInput,
-  DeleteSheetTabInput,
-  RenameSheetTabInput,
 } from "./sheets.js";
 
 // Slides schemas
@@ -121,9 +115,10 @@ export {
   GetGoogleSlidesContentSchema,
   CreateGoogleSlidesTextBoxSchema,
   CreateGoogleSlidesShapeSchema,
-  GetGoogleSlidesSpeakerNotesSchema,
-  UpdateGoogleSlidesSpeakerNotesSchema,
-  FormatGoogleSlidesElementSchema,
+  SlidesSpeakerNotesSchema,
+  FormatSlidesTextSchema,
+  FormatSlidesShapeSchema,
+  FormatSlideBackgroundSchema,
 } from "./slides.js";
 
 export type {
@@ -133,9 +128,10 @@ export type {
   GetGoogleSlidesContentInput,
   CreateGoogleSlidesTextBoxInput,
   CreateGoogleSlidesShapeInput,
-  GetGoogleSlidesSpeakerNotesInput,
-  UpdateGoogleSlidesSpeakerNotesInput,
-  FormatGoogleSlidesElementInput,
+  SlidesSpeakerNotesInput,
+  FormatSlidesTextInput,
+  FormatSlidesShapeInput,
+  FormatSlideBackgroundInput,
 } from "./slides.js";
 
 // Unified schemas
@@ -169,3 +165,50 @@ export type {
   DeleteEventInput,
   FindFreeTimeInput,
 } from "./calendar.js";
+
+// Gmail schemas
+export {
+  EmailAddressSchema,
+  AttachmentSchema,
+  SendEmailSchema,
+  DraftEmailSchema,
+  ReadEmailSchema,
+  SearchEmailsSchema,
+  DeleteEmailSchema,
+  ModifyEmailSchema,
+  DownloadAttachmentSchema,
+  CreateLabelSchema,
+  UpdateLabelSchema,
+  DeleteLabelSchema,
+  ListLabelsSchema,
+  GetOrCreateLabelSchema,
+  FilterCriteriaSchema,
+  FilterActionSchema,
+  FilterTemplateType,
+  CreateFilterSchema,
+  ListFiltersSchema,
+  DeleteFilterSchema,
+} from "./gmail.js";
+
+export type {
+  EmailAddressInput,
+  AttachmentInput,
+  SendEmailInput,
+  DraftEmailInput,
+  ReadEmailInput,
+  SearchEmailsInput,
+  DeleteEmailInput,
+  ModifyEmailInput,
+  DownloadAttachmentInput,
+  CreateLabelInput,
+  UpdateLabelInput,
+  DeleteLabelInput,
+  ListLabelsInput,
+  GetOrCreateLabelInput,
+  FilterCriteriaInput,
+  FilterActionInput,
+  FilterTemplateTypeValue,
+  CreateFilterInput,
+  ListFiltersInput,
+  DeleteFilterInput,
+} from "./gmail.js";

@@ -103,6 +103,32 @@ export function getPathCacheStats(): { pathCount: number; segmentCount: number }
 }
 
 /**
+ * Clean up expired cache entries.
+ * Call periodically to prevent memory leaks in long-running sessions.
+ * @returns Number of entries removed
+ */
+export function cleanupExpiredCache(): number {
+  let removed = 0;
+  const now = Date.now();
+
+  for (const [key, entry] of pathCache.entries()) {
+    if (now - entry.timestamp > TTL_MS) {
+      pathCache.delete(key);
+      removed++;
+    }
+  }
+
+  for (const [key, entry] of segmentCache.entries()) {
+    if (now - entry.timestamp > TTL_MS) {
+      segmentCache.delete(key);
+      removed++;
+    }
+  }
+
+  return removed;
+}
+
+/**
  * Normalize a path for consistent caching.
  */
 function normalizePath(path: string): string {

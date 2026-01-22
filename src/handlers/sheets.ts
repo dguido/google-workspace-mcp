@@ -9,16 +9,13 @@ import {
 import { GOOGLE_MIME_TYPES, getMimeTypeSuggestion } from "../utils/mimeTypes.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
-  ListSheetTabsSchema,
+  SheetTabsSchema,
   CreateGoogleSheetSchema,
   UpdateGoogleSheetSchema,
   GetGoogleSheetContentSchema,
   FormatGoogleSheetCellsSchema,
   MergeGoogleSheetCellsSchema,
   AddGoogleSheetConditionalFormatSchema,
-  CreateSheetTabSchema,
-  DeleteSheetTabSchema,
-  RenameSheetTabSchema,
 } from "../schemas/index.js";
 import { resolveOptionalFolderPath, checkFileExists, convertA1ToGridRange } from "./helpers.js";
 import {
@@ -546,162 +543,41 @@ async function getSheetIdByTitle(
   return sheet ? sheet.sheetId : null;
 }
 
-export async function handleCreateSheetTab(
+/**
+ * Unified sheet tabs handler - list, create, delete, or rename tabs
+ */
+export async function handleSheetTabs(
   sheets: sheets_v4.Sheets,
   args: unknown,
 ): Promise<ToolResponse> {
-  const validation = validateArgs(CreateSheetTabSchema, args);
+  const validation = validateArgs(SheetTabsSchema, args);
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  // Check if sheet name already exists
-  const existingSheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.title);
-  if (existingSheetId !== null) {
-    return errorResponse(`A sheet tab named "${data.title}" already exists in this spreadsheet.`, {
-      code: "ALREADY_EXISTS",
-    });
+  switch (data.action) {
+    case "list":
+      return listSheetTabs(sheets, data.spreadsheetId);
+
+    case "create":
+      return createSheetTab(sheets, data.spreadsheetId, data.title!, data.index);
+
+    case "delete":
+      return deleteSheetTab(sheets, data.spreadsheetId, data.title!);
+
+    case "rename":
+      return renameSheetTab(sheets, data.spreadsheetId, data.currentTitle!, data.newTitle!);
+
+    default:
+      return errorResponse(`Unknown action: ${data.action}`);
   }
-
-  // Create the new sheet
-  const addSheetRequest: sheets_v4.Schema$Request = {
-    addSheet: {
-      properties: {
-        title: data.title,
-        ...(data.index !== undefined && { index: data.index }),
-      },
-    },
-  };
-
-  const response = await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: data.spreadsheetId,
-    requestBody: { requests: [addSheetRequest] },
-  });
-
-  // Clear cache for this spreadsheet
-  clearSheetCache(data.spreadsheetId);
-
-  const newSheetId = response.data.replies?.[0]?.addSheet?.properties?.sheetId;
-
-  return successResponse(`Created new sheet tab "${data.title}" (ID: ${newSheetId})`);
 }
 
-export async function handleDeleteSheetTab(
+async function listSheetTabs(
   sheets: sheets_v4.Sheets,
-  args: unknown,
+  spreadsheetId: string,
 ): Promise<ToolResponse> {
-  const validation = validateArgs(DeleteSheetTabSchema, args);
-  if (!validation.success) return validation.response;
-  const data = validation.data;
-
-  // Resolve sheet title to sheetId
-  const sheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.sheetTitle);
-  if (sheetId === null) {
-    // Fetch available sheets for better error message
-    const spreadsheet = await sheets.spreadsheets.get({
-      spreadsheetId: data.spreadsheetId,
-    });
-    const availableSheets =
-      spreadsheet.data.sheets
-        ?.map((s) => s.properties?.title)
-        .filter(Boolean)
-        .join(", ") || "none";
-    return errorResponse(
-      `Sheet tab "${data.sheetTitle}" not found. Available sheets: ${availableSheets}`,
-    );
-  }
-
-  // Delete the sheet
-  const deleteSheetRequest: sheets_v4.Schema$Request = {
-    deleteSheet: { sheetId },
-  };
-
-  try {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId: data.spreadsheetId,
-      requestBody: { requests: [deleteSheetRequest] },
-    });
-  } catch (error: unknown) {
-    const err = error as { message?: string };
-    // Check if it's the "cannot delete last sheet" error
-    if (err.message?.includes("last sheet") || err.message?.includes("at least one sheet")) {
-      return errorResponse(
-        `Cannot delete "${data.sheetTitle}" - a spreadsheet must have at least one sheet.`,
-      );
-    }
-    throw error;
-  }
-
-  // Clear cache for this spreadsheet
-  clearSheetCache(data.spreadsheetId);
-
-  return successResponse(`Deleted sheet tab "${data.sheetTitle}"`);
-}
-
-export async function handleRenameSheetTab(
-  sheets: sheets_v4.Sheets,
-  args: unknown,
-): Promise<ToolResponse> {
-  const validation = validateArgs(RenameSheetTabSchema, args);
-  if (!validation.success) return validation.response;
-  const data = validation.data;
-
-  // Resolve current title to sheetId
-  const sheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.currentTitle);
-  if (sheetId === null) {
-    // Fetch available sheets for better error message
-    const spreadsheet = await sheets.spreadsheets.get({
-      spreadsheetId: data.spreadsheetId,
-    });
-    const availableSheets =
-      spreadsheet.data.sheets
-        ?.map((s) => s.properties?.title)
-        .filter(Boolean)
-        .join(", ") || "none";
-    return errorResponse(
-      `Sheet tab "${data.currentTitle}" not found. Available sheets: ${availableSheets}`,
-    );
-  }
-
-  // Check if new title already exists
-  const existingSheetId = await getSheetIdByTitle(sheets, data.spreadsheetId, data.newTitle);
-  if (existingSheetId !== null) {
-    return errorResponse(
-      `A sheet tab named "${data.newTitle}" already exists in this spreadsheet.`,
-    );
-  }
-
-  // Rename the sheet
-  const updateRequest: sheets_v4.Schema$Request = {
-    updateSheetProperties: {
-      properties: {
-        sheetId,
-        title: data.newTitle,
-      },
-      fields: "title",
-    },
-  };
-
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: data.spreadsheetId,
-    requestBody: { requests: [updateRequest] },
-  });
-
-  // Clear cache for this spreadsheet
-  clearSheetCache(data.spreadsheetId);
-
-  return successResponse(`Renamed sheet tab "${data.currentTitle}" to "${data.newTitle}"`);
-}
-
-export async function handleListSheetTabs(
-  sheets: sheets_v4.Sheets,
-  args: unknown,
-): Promise<ToolResponse> {
-  const validation = validateArgs(ListSheetTabsSchema, args);
-  if (!validation.success) return validation.response;
-  const data = validation.data;
-
   const response = await sheets.spreadsheets.get({
-    spreadsheetId: data.spreadsheetId,
+    spreadsheetId,
     fields:
       "spreadsheetId,sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))",
   });
@@ -720,7 +596,115 @@ export async function handleListSheetTabs(
     .join("\n");
 
   return structuredResponse(`Spreadsheet has ${tabs.length} tab(s):\n${tabList}`, {
-    spreadsheetId: data.spreadsheetId,
+    spreadsheetId,
     tabs,
   });
+}
+
+async function createSheetTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  title: string,
+  index?: number,
+): Promise<ToolResponse> {
+  // Check if sheet name already exists
+  const existingSheetId = await getSheetIdByTitle(sheets, spreadsheetId, title);
+  if (existingSheetId !== null) {
+    return errorResponse(`A sheet tab named "${title}" already exists in this spreadsheet.`, {
+      code: "ALREADY_EXISTS",
+    });
+  }
+
+  const addSheetRequest: sheets_v4.Schema$Request = {
+    addSheet: {
+      properties: {
+        title,
+        ...(index !== undefined && { index }),
+      },
+    },
+  };
+
+  const response = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [addSheetRequest] },
+  });
+
+  clearSheetCache(spreadsheetId);
+  const newSheetId = response.data.replies?.[0]?.addSheet?.properties?.sheetId;
+  return successResponse(`Created new sheet tab "${title}" (ID: ${newSheetId})`);
+}
+
+async function deleteSheetTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  title: string,
+): Promise<ToolResponse> {
+  const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title);
+  if (sheetId === null) {
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const availableSheets =
+      spreadsheet.data.sheets
+        ?.map((s) => s.properties?.title)
+        .filter(Boolean)
+        .join(", ") || "none";
+    return errorResponse(`Sheet tab "${title}" not found. Available sheets: ${availableSheets}`);
+  }
+
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ deleteSheet: { sheetId } }] },
+    });
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    if (err.message?.includes("last sheet") || err.message?.includes("at least one sheet")) {
+      return errorResponse(`Cannot delete "${title}" - spreadsheet must have at least one sheet.`);
+    }
+    throw error;
+  }
+
+  clearSheetCache(spreadsheetId);
+  return successResponse(`Deleted sheet tab "${title}"`);
+}
+
+async function renameSheetTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  currentTitle: string,
+  newTitle: string,
+): Promise<ToolResponse> {
+  const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, currentTitle);
+  if (sheetId === null) {
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const availableSheets =
+      spreadsheet.data.sheets
+        ?.map((s) => s.properties?.title)
+        .filter(Boolean)
+        .join(", ") || "none";
+    return errorResponse(
+      `Sheet tab "${currentTitle}" not found. Available sheets: ${availableSheets}`,
+    );
+  }
+
+  const existingNewId = await getSheetIdByTitle(sheets, spreadsheetId, newTitle);
+  if (existingNewId !== null) {
+    return errorResponse(`A sheet tab named "${newTitle}" already exists in this spreadsheet.`);
+  }
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId, title: newTitle },
+            fields: "title",
+          },
+        },
+      ],
+    },
+  });
+
+  clearSheetCache(spreadsheetId);
+  return successResponse(`Renamed sheet tab "${currentTitle}" to "${newTitle}"`);
 }

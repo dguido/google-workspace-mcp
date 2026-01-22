@@ -5,9 +5,10 @@ import {
   GetGoogleSlidesContentSchema,
   CreateGoogleSlidesTextBoxSchema,
   CreateGoogleSlidesShapeSchema,
-  GetGoogleSlidesSpeakerNotesSchema,
-  UpdateGoogleSlidesSpeakerNotesSchema,
-  FormatGoogleSlidesElementSchema,
+  SlidesSpeakerNotesSchema,
+  FormatSlidesTextSchema,
+  FormatSlidesShapeSchema,
+  FormatSlideBackgroundSchema,
 } from "./slides.js";
 
 describe("CreateGoogleSlidesSchema", () => {
@@ -224,234 +225,231 @@ describe("CreateGoogleSlidesShapeSchema", () => {
   });
 });
 
-describe("GetGoogleSlidesSpeakerNotesSchema", () => {
-  it("accepts valid input", () => {
-    const result = GetGoogleSlidesSpeakerNotesSchema.safeParse({
-      presentationId: "pres123",
-      slideIndex: 0,
+describe("SlidesSpeakerNotesSchema", () => {
+  describe("get action", () => {
+    it("accepts valid input", () => {
+      const result = SlidesSpeakerNotesSchema.safeParse({
+        presentationId: "pres123",
+        slideIndex: 0,
+        action: "get",
+      });
+      expect(result.success).toBe(true);
     });
-    expect(result.success).toBe(true);
+
+    it("rejects negative slideIndex", () => {
+      const result = SlidesSpeakerNotesSchema.safeParse({
+        presentationId: "pres123",
+        slideIndex: -1,
+        action: "get",
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
-  it("rejects negative slideIndex", () => {
-    const result = GetGoogleSlidesSpeakerNotesSchema.safeParse({
-      presentationId: "pres123",
-      slideIndex: -1,
+  describe("update action", () => {
+    it("accepts valid input", () => {
+      const result = SlidesSpeakerNotesSchema.safeParse({
+        presentationId: "pres123",
+        slideIndex: 0,
+        action: "update",
+        notes: "These are speaker notes",
+      });
+      expect(result.success).toBe(true);
     });
-    expect(result.success).toBe(false);
+
+    it("accepts empty notes", () => {
+      const result = SlidesSpeakerNotesSchema.safeParse({
+        presentationId: "pres123",
+        slideIndex: 0,
+        action: "update",
+        notes: "",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects negative slideIndex", () => {
+      const result = SlidesSpeakerNotesSchema.safeParse({
+        presentationId: "pres123",
+        slideIndex: -1,
+        action: "update",
+        notes: "notes",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("requires notes for update action", () => {
+      const result = SlidesSpeakerNotesSchema.safeParse({
+        presentationId: "pres123",
+        slideIndex: 0,
+        action: "update",
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
 
-describe("UpdateGoogleSlidesSpeakerNotesSchema", () => {
-  it("accepts valid input", () => {
-    const result = UpdateGoogleSlidesSpeakerNotesSchema.safeParse({
+describe("FormatSlidesTextSchema", () => {
+  it("requires objectId", () => {
+    const result = FormatSlidesTextSchema.safeParse({
       presentationId: "pres123",
-      slideIndex: 0,
-      notes: "These are speaker notes",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts empty notes", () => {
-    const result = UpdateGoogleSlidesSpeakerNotesSchema.safeParse({
-      presentationId: "pres123",
-      slideIndex: 0,
-      notes: "",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects negative slideIndex", () => {
-    const result = UpdateGoogleSlidesSpeakerNotesSchema.safeParse({
-      presentationId: "pres123",
-      slideIndex: -1,
-      notes: "notes",
+      bold: true,
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts valid text formatting", () => {
+    const result = FormatSlidesTextSchema.safeParse({
+      presentationId: "pres123",
+      objectId: "obj456",
+      bold: true,
+      italic: false,
+      fontSize: 14,
+      fontFamily: "Arial",
+      foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts paragraph formatting options", () => {
+    const result = FormatSlidesTextSchema.safeParse({
+      presentationId: "pres123",
+      objectId: "obj456",
+      alignment: "CENTER",
+      lineSpacing: 1.5,
+      bulletStyle: "DISC",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts text range for partial formatting", () => {
+    const result = FormatSlidesTextSchema.safeParse({
+      presentationId: "pres123",
+      objectId: "obj456",
+      startIndex: 0,
+      endIndex: 10,
+      bold: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects color values outside 0-1 range", () => {
+    const result = FormatSlidesTextSchema.safeParse({
+      presentationId: "pres123",
+      objectId: "obj456",
+      foregroundColor: { red: 255, green: 0, blue: 0 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("validates alignment enum", () => {
+    const validAlignments = ["START", "CENTER", "END", "JUSTIFIED"];
+    for (const alignment of validAlignments) {
+      const result = FormatSlidesTextSchema.safeParse({
+        presentationId: "pres123",
+        objectId: "obj456",
+        alignment,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("validates bulletStyle enum", () => {
+    const validStyles = ["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"];
+    for (const bulletStyle of validStyles) {
+      const result = FormatSlidesTextSchema.safeParse({
+        presentationId: "pres123",
+        objectId: "obj456",
+        bulletStyle,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
 });
 
-describe("FormatGoogleSlidesElementSchema", () => {
-  describe("targetType validation", () => {
-    it("requires objectId for text targetType", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "text",
-        bold: true,
-      });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0].message).toContain("objectId required");
-      }
+describe("FormatSlidesShapeSchema", () => {
+  it("requires objectId", () => {
+    const result = FormatSlidesShapeSchema.safeParse({
+      presentationId: "pres123",
+      backgroundColor: { red: 1, green: 0, blue: 0 },
     });
-
-    it("requires objectId for shape targetType", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "shape",
-        backgroundColor: { red: 1, green: 0, blue: 0 },
-      });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0].message).toContain("objectId required");
-      }
-    });
-
-    it("requires pageObjectIds for slide targetType", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "slide",
-        slideBackgroundColor: { red: 1, green: 1, blue: 1 },
-      });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0].message).toContain("pageObjectIds required");
-      }
-    });
-
-    it("rejects empty pageObjectIds array for slide targetType", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "slide",
-        pageObjectIds: [],
-        slideBackgroundColor: { red: 1, green: 1, blue: 1 },
-      });
-      expect(result.success).toBe(false);
-    });
+    expect(result.success).toBe(false);
   });
 
-  describe("text formatting", () => {
-    it("accepts valid text formatting with objectId", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj456",
-        bold: true,
-        italic: false,
-        fontSize: 14,
-        fontFamily: "Arial",
-        foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 },
-      });
-      expect(result.success).toBe(true);
+  it("accepts valid shape formatting", () => {
+    const result = FormatSlidesShapeSchema.safeParse({
+      presentationId: "pres123",
+      objectId: "shape789",
+      backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
+      outlineColor: { red: 0, green: 0, blue: 0 },
+      outlineWeight: 2,
+      outlineDashStyle: "SOLID",
     });
-
-    it("accepts paragraph formatting options", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj456",
-        alignment: "CENTER",
-        lineSpacing: 1.5,
-        bulletStyle: "DISC",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("accepts text range for partial formatting", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj456",
-        startIndex: 0,
-        endIndex: 10,
-        bold: true,
-      });
-      expect(result.success).toBe(true);
-    });
+    expect(result.success).toBe(true);
   });
 
-  describe("shape formatting", () => {
-    it("accepts valid shape formatting with objectId", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
+  it("validates outline dash style enum", () => {
+    const result = FormatSlidesShapeSchema.safeParse({
+      presentationId: "pres123",
+      objectId: "shape789",
+      outlineDashStyle: "INVALID",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts valid dash styles", () => {
+    const validStyles = ["SOLID", "DOT", "DASH", "DASH_DOT", "LONG_DASH", "LONG_DASH_DOT"];
+    for (const style of validStyles) {
+      const result = FormatSlidesShapeSchema.safeParse({
         presentationId: "pres123",
-        targetType: "shape",
         objectId: "shape789",
-        backgroundColor: { red: 1, green: 0, blue: 0, alpha: 0.8 },
-        outlineColor: { red: 0, green: 0, blue: 0 },
-        outlineWeight: 2,
-        outlineDashStyle: "SOLID",
+        outlineDashStyle: style,
       });
       expect(result.success).toBe(true);
-    });
+    }
+  });
+});
 
-    it("validates outline dash style enum", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "shape",
-        objectId: "shape789",
-        outlineDashStyle: "INVALID",
-      });
-      expect(result.success).toBe(false);
+describe("FormatSlideBackgroundSchema", () => {
+  it("requires pageObjectIds", () => {
+    const result = FormatSlideBackgroundSchema.safeParse({
+      presentationId: "pres123",
+      backgroundColor: { red: 1, green: 1, blue: 1 },
     });
+    expect(result.success).toBe(false);
   });
 
-  describe("slide background", () => {
-    it("accepts valid slide background with pageObjectIds", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "slide",
-        pageObjectIds: ["slide1", "slide2"],
-        slideBackgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
-      });
-      expect(result.success).toBe(true);
+  it("requires backgroundColor", () => {
+    const result = FormatSlideBackgroundSchema.safeParse({
+      presentationId: "pres123",
+      pageObjectIds: ["slide1"],
     });
+    expect(result.success).toBe(false);
   });
 
-  describe("color validation", () => {
-    it("rejects color values outside 0-1 range", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj456",
-        foregroundColor: { red: 255, green: 0, blue: 0 },
-      });
-      expect(result.success).toBe(false);
+  it("rejects empty pageObjectIds array", () => {
+    const result = FormatSlideBackgroundSchema.safeParse({
+      presentationId: "pres123",
+      pageObjectIds: [],
+      backgroundColor: { red: 1, green: 1, blue: 1 },
     });
-
-    it("accepts color values at boundaries (0 and 1)", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "text",
-        objectId: "obj456",
-        foregroundColor: { red: 0, green: 1, blue: 0.5 },
-      });
-      expect(result.success).toBe(true);
-    });
+    expect(result.success).toBe(false);
   });
 
-  describe("enum validations", () => {
-    it("validates alignment enum", () => {
-      const validAlignments = ["START", "CENTER", "END", "JUSTIFIED"];
-      for (const alignment of validAlignments) {
-        const result = FormatGoogleSlidesElementSchema.safeParse({
-          presentationId: "pres123",
-          targetType: "text",
-          objectId: "obj456",
-          alignment,
-        });
-        expect(result.success).toBe(true);
-      }
+  it("accepts valid slide background", () => {
+    const result = FormatSlideBackgroundSchema.safeParse({
+      presentationId: "pres123",
+      pageObjectIds: ["slide1", "slide2"],
+      backgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
     });
+    expect(result.success).toBe(true);
+  });
 
-    it("validates bulletStyle enum", () => {
-      const validStyles = ["NONE", "DISC", "ARROW", "SQUARE", "DIAMOND", "STAR", "NUMBERED"];
-      for (const bulletStyle of validStyles) {
-        const result = FormatGoogleSlidesElementSchema.safeParse({
-          presentationId: "pres123",
-          targetType: "text",
-          objectId: "obj456",
-          bulletStyle,
-        });
-        expect(result.success).toBe(true);
-      }
+  it("accepts single slide", () => {
+    const result = FormatSlideBackgroundSchema.safeParse({
+      presentationId: "pres123",
+      pageObjectIds: ["slide1"],
+      backgroundColor: { red: 1, green: 1, blue: 1 },
     });
-
-    it("validates targetType enum", () => {
-      const result = FormatGoogleSlidesElementSchema.safeParse({
-        presentationId: "pres123",
-        targetType: "invalid",
-      });
-      expect(result.success).toBe(false);
-    });
+    expect(result.success).toBe(true);
   });
 });

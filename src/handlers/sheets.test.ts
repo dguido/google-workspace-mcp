@@ -7,9 +7,7 @@ import {
   handleFormatGoogleSheetCells,
   handleMergeGoogleSheetCells,
   handleAddGoogleSheetConditionalFormat,
-  handleCreateSheetTab,
-  handleDeleteSheetTab,
-  handleRenameSheetTab,
+  handleSheetTabs,
 } from "./sheets.js";
 
 vi.mock("../utils/index.js", async (importOriginal) => {
@@ -391,7 +389,7 @@ describe("handleAddGoogleSheetConditionalFormat", () => {
   });
 });
 
-describe("handleCreateSheetTab", () => {
+describe("handleSheetTabs - create action", () => {
   let mockSheets: sheets_v4.Sheets;
 
   beforeEach(() => {
@@ -407,8 +405,9 @@ describe("handleCreateSheetTab", () => {
       data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] },
     } as never);
 
-    const result = await handleCreateSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "create",
       title: "NewTab",
     });
     expect(result.isError).toBe(false);
@@ -424,8 +423,9 @@ describe("handleCreateSheetTab", () => {
       data: { replies: [{ addSheet: { properties: { sheetId: 123 } } }] },
     } as never);
 
-    const result = await handleCreateSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "create",
       title: "NewTab",
       index: 0,
     });
@@ -437,8 +437,9 @@ describe("handleCreateSheetTab", () => {
       data: { sheets: [{ properties: { sheetId: 0, title: "ExistingTab" } }] },
     } as never);
 
-    const result = await handleCreateSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "create",
       title: "ExistingTab",
     });
     expect(result.isError).toBe(true);
@@ -446,23 +447,24 @@ describe("handleCreateSheetTab", () => {
   });
 
   it("returns error for empty spreadsheetId", async () => {
-    const result = await handleCreateSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "",
+      action: "create",
       title: "NewTab",
     });
     expect(result.isError).toBe(true);
   });
 
-  it("returns error for empty title", async () => {
-    const result = await handleCreateSheetTab(mockSheets, {
+  it("returns error for missing title", async () => {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
-      title: "",
+      action: "create",
     });
     expect(result.isError).toBe(true);
   });
 });
 
-describe("handleDeleteSheetTab", () => {
+describe("handleSheetTabs - delete action", () => {
   let mockSheets: sheets_v4.Sheets;
 
   beforeEach(() => {
@@ -480,9 +482,10 @@ describe("handleDeleteSheetTab", () => {
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
 
-    const result = await handleDeleteSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
-      sheetTitle: "ToDelete",
+      action: "delete",
+      title: "ToDelete",
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("Deleted sheet tab");
@@ -493,9 +496,10 @@ describe("handleDeleteSheetTab", () => {
       data: { sheets: [{ properties: { sheetId: 0, title: "Sheet1" } }] },
     } as never);
 
-    const result = await handleDeleteSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
-      sheetTitle: "NonExistent",
+      action: "delete",
+      title: "NonExistent",
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("not found");
@@ -509,24 +513,26 @@ describe("handleDeleteSheetTab", () => {
       new Error("Cannot delete the last sheet"),
     );
 
-    const result = await handleDeleteSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
-      sheetTitle: "LastSheet",
+      action: "delete",
+      title: "LastSheet",
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("at least one sheet");
   });
 
   it("returns error for empty spreadsheetId", async () => {
-    const result = await handleDeleteSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "",
-      sheetTitle: "Sheet1",
+      action: "delete",
+      title: "Sheet1",
     });
     expect(result.isError).toBe(true);
   });
 });
 
-describe("handleRenameSheetTab", () => {
+describe("handleSheetTabs - rename action", () => {
   let mockSheets: sheets_v4.Sheets;
 
   beforeEach(() => {
@@ -539,8 +545,9 @@ describe("handleRenameSheetTab", () => {
     } as never);
     vi.mocked(mockSheets.spreadsheets.batchUpdate).mockResolvedValue({} as never);
 
-    const result = await handleRenameSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "rename",
       currentTitle: "OldName",
       newTitle: "NewName",
     });
@@ -555,8 +562,9 @@ describe("handleRenameSheetTab", () => {
       data: { sheets: [{ properties: { sheetId: 0, title: "Sheet1" } }] },
     } as never);
 
-    const result = await handleRenameSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "rename",
       currentTitle: "NonExistent",
       newTitle: "NewName",
     });
@@ -574,8 +582,9 @@ describe("handleRenameSheetTab", () => {
       },
     } as never);
 
-    const result = await handleRenameSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "rename",
       currentTitle: "OldName",
       newTitle: "ExistingName",
     });
@@ -584,29 +593,63 @@ describe("handleRenameSheetTab", () => {
   });
 
   it("returns error for empty spreadsheetId", async () => {
-    const result = await handleRenameSheetTab(mockSheets, {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "",
+      action: "rename",
       currentTitle: "OldName",
       newTitle: "NewName",
     });
     expect(result.isError).toBe(true);
   });
 
-  it("returns error for empty currentTitle", async () => {
-    const result = await handleRenameSheetTab(mockSheets, {
+  it("returns error for missing currentTitle", async () => {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
-      currentTitle: "",
+      action: "rename",
       newTitle: "NewName",
     });
     expect(result.isError).toBe(true);
   });
 
-  it("returns error for empty newTitle", async () => {
-    const result = await handleRenameSheetTab(mockSheets, {
+  it("returns error for missing newTitle", async () => {
+    const result = await handleSheetTabs(mockSheets, {
       spreadsheetId: "sheet123",
+      action: "rename",
       currentTitle: "OldName",
-      newTitle: "",
     });
     expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleSheetTabs - list action", () => {
+  let mockSheets: sheets_v4.Sheets;
+
+  beforeEach(() => {
+    mockSheets = createMockSheets();
+  });
+
+  it("lists sheet tabs successfully", async () => {
+    vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
+      data: {
+        spreadsheetId: "sheet123",
+        sheets: [
+          {
+            properties: {
+              sheetId: 0,
+              title: "Sheet1",
+              index: 0,
+              gridProperties: { rowCount: 1000, columnCount: 26 },
+            },
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleSheetTabs(mockSheets, {
+      spreadsheetId: "sheet123",
+      action: "list",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("1 tab(s)");
   });
 });
