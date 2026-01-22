@@ -125,25 +125,33 @@ See [Advanced Configuration](docs/ADVANCED.md) for multi-account setup and envir
 
 ## Available Tools
 
-### Drive Operations
+### Drive (29 tools)
 
-`search` `listFolder` `createFolder` `deleteItem` `renameItem` `moveItem` `copyFile`
+`search` `listFolder` `createFolder` `createTextFile` `updateTextFile` `deleteItem` `renameItem` `moveItem` `copyFile` `getFileMetadata` `exportFile` `shareFile` `getSharing` `removePermission` `listRevisions` `restoreRevision` `downloadFile` `uploadFile` `getStorageQuota` `starFile` `resolveFilePath` `batchDelete` `batchRestore` `batchMove` `batchShare` `listTrash` `restoreFromTrash` `emptyTrash` `getFolderTree`
 
-### File Operations
+### Google Docs (8 tools)
 
-`createTextFile` `updateTextFile`
+`createGoogleDoc` `updateGoogleDoc` `getGoogleDocContent` `appendToDoc` `insertTextInDoc` `deleteTextInDoc` `replaceTextInDoc` `formatGoogleDocRange`
 
-### Google Docs
+### Google Sheets (7 tools)
 
-`createGoogleDoc` `updateGoogleDoc` `getGoogleDocContent` `formatGoogleDocRange`
+`createGoogleSheet` `updateGoogleSheet` `getGoogleSheetContent` `formatGoogleSheetCells` `mergeGoogleSheetCells` `addGoogleSheetConditionalFormat` `sheetTabs`
 
-### Google Sheets
+### Google Slides (10 tools)
 
-`createGoogleSheet` `updateGoogleSheet` `getGoogleSheetContent` `formatGoogleSheetCells` `formatGoogleSheetText` `formatGoogleSheetNumbers` `setGoogleSheetBorders` `mergeGoogleSheetCells` `addGoogleSheetConditionalFormat`
+`createGoogleSlides` `updateGoogleSlides` `getGoogleSlidesContent` `formatSlidesText` `formatSlidesShape` `formatSlideBackground` `createGoogleSlidesTextBox` `createGoogleSlidesShape` `slidesSpeakerNotes` `listSlidePages`
 
-### Google Slides
+### Calendar (7 tools)
 
-`createGoogleSlides` `updateGoogleSlides` `getGoogleSlidesContent` `formatGoogleSlidesElement` `createGoogleSlidesTextBox` `createGoogleSlidesShape` `getGoogleSlidesSpeakerNotes` `updateGoogleSlidesSpeakerNotes`
+`listCalendars` `listEvents` `getEvent` `createEvent` `updateEvent` `deleteEvent` `findFreeTime`
+
+### Gmail (14 tools)
+
+`sendEmail` `draftEmail` `readEmail` `searchEmails` `deleteEmail` `modifyEmail` `downloadAttachment` `listLabels` `getOrCreateLabel` `updateLabel` `deleteLabel` `createFilter` `listFilters` `deleteFilter`
+
+### Unified (3 tools)
+
+`createFile` `updateFile` `getFileContent`
 
 [Full API Reference](docs/API.md)
 

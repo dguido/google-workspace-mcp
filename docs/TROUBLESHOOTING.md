@@ -117,10 +117,6 @@ Error: Google Sheets API has not been used in project...
 - Batch operations where possible
 - Check quota usage in Google Cloud Console
 
-## Docker Issues
-
-See [Docker Usage](DOCKER.md) for Docker-specific troubleshooting.
-
 ## Debug Mode
 
 Enable detailed logging:
