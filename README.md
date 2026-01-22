@@ -1,6 +1,6 @@
 # Google Workspace MCP Server
 
-MCP server providing Claude access to Google Drive, Docs, Sheets, and Slides. Calendar and Gmail support planned.
+MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calendar, and Gmail.
 
 ## Quick Start
 
@@ -30,11 +30,12 @@ This opens your browser for Google OAuth consent. Tokens are saved to `~/.config
 ```json
 {
   "mcpServers": {
-    "google-drive": {
+    "google-workspace": {
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/your/gcp-oauth.keys.json"
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/your/gcp-oauth.keys.json",
+        "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar"
       }
     }
   }
@@ -94,9 +95,11 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 
 Tokens are stored at `~/.config/google-workspace-mcp/tokens.json` by default.
 
-### Service Filtering
+### Service Configuration
 
-Enable only specific Google Workspace services with `GOOGLE_WORKSPACE_SERVICES`:
+By default, we recommend enabling only the core services (`drive,gmail,calendar`) as shown in Quick Start. This provides file management, email, and calendar capabilities without the complexity of document editing tools.
+
+To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
 
 ```json
 {
@@ -106,17 +109,16 @@ Enable only specific Google Workspace services with `GOOGLE_WORKSPACE_SERVICES`:
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
         "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/gcp-oauth.keys.json",
-        "GOOGLE_WORKSPACE_SERVICES": "drive,gmail"
+        "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar,docs,sheets,slides"
       }
     }
   }
 }
 ```
 
-**Valid services:** `drive`, `docs`, `sheets`, `slides`, `calendar`, `gmail`
+**Available services:** `drive`, `docs`, `sheets`, `slides`, `calendar`, `gmail`
 
-- Not set → all services enabled (default, backward compatible)
-- Empty → no services enabled
+- Omit `GOOGLE_WORKSPACE_SERVICES` entirely to enable all services
 - Unified tools (`create_file`, `update_file`, `get_file_content`) require `drive`, `docs`, `sheets`, and `slides`
 
 See [Advanced Configuration](docs/ADVANCED.md) for multi-account setup and environment variables.
