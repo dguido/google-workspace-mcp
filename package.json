@@ -29,7 +29,7 @@
     "url": "git+https://github.com/dguido/google-workspace-mcp.git"
   },
   "bin": {
-    "google-workspace-mcp": "./dist/index.js"
+    "google-workspace-mcp": "dist/index.js"
   },
   "files": [
     "LICENSE",
