@@ -194,10 +194,6 @@ npm test         # Run tests
 
 See [Contributing Guide](CONTRIBUTING.md) for project structure and development workflow.
 
-## Docker
-
-See [Docker Usage](docs/DOCKER.md) for containerized deployment.
-
 ## Links
 
 - [GitHub Repository](https://github.com/dguido/google-workspace-mcp)
