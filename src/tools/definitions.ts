@@ -1740,20 +1740,6 @@ export const sheetsTools: ToolDefinition[] = [
         newTitle: { type: "string", description: "New title (required for rename)" },
       },
       required: ["spreadsheetId", "action"],
-      allOf: [
-        {
-          if: { properties: { action: { const: "create" } } },
-          then: { required: ["title"] },
-        },
-        {
-          if: { properties: { action: { const: "delete" } } },
-          then: { required: ["title"] },
-        },
-        {
-          if: { properties: { action: { const: "rename" } } },
-          then: { required: ["currentTitle", "newTitle"] },
-        },
-      ],
     },
     outputSchema: {
       type: "object",
@@ -2142,8 +2128,6 @@ export const slidesTools: ToolDefinition[] = [
         notes: { type: "string", description: "Notes content (required for update)" },
       },
       required: ["presentationId", "slideIndex", "action"],
-      if: { properties: { action: { const: "update" } } },
-      then: { required: ["notes"] },
     },
     outputSchema: {
       type: "object",
