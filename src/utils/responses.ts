@@ -1,3 +1,4 @@
+import { isToonEnabled } from "../config/services.js";
 import { log } from "./logging.js";
 
 /**
@@ -75,11 +76,18 @@ export function successResponse(text: string): ToolResponse {
  * Use this for tools that return structured data (metadata, lists, quotas, etc.).
  */
 export function structuredResponse(text: string, data: Record<string, unknown>): ToolResponse {
-  return {
+  const response: ToolResponse = {
     content: [{ type: "text", text }],
-    structuredContent: data,
     isError: false,
   };
+
+  // Only include structuredContent when TOON is disabled
+  // When TOON is enabled, data is already in text - no need to duplicate
+  if (!isToonEnabled()) {
+    response.structuredContent = data;
+  }
+
+  return response;
 }
 
 /**

@@ -47,3 +47,4 @@ export {
 } from "./pathCache.js";
 export { buildMimeMessage, parseEmailHeaders, decodeBase64Url } from "./mime.js";
 export type { EmailOptions } from "./mime.js";
+export { toToon } from "./toon.js";

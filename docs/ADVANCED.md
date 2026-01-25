@@ -97,10 +97,11 @@ These tools are used less frequently and can be loaded on-demand:
 
 **Optional** (for customization):
 
-| Variable                          | Description                     | Default                                      | Example                    |
-| --------------------------------- | ------------------------------- | -------------------------------------------- | -------------------------- |
-| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Override token storage location | `~/.config/google-workspace-mcp/tokens.json` | `/custom/path/tokens.json` |
-| `DEBUG`                           | Enable debug logging            | (disabled)                                   | `google-workspace-mcp:*`   |
+| Variable                          | Description                      | Default                                      | Example                    |
+| --------------------------------- | -------------------------------- | -------------------------------------------- | -------------------------- |
+| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Override token storage location  | `~/.config/google-workspace-mcp/tokens.json` | `/custom/path/tokens.json` |
+| `GOOGLE_WORKSPACE_TOON_FORMAT`    | Enable TOON format for responses | `false`                                      | `true`                     |
+| `DEBUG`                           | Enable debug logging             | (disabled)                                   | `google-workspace-mcp:*`   |
 
 ### System Variables
 
@@ -187,3 +188,53 @@ Authentication tokens are stored securely following the XDG Base Directory speci
 - Never commit tokens to version control
 - Tokens auto-refresh before expiration
 - Google OAuth apps in "Testing" status have refresh tokens that expire after 7 days
+
+## TOON Format
+
+TOON (Token-Oriented Object Notation) is a token-efficient encoding format designed for LLM consumption. When enabled, structured responses use TOON instead of JSON, reducing token usage by 20-50%.
+
+### Enabling TOON
+
+```bash
+GOOGLE_WORKSPACE_TOON_FORMAT=true
+```
+
+### How It Works
+
+TOON eliminates repeated field names in arrays. Instead of:
+
+```json
+{
+  "files": [
+    { "id": "abc", "name": "doc.txt", "size": 1024 },
+    { "id": "def", "name": "notes.md", "size": 2048 }
+  ]
+}
+```
+
+TOON encodes as:
+
+```
+files[2]{id,name,size}:
+  abc,doc.txt,1024
+  def,notes.md,2048
+```
+
+### Expected Savings
+
+| Data Pattern                              | Token Savings |
+| ----------------------------------------- | ------------- |
+| Uniform arrays (10+ items, scalar fields) | 40-55%        |
+| Nested objects with uniform sub-arrays    | 25-35%        |
+| Deeply nested objects                     | 20-30%        |
+| Single items                              | 5-15%         |
+
+### Best Use Cases
+
+- `list_calendars`, `search` (Drive) - uniform arrays with many fields
+- `list_events`, `search_emails` - mixed structures with nested arrays
+- `list_labels`, `list_filters` - large collections
+
+### Fallback Behavior
+
+If TOON encoding fails for any reason, responses automatically fall back to JSON formatting.

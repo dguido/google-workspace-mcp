@@ -1,5 +1,5 @@
 import type { calendar_v3 } from "googleapis";
-import { log, successResponse, structuredResponse, validateArgs } from "../utils/index.js";
+import { log, successResponse, structuredResponse, validateArgs, toToon } from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
   ListCalendarsSchema,
@@ -23,15 +23,6 @@ function formatEventTime(eventTime: calendar_v3.Schema$EventDateTime | undefined
   return "Unknown";
 }
 
-// Helper to format event for text output
-function formatEventSummary(event: calendar_v3.Schema$Event): string {
-  const start = formatEventTime(event.start);
-  const end = formatEventTime(event.end);
-  const isAllDay = !!event.start?.date;
-  const timeStr = isAllDay ? start : `${start} - ${end}`;
-  return `${event.summary || "(No title)"} | ${timeStr}`;
-}
-
 export async function handleListCalendars(
   calendar: calendar_v3.Calendar,
   args: unknown,
@@ -51,28 +42,23 @@ export async function handleListCalendars(
     return structuredResponse("No calendars found.", { calendars: [] });
   }
 
-  const formattedCalendars = calendars
-    .map((cal) => {
-      const primary = cal.primary ? " (Primary)" : "";
-      const access = cal.accessRole ? ` [${cal.accessRole}]` : "";
-      return `${cal.summary || cal.id}${primary}${access} - ID: ${cal.id}`;
-    })
-    .join("\n");
+  const calendarData = calendars.map((cal) => ({
+    id: cal.id,
+    summary: cal.summary,
+    description: cal.description,
+    primary: cal.primary,
+    accessRole: cal.accessRole,
+    backgroundColor: cal.backgroundColor,
+    foregroundColor: cal.foregroundColor,
+    timeZone: cal.timeZone,
+  }));
 
   log("Listed calendars", { count: calendars.length });
 
-  return structuredResponse(`Found ${calendars.length} calendar(s):\n\n${formattedCalendars}`, {
-    calendars: calendars.map((cal) => ({
-      id: cal.id,
-      summary: cal.summary,
-      description: cal.description,
-      primary: cal.primary,
-      accessRole: cal.accessRole,
-      backgroundColor: cal.backgroundColor,
-      foregroundColor: cal.foregroundColor,
-      timeZone: cal.timeZone,
-    })),
-  });
+  return structuredResponse(
+    `Found ${calendars.length} calendar(s):\n\n${toToon({ calendars: calendarData })}`,
+    { calendars: calendarData },
+  );
 }
 
 export async function handleListEvents(
@@ -104,9 +90,28 @@ export async function handleListEvents(
     });
   }
 
-  const formattedEvents = events.map((event) => `- ${formatEventSummary(event)}`).join("\n");
+  const eventData = events.map((event) => ({
+    id: event.id,
+    summary: event.summary,
+    description: event.description,
+    location: event.location,
+    start: event.start,
+    end: event.end,
+    status: event.status,
+    htmlLink: event.htmlLink,
+    hangoutLink: event.hangoutLink,
+    attendees: event.attendees?.map((a) => ({
+      email: a.email,
+      displayName: a.displayName,
+      responseStatus: a.responseStatus,
+      optional: a.optional,
+    })),
+    organizer: event.organizer,
+    creator: event.creator,
+    recurringEventId: event.recurringEventId,
+  }));
 
-  let textResponse = `Found ${events.length} event(s):\n\n${formattedEvents}`;
+  let textResponse = `Found ${events.length} event(s):\n\n${toToon({ events: eventData })}`;
   if (response.data.nextPageToken) {
     textResponse += `\n\nMore events available. Use pageToken: ${response.data.nextPageToken}`;
   }
@@ -114,26 +119,7 @@ export async function handleListEvents(
   log("Listed events", { calendarId, count: events.length });
 
   return structuredResponse(textResponse, {
-    events: events.map((event) => ({
-      id: event.id,
-      summary: event.summary,
-      description: event.description,
-      location: event.location,
-      start: event.start,
-      end: event.end,
-      status: event.status,
-      htmlLink: event.htmlLink,
-      hangoutLink: event.hangoutLink,
-      attendees: event.attendees?.map((a) => ({
-        email: a.email,
-        displayName: a.displayName,
-        responseStatus: a.responseStatus,
-        optional: a.optional,
-      })),
-      organizer: event.organizer,
-      creator: event.creator,
-      recurringEventId: event.recurringEventId,
-    })),
+    events: eventData,
     nextPageToken: response.data.nextPageToken || null,
   });
 }

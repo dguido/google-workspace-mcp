@@ -639,7 +639,10 @@ describe("handleGetSharing", () => {
     const result = await handleGetSharing(mockDrive, { fileId: "file123" });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("owner@example.com");
-    expect(result.content[0].text).toContain("Anyone with the link");
+    // structuredContent contains the data in a consistent format
+    const structured = result.structuredContent as { permissions: Array<{ type: string }> };
+    expect(structured.permissions).toHaveLength(2);
+    expect(structured.permissions[1].type).toBe("anyone");
   });
 
   it("returns error for empty fileId", async () => {

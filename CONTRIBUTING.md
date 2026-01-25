@@ -39,7 +39,7 @@ google-workspace-mcp/
 │   ├── handlers/          # Tool implementations
 │   ├── schemas/           # Zod validation schemas
 │   ├── tools/             # Tool definitions
-│   └── utils/             # Shared utilities
+│   └── utils/             # Shared utilities (responses, toon encoding, logging)
 ├── dist/                  # Compiled JavaScript (generated)
 ├── docs/                  # Documentation
 ├── scripts/               # Build scripts
@@ -57,6 +57,33 @@ npm run build     # Compile TypeScript
 npm run watch     # Compile and watch for changes
 npm run typecheck # Type checking only
 ```
+
+## Local Testing with Claude Code
+
+To test the MCP server directly in Claude Code during development:
+
+1. Build the project:
+
+   ```bash
+   npm run build
+   ```
+
+2. Create `.mcp.json` in the project root:
+
+   ```json
+   {
+     "mcpServers": {
+       "google-workspace": {
+         "command": "node",
+         "args": ["dist/index.js"]
+       }
+     }
+   }
+   ```
+
+3. Start a new Claude Code session in this directory. The MCP server will auto-load.
+
+Note: `.mcp.json` is gitignored to prevent accidental commits.
 
 ## Scripts
 

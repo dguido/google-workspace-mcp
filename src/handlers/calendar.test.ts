@@ -58,7 +58,10 @@ describe("handleListCalendars", () => {
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("2 calendar(s)");
     expect(result.content[0].text).toContain("Primary Calendar");
-    expect(result.content[0].text).toContain("(Primary)");
+    // structuredContent contains the data in a consistent format
+    const structured = result.structuredContent as { calendars: Array<{ primary: boolean }> };
+    expect(structured.calendars).toHaveLength(2);
+    expect(structured.calendars[0].primary).toBe(true);
   });
 
   it("handles empty calendar list", async () => {

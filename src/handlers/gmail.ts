@@ -9,6 +9,7 @@ import {
   parseEmailHeaders,
   decodeBase64Url,
   truncateResponse,
+  toToon,
 } from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
@@ -315,11 +316,7 @@ export async function handleSearchEmails(
     }),
   );
 
-  const formattedList = messageDetails
-    .map((m) => `- [${m.id}] ${m.subject || "(No subject)"} from ${m.from || "Unknown"}`)
-    .join("\n");
-
-  let textResponse = `Found ${response.data.resultSizeEstimate} email(s):\n\n${formattedList}`;
+  let textResponse = `Found ${response.data.resultSizeEstimate} email(s):\n\n${toToon({ messages: messageDetails })}`;
   if (response.data.nextPageToken) {
     textResponse += `\n\nMore results available. Use pageToken: ${response.data.nextPageToken}`;
   }
@@ -604,7 +601,16 @@ export async function handleListLabels(
     labels = userLabels;
   }
 
-  const formattedLabels = labels.map((l) => `- ${l.name} [${l.id}] (${l.type})`).join("\n");
+  const labelData = labels.map((l) => ({
+    id: l.id,
+    name: l.name,
+    type: l.type,
+    messageListVisibility: l.messageListVisibility,
+    labelListVisibility: l.labelListVisibility,
+    color: l.color,
+    messagesTotal: l.messagesTotal,
+    messagesUnread: l.messagesUnread,
+  }));
 
   log("Listed labels", {
     total: labels.length,
@@ -612,20 +618,14 @@ export async function handleListLabels(
     user: userLabels.length,
   });
 
-  return structuredResponse(`Found ${labels.length} label(s):\n\n${formattedLabels}`, {
-    labels: labels.map((l) => ({
-      id: l.id,
-      name: l.name,
-      type: l.type,
-      messageListVisibility: l.messageListVisibility,
-      labelListVisibility: l.labelListVisibility,
-      color: l.color,
-      messagesTotal: l.messagesTotal,
-      messagesUnread: l.messagesUnread,
-    })),
-    systemLabelCount: systemLabels.length,
-    userLabelCount: userLabels.length,
-  });
+  return structuredResponse(
+    `Found ${labels.length} label(s):\n\n${toToon({ labels: labelData })}`,
+    {
+      labels: labelData,
+      systemLabelCount: systemLabels.length,
+      userLabelCount: userLabels.length,
+    },
+  );
 }
 
 export async function handleGetOrCreateLabel(
@@ -854,30 +854,20 @@ export async function handleListFilters(
     return structuredResponse("No filters found.", { filters: [] });
   }
 
-  const formattedFilters = filters
-    .map((f) => {
-      const criteria = f.criteria || {};
-      const criteriaStr = [
-        criteria.from ? `from:${criteria.from}` : null,
-        criteria.to ? `to:${criteria.to}` : null,
-        criteria.subject ? `subject:${criteria.subject}` : null,
-        criteria.query ? `query:${criteria.query}` : null,
-      ]
-        .filter(Boolean)
-        .join(", ");
-      return `- [${f.id}] ${criteriaStr || "(no criteria)"}`;
-    })
-    .join("\n");
+  const filterData = filters.map((f) => ({
+    id: f.id,
+    criteria: f.criteria,
+    action: f.action,
+  }));
 
   log("Listed filters", { count: filters.length });
 
-  return structuredResponse(`Found ${filters.length} filter(s):\n\n${formattedFilters}`, {
-    filters: filters.map((f) => ({
-      id: f.id,
-      criteria: f.criteria,
-      action: f.action,
-    })),
-  });
+  return structuredResponse(
+    `Found ${filters.length} filter(s):\n\n${toToon({ filters: filterData })}`,
+    {
+      filters: filterData,
+    },
+  );
 }
 
 export async function handleDeleteFilter(
