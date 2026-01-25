@@ -49,6 +49,43 @@ const SYSTEM_LABELS = new Set([
   "CATEGORY_FORUMS",
 ]);
 
+// Gmail thread IDs are 16-character hex strings
+const THREAD_ID_PATTERN = /^[0-9a-f]{16}$/i;
+
+type FailureCategory =
+  | "INVALID_FORMAT"
+  | "NOT_FOUND"
+  | "PERMISSION_DENIED"
+  | "RATE_LIMITED"
+  | "UNKNOWN";
+
+interface BatchFailure {
+  threadId: string;
+  category: FailureCategory;
+  error: string;
+}
+
+const CATEGORY_SUGGESTIONS: Record<FailureCategory, string> = {
+  INVALID_FORMAT: "Use search_emails to get valid thread IDs",
+  NOT_FOUND: "Thread may have been deleted. Use search_emails to refresh",
+  PERMISSION_DENIED: "You don't have access to this thread",
+  RATE_LIMITED: "Too many requests. Wait and retry with smaller batches",
+  UNKNOWN: "Check the thread ID and try again",
+};
+
+function isValidThreadIdFormat(id: string): boolean {
+  return THREAD_ID_PATTERN.test(id);
+}
+
+function categorizeError(errorMessage: string): FailureCategory {
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("invalid id") || msg.includes("invalid value")) return "INVALID_FORMAT";
+  if (msg.includes("not found")) return "NOT_FOUND";
+  if (msg.includes("permission") || msg.includes("forbidden")) return "PERMISSION_DENIED";
+  if (msg.includes("rate") || msg.includes("quota")) return "RATE_LIMITED";
+  return "UNKNOWN";
+}
+
 // Helper to extract email body from message parts
 function extractEmailBody(payload: gmail_v1.Schema$MessagePart | undefined): {
   text: string;
@@ -390,45 +427,115 @@ export async function handleModifyEmail(
 ): Promise<ToolResponse> {
   const validation = validateArgs(ModifyEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { messageId, addLabelIds, removeLabelIds } = validation.data;
+  const { threadId, addLabelIds, removeLabelIds } = validation.data;
 
   // Normalize to array for uniform handling
-  const messageIds = Array.isArray(messageId) ? messageId : [messageId];
+  const ids = Array.isArray(threadId) ? threadId : [threadId];
 
-  if (messageIds.length === 1) {
-    // Single modify
-    const response = await gmail.users.messages.modify({
+  if (ids.length === 1) {
+    const response = await gmail.users.threads.modify({
       userId: "me",
-      id: messageIds[0],
+      id: ids[0],
       requestBody: { addLabelIds, removeLabelIds },
     });
 
-    log("Modified email labels", { messageId: messageIds[0], addLabelIds, removeLabelIds });
+    log("Modified thread labels", { threadId: ids[0], addLabelIds, removeLabelIds });
 
+    const messageCount = response.data.messages?.length || 0;
     return structuredResponse(
-      `Email ${messageIds[0]} labels updated.\nCurrent labels: ${response.data.labelIds?.join(", ") || "None"}`,
+      `Thread ${ids[0]} labels updated (${messageCount} message(s) affected).\n` +
+        `Current labels: ${response.data.messages?.[0]?.labelIds?.join(", ") || "None"}`,
       {
         id: response.data.id,
-        threadId: response.data.threadId,
-        labelIds: response.data.labelIds,
+        historyId: response.data.historyId,
+        messageCount,
+        labelIds: response.data.messages?.[0]?.labelIds,
       },
     );
   }
 
-  // Batch modify
-  await gmail.users.messages.batchModify({
-    userId: "me",
-    requestBody: {
-      ids: messageIds,
-      addLabelIds,
-      removeLabelIds,
-    },
+  // Pre-filter invalid IDs before making any API calls
+  const validIds = ids.filter(isValidThreadIdFormat);
+  const invalidIds = ids.filter((id) => !isValidThreadIdFormat(id));
+
+  // Create failures for invalid IDs without API calls
+  const formatFailures: BatchFailure[] = invalidIds.map((id) => ({
+    threadId: id,
+    category: "INVALID_FORMAT" as const,
+    error: "Invalid thread ID format",
+  }));
+
+  // Only call API for valid IDs
+  const results = await Promise.allSettled(
+    validIds.map((id) =>
+      gmail.users.threads.modify({
+        userId: "me",
+        id,
+        requestBody: { addLabelIds, removeLabelIds },
+      }),
+    ),
+  );
+
+  const apiSucceeded = results.filter((r) => r.status === "fulfilled").length;
+  const apiFailures: BatchFailure[] = results
+    .map((r, i) => ({ id: validIds[i], result: r }))
+    .filter(
+      (item): item is { id: string; result: PromiseRejectedResult } =>
+        item.result.status === "rejected",
+    )
+    .map((item) => {
+      const errorMsg = item.result.reason?.message || String(item.result.reason) || "Unknown error";
+      return {
+        threadId: item.id,
+        category: categorizeError(errorMsg),
+        error: errorMsg,
+      };
+    });
+
+  const allFailures = [...formatFailures, ...apiFailures];
+  const succeeded = apiSucceeded;
+
+  log("Batch modified threads", {
+    count: ids.length,
+    succeeded,
+    failed: allFailures.length,
+    preFiltered: invalidIds.length,
+    addLabelIds,
+    removeLabelIds,
   });
 
-  log("Batch modified emails", { count: messageIds.length, addLabelIds, removeLabelIds });
+  if (allFailures.length > 0) {
+    // Group failures by category
+    const failuresByCategory = allFailures.reduce(
+      (acc, f) => {
+        if (!acc[f.category]) acc[f.category] = [];
+        acc[f.category].push(f.threadId);
+        return acc;
+      },
+      {} as Record<FailureCategory, string[]>,
+    );
+
+    // Build categorized failure text
+    const categoryLines = (Object.entries(failuresByCategory) as [FailureCategory, string[]][])
+      .map(([category, threadIds]) => {
+        const suggestion = CATEGORY_SUGGESTIONS[category];
+        const idList = threadIds.slice(0, 5).join(", ");
+        const moreText = threadIds.length > 5 ? ` (+${threadIds.length - 5} more)` : "";
+        return `- ${category} (${threadIds.length}): ${suggestion}\n  ${idList}${moreText}`;
+      })
+      .join("\n");
+
+    return structuredResponse(
+      `Partially completed: ${succeeded} thread(s) modified, ${allFailures.length} failed.` +
+        (addLabelIds ? `\nAdded labels: ${addLabelIds.join(", ")}` : "") +
+        (removeLabelIds ? `\nRemoved labels: ${removeLabelIds.join(", ")}` : "") +
+        `\n\nFailures:\n${categoryLines}`,
+      { succeeded, failed: allFailures.length, total: ids.length, failuresByCategory },
+    );
+  }
 
   return successResponse(
-    `Successfully modified labels for ${messageIds.length} email(s).` +
+    `Successfully modified labels for ${ids.length} thread(s).` +
       (addLabelIds ? `\nAdded labels: ${addLabelIds.join(", ")}` : "") +
       (removeLabelIds ? `\nRemoved labels: ${removeLabelIds.join(", ")}` : ""),
   );

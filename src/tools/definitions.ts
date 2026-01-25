@@ -3033,13 +3033,13 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "modify_email",
-    description: "Add/remove labels (max 1000 IDs per request)",
+    description: "Add/remove labels on threads (max 1000 IDs per request)",
     inputSchema: {
       type: "object",
       properties: {
-        messageId: {
+        threadId: {
           oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 1000 }],
-          description: "Message ID or array of IDs (max 1000)",
+          description: "Thread ID or array of IDs (max 1000)",
         },
         addLabelIds: {
           type: "array",
@@ -3052,14 +3052,14 @@ export const gmailTools: ToolDefinition[] = [
           description: "(optional) Label IDs to remove",
         },
       },
-      required: ["messageId"],
+      required: ["threadId"],
     },
     outputSchema: {
       type: "object",
       properties: {
-        modified: { type: "number", description: "Number of messages modified" },
-        addedLabels: { type: "array", items: { type: "string" }, description: "Labels added" },
-        removedLabels: { type: "array", items: { type: "string" }, description: "Labels removed" },
+        id: { type: "string", description: "Thread ID" },
+        messageCount: { type: "number", description: "Number of messages in thread" },
+        labelIds: { type: "array", items: { type: "string" }, description: "Current labels" },
       },
     },
   },

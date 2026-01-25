@@ -181,9 +181,9 @@ export type DeleteEmailInput = z.infer<typeof DeleteEmailSchema>;
  * Schema for modifying email labels - supports single ID or array for batch operations
  */
 export const ModifyEmailSchema = z.object({
-  messageId: z
+  threadId: z
     .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(1000)])
-    .describe("Message ID or array of IDs (max 1000 for batch)"),
+    .describe("Thread ID or array of IDs (max 1000 for batch)"),
   addLabelIds: z.array(z.string()).optional().describe("Label IDs to add"),
   removeLabelIds: z.array(z.string()).optional().describe("Label IDs to remove"),
 });
