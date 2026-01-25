@@ -11,8 +11,6 @@ vi.mock("./auth/utils.js", async () => {
   return {
     ...actual,
     getSecureTokenPath: vi.fn(() => "/mock/path/.config/google-workspace-mcp/tokens.json"),
-    getLegacyTokenPath: vi.fn(() => "/mock/path/.gcp-saved-tokens.json"),
-    getAdditionalLegacyPaths: vi.fn(() => []),
     getKeysFilePath: vi.fn(() => "/mock/path/gcp-oauth.keys.json"),
     generateCredentialsErrorMessage: vi.fn(() => "Mock error message"),
   };

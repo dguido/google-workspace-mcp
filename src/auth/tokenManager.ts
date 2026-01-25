@@ -1,7 +1,7 @@
 import { OAuth2Client, Credentials } from "google-auth-library";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { getSecureTokenPath, getLegacyTokenPath, getAdditionalLegacyPaths } from "./utils.js";
+import { getSecureTokenPath } from "./utils.js";
 import { GaxiosError } from "gaxios";
 import { log } from "../utils/logging.js";
 
@@ -68,75 +68,19 @@ export class TokenManager {
     });
   }
 
-  private async migrateLegacyTokens(): Promise<boolean> {
-    // Check all possible legacy locations
-    const legacyPaths = [getLegacyTokenPath(), ...getAdditionalLegacyPaths()];
-
-    for (const legacyPath of legacyPaths) {
-      try {
-        // Check if legacy tokens exist
-        if (
-          !(await fs
-            .access(legacyPath)
-            .then(() => true)
-            .catch(() => false))
-        ) {
-          continue; // Try next location
-        }
-
-        // Read legacy tokens
-        const legacyTokens = JSON.parse(await fs.readFile(legacyPath, "utf-8"));
-
-        if (!legacyTokens || typeof legacyTokens !== "object") {
-          log(`Invalid legacy token format at ${legacyPath}, skipping`);
-          continue;
-        }
-
-        // Ensure new token directory exists
-        await this.ensureTokenDirectoryExists();
-
-        // Copy to new location
-        await fs.writeFile(this.tokenPath, JSON.stringify(legacyTokens, null, 2), {
-          mode: 0o600,
-        });
-
-        log(`Migrated tokens from legacy location: ${legacyPath} to: ${this.tokenPath}`);
-
-        // Optionally remove legacy file after successful migration
-        try {
-          await fs.unlink(legacyPath);
-          log("Removed legacy token file");
-        } catch (unlinkErr) {
-          log("Warning: Could not remove legacy token file:", unlinkErr);
-        }
-
-        return true;
-      } catch (error) {
-        log(`Error migrating legacy tokens from ${legacyPath}`, error);
-        // Continue to next location
-      }
-    }
-
-    return false; // No legacy tokens found or migrated
-  }
-
   async loadSavedTokens(): Promise<boolean> {
     try {
       await this.ensureTokenDirectoryExists();
 
-      // Check if current token file exists
+      // Check if token file exists
       const tokenExists = await fs
         .access(this.tokenPath)
         .then(() => true)
         .catch(() => false);
 
-      // If no current tokens, try to migrate from legacy location
       if (!tokenExists) {
-        const migrated = await this.migrateLegacyTokens();
-        if (!migrated) {
-          log("No token file found at:", this.tokenPath);
-          return false;
-        }
+        log("No token file found at:", this.tokenPath);
+        return false;
       }
 
       const tokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8"));

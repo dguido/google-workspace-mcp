@@ -12,8 +12,6 @@ vi.mock("./utils.js", async () => {
   return {
     ...actual,
     getSecureTokenPath: vi.fn(() => "/mock/path/.config/google-workspace-mcp/tokens.json"),
-    getLegacyTokenPath: vi.fn(() => "/mock/path/.gcp-saved-tokens.json"),
-    getAdditionalLegacyPaths: vi.fn(() => ["/mock/path/google-tokens.json"]),
   };
 });
 
@@ -109,44 +107,6 @@ describe("auth/tokenManager", () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockResolvedValue("invalid json {{{");
       vi.mocked(fs.unlink).mockResolvedValue(undefined);
-
-      const result = await tokenManager.loadSavedTokens();
-
-      expect(result).toBe(false);
-    });
-  });
-
-  describe("legacy token migration", () => {
-    it("migrates tokens from legacy path when current file does not exist", async () => {
-      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
-      fileError.code = "ENOENT";
-
-      // First call (checking current path) fails
-      // Second call (checking legacy path) succeeds
-      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.access)
-        .mockRejectedValueOnce(fileError) // Current path doesn't exist
-        .mockResolvedValueOnce(undefined); // Legacy path exists
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(validTokens));
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-      vi.mocked(fs.unlink).mockResolvedValue(undefined);
-
-      const result = await tokenManager.loadSavedTokens();
-
-      expect(result).toBe(true);
-      expect(fs.writeFile).toHaveBeenCalled();
-    });
-
-    it("skips invalid legacy token format", async () => {
-      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
-      fileError.code = "ENOENT";
-
-      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(fs.access)
-        .mockRejectedValueOnce(fileError) // Current path doesn't exist
-        .mockResolvedValueOnce(undefined) // Legacy path 1 exists
-        .mockRejectedValue(fileError); // No more paths
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(null)); // Invalid format
 
       const result = await tokenManager.loadSavedTokens();
 

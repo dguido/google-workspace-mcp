@@ -1,15 +1,5 @@
 import * as path from "path";
 import * as os from "os";
-import { fileURLToPath } from "url";
-
-// Helper to get the project root directory reliably
-function getProjectRoot(): string {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  // In build output (e.g., dist/auth/utils.js), __dirname is .../dist/auth
-  // Go up TWO levels to get the project root
-  const projectRoot = path.join(__dirname, "..", "..");
-  return path.resolve(projectRoot);
-}
 
 // Returns the absolute path for the saved token file.
 // Uses XDG Base Directory spec with fallback to home directory
@@ -33,24 +23,9 @@ export function getSecureTokenPath(): string {
   return path.join(tokenDir, "tokens.json");
 }
 
-// Returns the legacy token path for backward compatibility
-export function getLegacyTokenPath(): string {
-  const projectRoot = getProjectRoot();
-  return path.join(projectRoot, ".gcp-saved-tokens.json");
-}
-
-// Additional legacy paths to check
-export function getAdditionalLegacyPaths(): string[] {
-  return [
-    process.env.GOOGLE_TOKEN_PATH,
-    path.join(process.cwd(), "google-tokens.json"),
-    path.join(process.cwd(), ".gcp-saved-tokens.json"),
-  ].filter(Boolean) as string[];
-}
-
 // Returns the absolute path for the GCP OAuth keys file with priority:
 // 1. Environment variable GOOGLE_DRIVE_OAUTH_CREDENTIALS (highest priority)
-// 2. Default file path (lowest priority)
+// 2. Current working directory (works for both local dev and npx)
 export function getKeysFilePath(): string {
   // Priority 1: Environment variable
   const envCredentialsPath = process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
@@ -58,10 +33,10 @@ export function getKeysFilePath(): string {
     return path.resolve(envCredentialsPath);
   }
 
-  // Priority 2: Default file path
-  const projectRoot = getProjectRoot();
-  const keysPath = path.join(projectRoot, "gcp-oauth.keys.json");
-  return keysPath;
+  // Priority 2: Current working directory
+  // For local dev: user runs from project root, so cwd has the keys
+  // For npx: user runs from a directory where they've placed their keys
+  return path.join(process.cwd(), "gcp-oauth.keys.json");
 }
 
 // Interface for OAuth credentials

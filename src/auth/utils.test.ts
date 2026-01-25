@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as path from "path";
 import * as os from "os";
-import {
-  getSecureTokenPath,
-  getLegacyTokenPath,
-  getAdditionalLegacyPaths,
-  getKeysFilePath,
-  generateCredentialsErrorMessage,
-} from "./utils.js";
+import { getSecureTokenPath, getKeysFilePath, generateCredentialsErrorMessage } from "./utils.js";
 
 describe("auth/utils", () => {
   const originalEnv = { ...process.env };
@@ -63,52 +57,6 @@ describe("auth/utils", () => {
       const result = getSecureTokenPath();
 
       expect(path.isAbsolute(result)).toBe(true);
-    });
-  });
-
-  describe("getLegacyTokenPath", () => {
-    it("returns path in project root with legacy filename", () => {
-      const result = getLegacyTokenPath();
-
-      expect(result).toContain(".gcp-saved-tokens.json");
-      expect(path.isAbsolute(result)).toBe(true);
-    });
-  });
-
-  describe("getAdditionalLegacyPaths", () => {
-    it("includes GOOGLE_TOKEN_PATH when set", () => {
-      const tokenPath = "/custom/google-tokens.json";
-      process.env.GOOGLE_TOKEN_PATH = tokenPath;
-
-      const result = getAdditionalLegacyPaths();
-
-      expect(result).toContain(tokenPath);
-    });
-
-    it("includes cwd-based paths", () => {
-      delete process.env.GOOGLE_TOKEN_PATH;
-
-      const result = getAdditionalLegacyPaths();
-
-      expect(result).toContain(path.join(process.cwd(), "google-tokens.json"));
-      expect(result).toContain(path.join(process.cwd(), ".gcp-saved-tokens.json"));
-    });
-
-    it("filters out undefined values", () => {
-      delete process.env.GOOGLE_TOKEN_PATH;
-
-      const result = getAdditionalLegacyPaths();
-
-      expect(result.every((p) => p !== undefined && p !== null)).toBe(true);
-    });
-
-    it("returns array without GOOGLE_TOKEN_PATH when not set", () => {
-      delete process.env.GOOGLE_TOKEN_PATH;
-
-      const result = getAdditionalLegacyPaths();
-
-      // Should have at least the two cwd-based paths
-      expect(result.length).toBeGreaterThanOrEqual(2);
     });
   });
 
