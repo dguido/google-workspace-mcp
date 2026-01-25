@@ -1,6 +1,6 @@
 # Google Workspace MCP
 
-MCP server providing Claude access to Google Drive, Docs, Sheets, and Slides. Calendar and Gmail support planned.
+MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calendar, and Gmail.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ MCP server providing Claude access to Google Drive, Docs, Sheets, and Slides. Ca
 src/
 ├── index.ts           # Entry point, MCP server setup, tool routing
 ├── auth/              # OAuth2 authentication
-├── handlers/          # Tool implementations (drive, docs, sheets, slides, unified)
+├── handlers/          # Tool implementations (drive, docs, sheets, slides, calendar, gmail, unified)
 ├── schemas/           # Zod validation schemas
 ├── tools/             # Tool definitions for MCP
 ├── utils/             # Shared utilities
@@ -104,19 +104,21 @@ function createMockDrive(): drive_v3.Drive {
 | Path vs ID parameters    | All file/folder params accept either. Use `.refine()` to enforce mutual exclusion                                   |
 | Folder auto-creation     | `resolvePath()` creates intermediate folders automatically                                                          |
 | Response type selection  | Use `successResponse(text)` for simple messages, `structuredResponse(text, data)` when machine-readable data needed |
+| TOON format in responses | Use `toToon()` to encode data in text responses; `structuredContent` is auto-suppressed when TOON is enabled        |
 | Batch operation progress | Use `processBatchOperation()` - handles progress reporting and partial failures                                     |
 | Google API errors        | Wrap in try/catch, use `errorResponse()` with context about what operation failed                                   |
 
 ### Key utilities
 
-| Utility                                        | Purpose                                    |
-| ---------------------------------------------- | ------------------------------------------ |
-| `validateArgs(schema, args)`                   | Validate input, return discriminated union |
-| `resolveOptionalFolderPath(drive, id?, path?)` | Resolve folder ID from ID or path          |
-| `resolvePath(drive, path)`                     | Resolve path to ID, auto-creates folders   |
-| `processBatchOperation(ids, op, ctx, opts)`    | Handle batch operations with progress      |
-| `withTimeout(promise, ms)`                     | Timeout wrapper                            |
-| `withRetry(op, options)`                       | Retry with exponential backoff             |
+| Utility                                        | Purpose                                      |
+| ---------------------------------------------- | -------------------------------------------- |
+| `validateArgs(schema, args)`                   | Validate input, return discriminated union   |
+| `resolveOptionalFolderPath(drive, id?, path?)` | Resolve folder ID from ID or path            |
+| `resolvePath(drive, path)`                     | Resolve path to ID, auto-creates folders     |
+| `processBatchOperation(ids, op, ctx, opts)`    | Handle batch operations with progress        |
+| `toToon(data)`                                 | Encode data as TOON format (token-efficient) |
+| `withTimeout(promise, ms)`                     | Timeout wrapper                              |
+| `withRetry(op, options)`                       | Retry with exponential backoff               |
 
 ### Naming conventions
 

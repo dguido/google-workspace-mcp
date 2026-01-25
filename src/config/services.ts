@@ -88,3 +88,12 @@ export function areUnifiedToolsEnabled(): boolean {
 export function resetServiceConfig(): void {
   enabledServices = null;
 }
+
+/**
+ * Check if TOON format is enabled for token-efficient responses.
+ * Set GOOGLE_WORKSPACE_TOON_FORMAT=true to enable.
+ * Default: false (uses JSON for backward compatibility)
+ */
+export function isToonEnabled(): boolean {
+  return process.env.GOOGLE_WORKSPACE_TOON_FORMAT === "true";
+}

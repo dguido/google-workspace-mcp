@@ -95,6 +95,28 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 
 Tokens are stored at `~/.config/google-workspace-mcp/tokens.json` by default.
 
+### Token-Efficient Output (TOON)
+
+For LLM-optimized responses that reduce token usage by 20-50%, enable TOON format:
+
+```json
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "npx",
+      "args": ["@dguido/google-workspace-mcp"],
+      "env": {
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/gcp-oauth.keys.json",
+        "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar",
+        "GOOGLE_WORKSPACE_TOON_FORMAT": "true"
+      }
+    }
+  }
+}
+```
+
+TOON (Token-Oriented Object Notation) encodes structured responses more compactly than JSON by eliminating repeated field names. Savings are highest for list operations (calendars, events, emails, filters).
+
 ### Service Configuration
 
 By default, we recommend enabling only the core services (`drive,gmail,calendar`) as shown in Quick Start. This provides file management, email, and calendar capabilities without the complexity of document editing tools.

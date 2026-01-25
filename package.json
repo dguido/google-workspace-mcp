@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.25.2",
+    "@toon-format/toon": "^2.1.0",
     "google-auth-library": "10.5.0",
     "googleapis": "170.1.0",
     "open": "11.0.0",

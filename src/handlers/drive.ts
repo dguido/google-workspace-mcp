@@ -10,6 +10,7 @@ import {
   elicitConfirmation,
   formatDisambiguationOptions,
   validateArgs,
+  toToon,
 } from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
@@ -18,7 +19,7 @@ import {
   buildFullTextQuery,
   buildNameQuery,
 } from "../utils/gdrive-query.js";
-import { formatBytes, formatBytesCompact } from "../utils/format.js";
+import { formatBytes } from "../utils/format.js";
 import {
   GetFolderTreeSchema,
   SearchSchema,
@@ -90,19 +91,29 @@ export async function handleSearch(drive: drive_v3.Drive, args: unknown): Promis
     supportsAllDrives: true,
   });
 
-  const fileList =
-    res.data.files?.map((f: drive_v3.Schema$File) => `${f.name} (${f.mimeType})`).join("\n") || "";
+  const files =
+    res.data.files?.map((f: drive_v3.Schema$File) => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      modifiedTime: f.modifiedTime,
+      size: f.size,
+    })) || [];
+
   log("Search results", {
     query: userQuery,
-    resultCount: res.data.files?.length,
+    resultCount: files.length,
   });
 
-  let response = `Found ${res.data.files?.length ?? 0} files:\n${fileList}`;
+  let textResponse = `Found ${files.length} files:\n\n${toToon({ files })}`;
   if (res.data.nextPageToken) {
-    response += `\n\nMore results available. Use pageToken: ${res.data.nextPageToken}`;
+    textResponse += `\n\nMore results available. Use pageToken: ${res.data.nextPageToken}`;
   }
 
-  return successResponse(response);
+  return structuredResponse(textResponse, {
+    files,
+    nextPageToken: res.data.nextPageToken || null,
+  });
 }
 
 export async function handleCreateTextFile(
@@ -719,33 +730,21 @@ export async function handleGetSharing(
 
   const permissionList = permissions.data.permissions || [];
 
-  const formattedPermissions = permissionList
-    .map((p) => {
-      let target = "";
-      if (p.type === "anyone") {
-        target = "Anyone with the link";
-      } else if (p.type === "domain") {
-        target = `Anyone in ${p.domain}`;
-      } else {
-        target = p.emailAddress || p.displayName || "Unknown";
-      }
-      return `• ${target}: ${p.role} (ID: ${p.id})`;
-    })
-    .join("\n");
+  const permissionData = permissionList.map((p) => ({
+    id: p.id,
+    role: p.role,
+    type: p.type,
+    emailAddress: p.emailAddress,
+    domain: p.domain,
+    displayName: p.displayName,
+  }));
 
-  const textResponse = `Sharing settings for "${file.data.name}":\n\n${formattedPermissions}\n\nLink: ${file.data.webViewLink}`;
+  const textResponse = `Sharing settings for "${file.data.name}":\n\n${toToon({ permissions: permissionData })}\n\nLink: ${file.data.webViewLink}`;
 
   return structuredResponse(textResponse, {
     fileName: file.data.name,
     webViewLink: file.data.webViewLink,
-    permissions: permissionList.map((p) => ({
-      id: p.id,
-      role: p.role,
-      type: p.type,
-      emailAddress: p.emailAddress,
-      domain: p.domain,
-      displayName: p.displayName,
-    })),
+    permissions: permissionData,
   });
 }
 
@@ -796,32 +795,24 @@ export async function handleListRevisions(
     return successResponse(`No revisions found for "${file.data.name}".`);
   }
 
-  const formattedRevisions = revisionList
-    .map((r, idx) => {
-      const author =
-        r.lastModifyingUser?.displayName || r.lastModifyingUser?.emailAddress || "Unknown";
-      const sizeStr = formatBytes(r.size);
-      const keepForever = r.keepForever ? " (pinned)" : "";
-      return `${idx + 1}. ID: ${r.id} | ${r.modifiedTime} | ${author} | ${sizeStr}${keepForever}`;
-    })
-    .join("\n");
+  const revisionData = revisionList.map((r) => ({
+    id: r.id,
+    modifiedTime: r.modifiedTime,
+    size: r.size,
+    keepForever: r.keepForever,
+    lastModifyingUser: r.lastModifyingUser
+      ? {
+          displayName: r.lastModifyingUser.displayName,
+          emailAddress: r.lastModifyingUser.emailAddress,
+        }
+      : undefined,
+  }));
 
-  const textResponse = `Revisions for "${file.data.name}" (${revisionList.length} found):\n\n${formattedRevisions}`;
+  const textResponse = `Revisions for "${file.data.name}" (${revisionList.length} found):\n\n${toToon({ revisions: revisionData })}`;
 
   return structuredResponse(textResponse, {
     fileName: file.data.name,
-    revisions: revisionList.map((r) => ({
-      id: r.id,
-      modifiedTime: r.modifiedTime,
-      size: r.size,
-      keepForever: r.keepForever,
-      lastModifyingUser: r.lastModifyingUser
-        ? {
-            displayName: r.lastModifyingUser.displayName,
-            emailAddress: r.lastModifyingUser.emailAddress,
-          }
-        : undefined,
-    })),
+    revisions: revisionData,
   });
 }
 
@@ -1688,28 +1679,22 @@ export async function handleListTrash(drive: drive_v3.Drive, args: unknown): Pro
     });
   }
 
-  const fileList = files
-    .map((f) => {
-      const icon = f.mimeType === FOLDER_MIME_TYPE ? "📁" : "📄";
-      const size = f.mimeType === FOLDER_MIME_TYPE ? "" : ` (${formatBytesCompact(f.size)})`;
-      return `${icon} ${f.name}${size} - ID: ${f.id}`;
-    })
-    .join("\n");
+  const fileData = files.map((f) => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    size: f.size,
+    trashedTime: f.trashedTime,
+  }));
 
   const textResponse =
-    `Trash contents (${files.length} items):\n\n${fileList}` +
+    `Trash contents (${files.length} items):\n\n${toToon({ files: fileData })}` +
     (response.data.nextPageToken
       ? "\n\n(More items available - use nextPageToken to continue)"
       : "");
 
   return structuredResponse(textResponse, {
-    files: files.map((f) => ({
-      id: f.id,
-      name: f.name,
-      mimeType: f.mimeType,
-      size: f.size,
-      trashedTime: f.trashedTime,
-    })),
+    files: fileData,
     nextPageToken: response.data.nextPageToken || null,
   });
 }

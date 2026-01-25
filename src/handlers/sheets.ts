@@ -5,6 +5,7 @@ import {
   errorResponse,
   withTimeout,
   validateArgs,
+  toToon,
 } from "../utils/index.js";
 import { GOOGLE_MIME_TYPES, getMimeTypeSuggestion } from "../utils/mimeTypes.js";
 import type { ToolResponse } from "../utils/index.js";
@@ -591,11 +592,7 @@ async function listSheetTabs(
       columnCount: sheet.properties?.gridProperties?.columnCount,
     })) || [];
 
-  const tabList = tabs
-    .map((t) => `${t.index}: ${t.title} (${t.rowCount}x${t.columnCount})`)
-    .join("\n");
-
-  return structuredResponse(`Spreadsheet has ${tabs.length} tab(s):\n${tabList}`, {
+  return structuredResponse(`Spreadsheet has ${tabs.length} tab(s):\n\n${toToon({ tabs })}`, {
     spreadsheetId,
     tabs,
   });

@@ -5,6 +5,7 @@ import {
   isServiceEnabled,
   areUnifiedToolsEnabled,
   resetServiceConfig,
+  isToonEnabled,
 } from "./services.js";
 
 describe("Service Configuration", () => {
@@ -206,5 +207,52 @@ describe("Service Configuration", () => {
       const fresh = getEnabledServices();
       expect(fresh.size).toBe(3);
     });
+  });
+});
+
+describe("isToonEnabled", () => {
+  const originalEnv = process.env.GOOGLE_WORKSPACE_TOON_FORMAT;
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.GOOGLE_WORKSPACE_TOON_FORMAT;
+    } else {
+      process.env.GOOGLE_WORKSPACE_TOON_FORMAT = originalEnv;
+    }
+  });
+
+  it("returns false by default when env var is not set", () => {
+    delete process.env.GOOGLE_WORKSPACE_TOON_FORMAT;
+    expect(isToonEnabled()).toBe(false);
+  });
+
+  it("returns true when env var is 'true'", () => {
+    process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "true";
+    expect(isToonEnabled()).toBe(true);
+  });
+
+  it("returns false when env var is 'false'", () => {
+    process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "false";
+    expect(isToonEnabled()).toBe(false);
+  });
+
+  it("returns false when env var is empty string", () => {
+    process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "";
+    expect(isToonEnabled()).toBe(false);
+  });
+
+  it("returns false when env var is 'TRUE' (case sensitive)", () => {
+    process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "TRUE";
+    expect(isToonEnabled()).toBe(false);
+  });
+
+  it("returns false when env var is '1'", () => {
+    process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "1";
+    expect(isToonEnabled()).toBe(false);
+  });
+
+  it("returns false when env var is 'yes'", () => {
+    process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "yes";
+    expect(isToonEnabled()).toBe(false);
   });
 });
