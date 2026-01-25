@@ -124,3 +124,16 @@ Note: `.mcp.json` is gitignored to prevent accidental commits.
 - Write tests for new functionality
 - Keep functions under 100 lines
 - Use meaningful variable names
+
+## Releasing
+
+Releases are published automatically via GitHub Actions. Do not run `npm publish` manually.
+
+To release a new version:
+
+1. Bump version: `npm version patch|minor|major --no-git-tag-version`
+2. Commit: `git commit -am "Bump version to X.Y.Z"`
+3. Push: `git push origin main`
+4. Create release: `gh release create vX.Y.Z --generate-notes`
+
+The GitHub Action triggers on new releases and publishes to npm automatically.
