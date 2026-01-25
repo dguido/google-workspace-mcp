@@ -36,6 +36,12 @@ Thumbs.db
 *.swp
 *.swo
 
+# Serena MCP memories (auto-generated)
+.serena/memories/
+
+# Local MCP config (for development testing)
+.mcp.json
+
 # Test coverage
 coverage/
 .nyc_output/
