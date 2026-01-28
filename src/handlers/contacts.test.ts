@@ -158,6 +158,47 @@ describe("handleGetContact", () => {
     expect(result.content[0].text).toContain("Email Addresses:\n  None");
     expect(result.content[0].text).toContain("Phone Numbers:\n  None");
   });
+
+  it("normalizes bare ID to full resource name", async () => {
+    vi.mocked(mockPeople.people.get).mockResolvedValue({
+      data: {
+        resourceName: "people/c1234567890",
+        names: [{ displayName: "John Doe" }],
+      },
+    } as never);
+
+    await handleGetContact(mockPeople, { resourceName: "c1234567890" });
+    expect(mockPeople.people.get).toHaveBeenCalledWith({
+      resourceName: "people/c1234567890",
+      personFields: expect.any(String),
+    });
+  });
+
+  it("displays addresses in output", async () => {
+    vi.mocked(mockPeople.people.get).mockResolvedValue({
+      data: {
+        resourceName: "people/c1234",
+        names: [{ displayName: "John Doe" }],
+        addresses: [
+          {
+            streetAddress: "123 Main St",
+            city: "San Francisco",
+            region: "CA",
+            postalCode: "94105",
+            country: "USA",
+            type: "work",
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleGetContact(mockPeople, { resourceName: "people/c1234" });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("Addresses:");
+    expect(result.content[0].text).toContain("123 Main St");
+    expect(result.content[0].text).toContain("San Francisco");
+    expect(result.content[0].text).toContain("(work)");
+  });
 });
 
 describe("handleSearchContacts", () => {
@@ -382,6 +423,34 @@ describe("handleUpdateContact", () => {
     const result = await handleUpdateContact(mockPeople, { resourceName: "" });
     expect(result.isError).toBe(true);
   });
+
+  it("normalizes bare ID to full resource name", async () => {
+    vi.mocked(mockPeople.people.get).mockResolvedValue({
+      data: {
+        resourceName: "people/c1234",
+        etag: "etag123",
+        names: [{ givenName: "John" }],
+      },
+    } as never);
+    vi.mocked(mockPeople.people.updateContact).mockResolvedValue({
+      data: { resourceName: "people/c1234" },
+    } as never);
+
+    await handleUpdateContact(mockPeople, {
+      resourceName: "c1234",
+      givenName: "Johnny",
+    });
+
+    expect(mockPeople.people.get).toHaveBeenCalledWith({
+      resourceName: "people/c1234",
+      personFields: expect.any(String),
+    });
+    expect(mockPeople.people.updateContact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceName: "people/c1234",
+      }),
+    );
+  });
 });
 
 describe("handleDeleteContact", () => {
@@ -422,5 +491,18 @@ describe("handleDeleteContact", () => {
   it("returns error for missing resourceName", async () => {
     const result = await handleDeleteContact(mockPeople, { resourceName: "" });
     expect(result.isError).toBe(true);
+  });
+
+  it("normalizes bare ID to full resource name", async () => {
+    vi.mocked(mockPeople.people.get).mockResolvedValue({
+      data: { names: [{ displayName: "John Doe" }] },
+    } as never);
+    vi.mocked(mockPeople.people.deleteContact).mockResolvedValue({} as never);
+
+    await handleDeleteContact(mockPeople, { resourceName: "c1234" });
+
+    expect(mockPeople.people.deleteContact).toHaveBeenCalledWith({
+      resourceName: "people/c1234",
+    });
   });
 });
