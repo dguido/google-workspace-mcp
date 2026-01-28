@@ -50,3 +50,5 @@ coverage/
 *.tmp
 *.temp
 .cache/
+# Serena local config
+.serena/

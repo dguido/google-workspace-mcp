@@ -46,6 +46,41 @@ rg "name: '" src/tools/definitions.ts
 rg "handleCreateTextFile" src
 ```
 
+### Serena (LSP symbol tools)
+
+Use Serena's semantic tools when text search isn't enough:
+
+| When you need to...                      | Use                        |
+| ---------------------------------------- | -------------------------- |
+| Understand a file's structure            | `get_symbols_overview`     |
+| Find where something is defined          | `find_symbol`              |
+| Find all usages of a function/class/type | `find_referencing_symbols` |
+| Rename across the entire codebase        | `rename_symbol`            |
+
+**Prefer Serena over grep/ast-grep when:** You need to follow type relationships, find implementations of interfaces, or refactor symbols safely across files.
+
+### Context7 (library documentation)
+
+Fetches up-to-date docs and examples for any library. Use when working with:
+
+- Google APIs (`googleapis`)
+- Zod schemas
+- Vitest testing patterns
+- Any npm package where you need current API details
+
+**Tools:** `resolve-library-id` → `get-library-docs`
+
+### Exa (web & code search)
+
+| Tool                   | Use for                                             |
+| ---------------------- | --------------------------------------------------- |
+| `web_search_exa`       | Current info, blog posts, Stack Overflow, tutorials |
+| `get_code_context_exa` | Real code examples from GitHub repos                |
+
+**Prefer Exa over WebSearch when:** You need code snippets, implementation examples, or results from developer-focused sources.
+
+**Prefer Context7 over Exa when:** You need official library documentation or API reference.
+
 ## Code Standards
 
 **Philosophy:** No speculative features. No premature abstraction. Clarity over cleverness. Justify new dependencies.
