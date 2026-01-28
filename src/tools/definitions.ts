@@ -3356,7 +3356,7 @@ export const contactsTools: ToolDefinition[] = [
       properties: {
         resourceName: {
           type: "string",
-          description: "Contact resource name (e.g., people/c1234567890)",
+          description: "Contact resource name or ID (e.g., people/c1234567890 or c1234567890)",
         },
       },
       required: ["resourceName"],
@@ -3404,6 +3404,33 @@ export const contactsTools: ToolDefinition[] = [
               names: { type: "array", description: "Contact names" },
               emailAddresses: { type: "array", description: "Email addresses" },
               phoneNumbers: { type: "array", description: "Phone numbers" },
+              organizations: {
+                type: "array",
+                description: "Organizations",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    title: { type: "string" },
+                    department: { type: "string" },
+                  },
+                },
+              },
+              addresses: {
+                type: "array",
+                description: "Physical addresses",
+                items: {
+                  type: "object",
+                  properties: {
+                    streetAddress: { type: "string" },
+                    city: { type: "string" },
+                    region: { type: "string" },
+                    postalCode: { type: "string" },
+                    country: { type: "string" },
+                    type: { type: "string" },
+                  },
+                },
+              },
             },
           },
         },
@@ -3508,7 +3535,7 @@ export const contactsTools: ToolDefinition[] = [
       properties: {
         resourceName: {
           type: "string",
-          description: "Contact resource name (e.g., people/c1234567890)",
+          description: "Contact resource name or ID (e.g., people/c1234567890 or c1234567890)",
         },
         givenName: {
           type: "string",
@@ -3602,7 +3629,7 @@ export const contactsTools: ToolDefinition[] = [
       properties: {
         resourceName: {
           type: "string",
-          description: "Contact resource name (e.g., people/c1234567890)",
+          description: "Contact resource name or ID (e.g., people/c1234567890 or c1234567890)",
         },
       },
       required: ["resourceName"],

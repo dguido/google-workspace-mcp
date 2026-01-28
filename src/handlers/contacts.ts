@@ -147,12 +147,24 @@ export async function handleGetContact(
         .join("\n")
     : "  None";
 
+  const addressList = person.addresses
+    ? person.addresses
+        .map((a) => {
+          const parts = [a.streetAddress, a.city, a.region, a.postalCode, a.country]
+            .filter(Boolean)
+            .join(", ");
+          return `  - ${parts}${a.type ? ` (${a.type})` : ""}`;
+        })
+        .join("\n")
+    : "  None";
+
   const textResponse = [
     `Contact: ${displayName}`,
     `Resource: ${person.resourceName}`,
     `\nEmail Addresses:\n${emailList}`,
     `\nPhone Numbers:\n${phoneList}`,
     `\nOrganizations:\n${orgList}`,
+    `\nAddresses:\n${addressList}`,
   ].join("\n");
 
   log("Retrieved contact", { resourceName });

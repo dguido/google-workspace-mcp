@@ -49,6 +49,10 @@ export type OrganizationInput = z.infer<typeof OrganizationSchema>;
 
 // Tool-specific schemas
 
+// Helper to normalize resource names - accepts both "people/c123" and bare "c123"
+const normalizeResourceName = (value: string) =>
+  value.startsWith("people/") ? value : `people/${value}`;
+
 export const ListContactsSchema = z.object({
   pageSize: z
     .number()
@@ -76,7 +80,8 @@ export const GetContactSchema = z.object({
   resourceName: z
     .string()
     .min(1, "Resource name is required")
-    .describe("Contact resource name (e.g., people/c1234567890)"),
+    .transform(normalizeResourceName)
+    .describe("Contact resource name or ID (e.g., people/c1234567890 or c1234567890)"),
 });
 
 export type GetContactInput = z.infer<typeof GetContactSchema>;
@@ -113,7 +118,8 @@ export const UpdateContactSchema = z.object({
   resourceName: z
     .string()
     .min(1, "Resource name is required")
-    .describe("Contact resource name (e.g., people/c1234567890)"),
+    .transform(normalizeResourceName)
+    .describe("Contact resource name or ID (e.g., people/c1234567890 or c1234567890)"),
   givenName: z.string().optional().describe("Given name (first name)"),
   familyName: z.string().optional().describe("Family name (last name)"),
   emailAddresses: z
@@ -134,7 +140,8 @@ export const DeleteContactSchema = z.object({
   resourceName: z
     .string()
     .min(1, "Resource name is required")
-    .describe("Contact resource name (e.g., people/c1234567890)"),
+    .transform(normalizeResourceName)
+    .describe("Contact resource name or ID (e.g., people/c1234567890 or c1234567890)"),
 });
 
 export type DeleteContactInput = z.infer<typeof DeleteContactSchema>;
