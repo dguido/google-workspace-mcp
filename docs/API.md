@@ -1,6 +1,6 @@
 # API Reference
 
-Complete reference for all Google Workspace MCP tools (79 total across 7 services).
+Complete reference for all Google Workspace MCP tools (85 total across 8 services).
 
 ## Discovery
 
@@ -8,11 +8,11 @@ Complete reference for all Google Workspace MCP tools (79 total across 7 service
 
 List available tools, optionally filtered by service or keyword.
 
-| Parameter        | Type    | Required | Description                                                              |
-| ---------------- | ------- | -------- | ------------------------------------------------------------------------ |
-| `service`        | string  | No       | Filter by service: drive, docs, sheets, slides, calendar, gmail, unified |
-| `keyword`        | string  | No       | Filter by keyword in tool name or description                            |
-| `includeSchemas` | boolean | No       | Include full input/output schemas (default: false)                       |
+| Parameter        | Type    | Required | Description                                                                        |
+| ---------------- | ------- | -------- | ---------------------------------------------------------------------------------- |
+| `service`        | string  | No       | Filter by service: drive, docs, sheets, slides, calendar, gmail, contacts, unified |
+| `keyword`        | string  | No       | Filter by keyword in tool name or description                                      |
+| `includeSchemas` | boolean | No       | Include full input/output schemas (default: false)                                 |
 
 ## Drive (29 tools)
 
@@ -858,6 +858,70 @@ Delete an email filter.
 | Parameter  | Type   | Required | Description         |
 | ---------- | ------ | -------- | ------------------- |
 | `filterId` | string | Yes      | Filter ID to delete |
+
+## Contacts (6 tools)
+
+### list_contacts
+
+List contacts from the user's Google Contacts.
+
+| Parameter   | Type   | Required | Description                                         |
+| ----------- | ------ | -------- | --------------------------------------------------- |
+| `pageSize`  | number | No       | Results per page (default: 100, max: 1000)          |
+| `pageToken` | string | No       | Token for next page                                 |
+| `sortOrder` | string | No       | LAST_MODIFIED_ASCENDING or LAST_MODIFIED_DESCENDING |
+
+### get_contact
+
+Get details of a specific contact.
+
+| Parameter      | Type   | Required | Description                                      |
+| -------------- | ------ | -------- | ------------------------------------------------ |
+| `resourceName` | string | Yes      | Contact resource name (e.g., people/c1234567890) |
+
+### search_contacts
+
+Search contacts by name, email, or phone number.
+
+| Parameter  | Type   | Required | Description                             |
+| ---------- | ------ | -------- | --------------------------------------- |
+| `query`    | string | Yes      | Search query (name, email, or phone)    |
+| `pageSize` | number | No       | Results per page (default: 30, max: 30) |
+
+### create_contact
+
+Create a new contact.
+
+| Parameter        | Type   | Required | Description                                                         |
+| ---------------- | ------ | -------- | ------------------------------------------------------------------- |
+| `givenName`      | string | Yes      | First name                                                          |
+| `familyName`     | string | No       | Last name                                                           |
+| `emailAddresses` | array  | No       | Array of { value, type } (type: home, work, other)                  |
+| `phoneNumbers`   | array  | No       | Array of { value, type } (type: home, work, mobile, other)          |
+| `organizations`  | array  | No       | Array of { name, title, department }                                |
+| `addresses`      | array  | No       | Array of { streetAddress, city, region, postalCode, country, type } |
+
+### update_contact
+
+Update an existing contact.
+
+| Parameter        | Type   | Required | Description                                      |
+| ---------------- | ------ | -------- | ------------------------------------------------ |
+| `resourceName`   | string | Yes      | Contact resource name (e.g., people/c1234567890) |
+| `givenName`      | string | No       | New first name                                   |
+| `familyName`     | string | No       | New last name                                    |
+| `emailAddresses` | array  | No       | Replace email addresses                          |
+| `phoneNumbers`   | array  | No       | Replace phone numbers                            |
+| `organizations`  | array  | No       | Replace organizations                            |
+| `addresses`      | array  | No       | Replace addresses                                |
+
+### delete_contact
+
+Delete a contact.
+
+| Parameter      | Type   | Required | Description                                      |
+| -------------- | ------ | -------- | ------------------------------------------------ |
+| `resourceName` | string | Yes      | Contact resource name (e.g., people/c1234567890) |
 
 ## Unified (3 tools)
 
