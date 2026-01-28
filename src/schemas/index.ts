@@ -212,3 +212,30 @@ export type {
   ListFiltersInput,
   DeleteFilterInput,
 } from "./gmail.js";
+
+// Contacts schemas
+export {
+  PhoneNumberSchema,
+  ContactEmailSchema,
+  AddressSchema,
+  OrganizationSchema,
+  ListContactsSchema,
+  GetContactSchema,
+  SearchContactsSchema,
+  CreateContactSchema,
+  UpdateContactSchema,
+  DeleteContactSchema,
+} from "./contacts.js";
+
+export type {
+  PhoneNumberInput,
+  ContactEmailInput,
+  AddressInput,
+  OrganizationInput,
+  ListContactsInput,
+  GetContactInput,
+  SearchContactsInput,
+  CreateContactInput,
+  UpdateContactInput,
+  DeleteContactInput,
+} from "./contacts.js";

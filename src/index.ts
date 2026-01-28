@@ -27,6 +27,7 @@ import {
   getSlidesService,
   getCalendarService,
   getGmailService,
+  getPeopleService,
 } from "./utils/index.js";
 
 // Import service configuration
@@ -126,6 +127,13 @@ import {
   handleCreateFilter,
   handleListFilters,
   handleDeleteFilter,
+  // Contacts handlers
+  handleListContacts,
+  handleGetContact,
+  handleSearchContacts,
+  handleCreateContact,
+  handleUpdateContact,
+  handleDeleteContact,
   // Discovery handlers
   handleListTools,
 } from "./handlers/index.js";
@@ -446,7 +454,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 // -----------------------------------------------------------------------------
 
 import type { ToolResponse } from "./utils/index.js";
-import type { docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1 } from "googleapis";
+import type { docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1, people_v1 } from "googleapis";
 
 interface ToolServices {
   drive: drive_v3.Drive;
@@ -455,6 +463,7 @@ interface ToolServices {
   slides: slides_v1.Slides;
   calendar: calendar_v3.Calendar;
   gmail: gmail_v1.Gmail;
+  people: people_v1.People;
   context: HandlerContext;
 }
 
@@ -599,6 +608,18 @@ function createToolRegistry(): Record<string, ToolHandler> {
     } satisfies Record<string, ToolHandler>);
   }
 
+  // Contacts tools
+  if (isServiceEnabled("contacts")) {
+    Object.assign(registry, {
+      list_contacts: ({ people }, args) => handleListContacts(people, args),
+      get_contact: ({ people }, args) => handleGetContact(people, args),
+      search_contacts: ({ people }, args) => handleSearchContacts(people, args),
+      create_contact: ({ people }, args) => handleCreateContact(people, args),
+      update_contact: ({ people }, args) => handleUpdateContact(people, args),
+      delete_contact: ({ people }, args) => handleDeleteContact(people, args),
+    } satisfies Record<string, ToolHandler>);
+  }
+
   return registry;
 }
 
@@ -623,6 +644,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       slides: getSlidesService(authClient!),
       calendar: getCalendarService(authClient!),
       gmail: getGmailService(authClient!),
+      people: getPeopleService(authClient!),
       context: { server, progressToken: meta?.progressToken },
     };
 

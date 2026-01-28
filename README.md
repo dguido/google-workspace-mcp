@@ -1,13 +1,13 @@
 # Google Workspace MCP Server
 
-MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calendar, and Gmail.
+MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calendar, Gmail, and Contacts.
 
 ## Quick Start
 
 ### Prerequisites
 
 - **Node.js** 22+ (LTS recommended)
-- **Google Cloud Project** with Drive, Docs, Sheets, and Slides APIs enabled
+- **Google Cloud Project** with Drive, Docs, Sheets, Slides, Calendar, Gmail, and People APIs enabled
 - **OAuth 2.0 Credentials** (Desktop application type)
 
 ### 1. Set Up Google Cloud
@@ -67,7 +67,7 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 ### 2. Enable Required APIs
 
 - Go to "APIs & Services" > "Library"
-- Enable: **Google Drive API**, **Google Docs API**, **Google Sheets API**, **Google Slides API**
+- Enable: **Google Drive API**, **Google Docs API**, **Google Sheets API**, **Google Slides API**, **Google Calendar API**, **Gmail API**, **People API**
 
 ### 3. Configure OAuth Consent Screen
 
@@ -75,7 +75,7 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 - Fill in app name, support email, and developer contact
 - Choose "External" (or "Internal" for Workspace)
 - Add your email as a test user
-- Add scopes: `drive.file`, `documents`, `spreadsheets`, `presentations`, `drive`, `drive.readonly`
+- Add scopes: `drive.file`, `documents`, `spreadsheets`, `presentations`, `drive`, `drive.readonly`, `calendar`, `gmail.modify`, `gmail.labels`, `contacts`
 
 ### 4. Create OAuth 2.0 Credentials
 
@@ -138,7 +138,7 @@ To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
 }
 ```
 
-**Available services:** `drive`, `docs`, `sheets`, `slides`, `calendar`, `gmail`
+**Available services:** `drive`, `docs`, `sheets`, `slides`, `calendar`, `gmail`, `contacts`
 
 - Omit `GOOGLE_WORKSPACE_SERVICES` entirely to enable all services
 - Unified tools (`create_file`, `update_file`, `get_file_content`) require `drive`, `docs`, `sheets`, and `slides`
@@ -170,6 +170,10 @@ See [Advanced Configuration](docs/ADVANCED.md) for multi-account setup and envir
 ### Gmail (14 tools)
 
 `sendEmail` `draftEmail` `readEmail` `searchEmails` `deleteEmail` `modifyEmail` `downloadAttachment` `listLabels` `getOrCreateLabel` `updateLabel` `deleteLabel` `createFilter` `listFilters` `deleteFilter`
+
+### Contacts (6 tools)
+
+`listContacts` `getContact` `searchContacts` `createContact` `updateContact` `deleteContact`
 
 ### Unified (3 tools)
 

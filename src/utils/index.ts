@@ -14,6 +14,7 @@ export {
   getSlidesService,
   getCalendarService,
   getGmailService,
+  getPeopleService,
   clearServiceCache,
 } from "./services.js";
 export { withTimeout, DEFAULT_API_TIMEOUT_MS } from "./timeout.js";

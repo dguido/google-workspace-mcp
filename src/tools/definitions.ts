@@ -3297,6 +3297,319 @@ export const gmailTools: ToolDefinition[] = [
   },
 ];
 
+// Contacts tools
+export const contactsTools: ToolDefinition[] = [
+  {
+    name: "list_contacts",
+    description: "List contacts from Google Contacts (max 1000 per page)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageSize: {
+          type: "number",
+          description: "(optional, default: 100) Number of contacts to return (max 1000)",
+        },
+        pageToken: {
+          type: "string",
+          description: "(optional) Token for pagination",
+        },
+        sortOrder: {
+          type: "string",
+          enum: [
+            "LAST_MODIFIED_ASCENDING",
+            "LAST_MODIFIED_DESCENDING",
+            "FIRST_NAME_ASCENDING",
+            "LAST_NAME_ASCENDING",
+          ],
+          description: "(optional) Sort order for results",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        contacts: {
+          type: "array",
+          description: "List of contacts",
+          items: {
+            type: "object",
+            properties: {
+              resourceName: { type: "string", description: "Contact resource name" },
+              names: { type: "array", description: "Contact names" },
+              emailAddresses: { type: "array", description: "Email addresses" },
+              phoneNumbers: { type: "array", description: "Phone numbers" },
+              organizations: { type: "array", description: "Organizations" },
+              addresses: { type: "array", description: "Physical addresses" },
+            },
+          },
+        },
+        nextPageToken: { type: "string", description: "Token for next page" },
+        totalPeople: { type: "number", description: "Total number of contacts" },
+      },
+    },
+  },
+  {
+    name: "get_contact",
+    description: "Get a single contact by resource name",
+    inputSchema: {
+      type: "object",
+      properties: {
+        resourceName: {
+          type: "string",
+          description: "Contact resource name (e.g., people/c1234567890)",
+        },
+      },
+      required: ["resourceName"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        resourceName: { type: "string", description: "Contact resource name" },
+        etag: { type: "string", description: "Contact etag for updates" },
+        names: { type: "array", description: "Contact names" },
+        emailAddresses: { type: "array", description: "Email addresses" },
+        phoneNumbers: { type: "array", description: "Phone numbers" },
+        organizations: { type: "array", description: "Organizations" },
+        addresses: { type: "array", description: "Physical addresses" },
+      },
+    },
+  },
+  {
+    name: "search_contacts",
+    description: "Search contacts by name, email, or phone number",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query (matches name, email, or phone)",
+        },
+        pageSize: {
+          type: "number",
+          description: "(optional, default: 10) Number of results to return (max 30)",
+        },
+      },
+      required: ["query"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        contacts: {
+          type: "array",
+          description: "Matching contacts",
+          items: {
+            type: "object",
+            properties: {
+              resourceName: { type: "string", description: "Contact resource name" },
+              names: { type: "array", description: "Contact names" },
+              emailAddresses: { type: "array", description: "Email addresses" },
+              phoneNumbers: { type: "array", description: "Phone numbers" },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "create_contact",
+    description: "Create a new contact",
+    inputSchema: {
+      type: "object",
+      properties: {
+        givenName: {
+          type: "string",
+          description: "Given name (first name)",
+        },
+        familyName: {
+          type: "string",
+          description: "(optional) Family name (last name)",
+        },
+        emailAddresses: {
+          type: "array",
+          description: "(optional) Email addresses",
+          items: {
+            type: "object",
+            properties: {
+              value: { type: "string", description: "Email address" },
+              type: {
+                type: "string",
+                enum: ["home", "work", "other"],
+                description: "Email type",
+              },
+            },
+            required: ["value"],
+          },
+        },
+        phoneNumbers: {
+          type: "array",
+          description: "(optional) Phone numbers",
+          items: {
+            type: "object",
+            properties: {
+              value: { type: "string", description: "Phone number" },
+              type: {
+                type: "string",
+                enum: ["home", "work", "mobile", "other"],
+                description: "Phone type",
+              },
+            },
+            required: ["value"],
+          },
+        },
+        organizations: {
+          type: "array",
+          description: "(optional) Organizations/companies",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Company name" },
+              title: { type: "string", description: "Job title" },
+              department: { type: "string", description: "Department" },
+            },
+          },
+        },
+        addresses: {
+          type: "array",
+          description: "(optional) Physical addresses",
+          items: {
+            type: "object",
+            properties: {
+              streetAddress: { type: "string", description: "Street address" },
+              city: { type: "string", description: "City" },
+              region: { type: "string", description: "State/Province" },
+              postalCode: { type: "string", description: "Postal code" },
+              country: { type: "string", description: "Country" },
+              type: {
+                type: "string",
+                enum: ["home", "work", "other"],
+                description: "Address type",
+              },
+            },
+          },
+        },
+      },
+      required: ["givenName"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        resourceName: { type: "string", description: "Created contact resource name" },
+        names: { type: "array", description: "Contact names" },
+        emailAddresses: { type: "array", description: "Email addresses" },
+        phoneNumbers: { type: "array", description: "Phone numbers" },
+      },
+    },
+  },
+  {
+    name: "update_contact",
+    description: "Update an existing contact",
+    inputSchema: {
+      type: "object",
+      properties: {
+        resourceName: {
+          type: "string",
+          description: "Contact resource name (e.g., people/c1234567890)",
+        },
+        givenName: {
+          type: "string",
+          description: "(optional) Given name (first name)",
+        },
+        familyName: {
+          type: "string",
+          description: "(optional) Family name (last name)",
+        },
+        emailAddresses: {
+          type: "array",
+          description: "(optional) Email addresses (replaces existing)",
+          items: {
+            type: "object",
+            properties: {
+              value: { type: "string", description: "Email address" },
+              type: {
+                type: "string",
+                enum: ["home", "work", "other"],
+                description: "Email type",
+              },
+            },
+            required: ["value"],
+          },
+        },
+        phoneNumbers: {
+          type: "array",
+          description: "(optional) Phone numbers (replaces existing)",
+          items: {
+            type: "object",
+            properties: {
+              value: { type: "string", description: "Phone number" },
+              type: {
+                type: "string",
+                enum: ["home", "work", "mobile", "other"],
+                description: "Phone type",
+              },
+            },
+            required: ["value"],
+          },
+        },
+        organizations: {
+          type: "array",
+          description: "(optional) Organizations (replaces existing)",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Company name" },
+              title: { type: "string", description: "Job title" },
+              department: { type: "string", description: "Department" },
+            },
+          },
+        },
+        addresses: {
+          type: "array",
+          description: "(optional) Addresses (replaces existing)",
+          items: {
+            type: "object",
+            properties: {
+              streetAddress: { type: "string", description: "Street address" },
+              city: { type: "string", description: "City" },
+              region: { type: "string", description: "State/Province" },
+              postalCode: { type: "string", description: "Postal code" },
+              country: { type: "string", description: "Country" },
+              type: {
+                type: "string",
+                enum: ["home", "work", "other"],
+                description: "Address type",
+              },
+            },
+          },
+        },
+      },
+      required: ["resourceName"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        resourceName: { type: "string", description: "Updated contact resource name" },
+        names: { type: "array", description: "Contact names" },
+        emailAddresses: { type: "array", description: "Email addresses" },
+        phoneNumbers: { type: "array", description: "Phone numbers" },
+      },
+    },
+  },
+  {
+    name: "delete_contact",
+    description: "Delete a contact",
+    inputSchema: {
+      type: "object",
+      properties: {
+        resourceName: {
+          type: "string",
+          description: "Contact resource name (e.g., people/c1234567890)",
+        },
+      },
+      required: ["resourceName"],
+    },
+  },
+];
+
 import { isServiceEnabled, areUnifiedToolsEnabled, type ServiceName } from "../config/index.js";
 
 /** Map of service names to their tool definitions */
@@ -3307,6 +3620,7 @@ export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
   slides: slidesTools,
   calendar: calendarTools,
   gmail: gmailTools,
+  contacts: contactsTools,
 };
 
 /** Discovery tool for listing available tools */
@@ -3319,7 +3633,7 @@ export const discoveryTools: ToolDefinition[] = [
       properties: {
         service: {
           type: "string",
-          enum: ["drive", "docs", "sheets", "slides", "calendar", "gmail", "unified"],
+          enum: ["drive", "docs", "sheets", "slides", "calendar", "gmail", "contacts", "unified"],
           description: "(optional) Filter by service name",
         },
         keyword: {

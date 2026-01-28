@@ -98,6 +98,7 @@ Error: Google Sheets API has not been used in project...
 
 - Need drive.file or drive scope
 - Need docs, sheets, slides scopes for respective services
+- Need contacts scope for Contacts service
 
 **Solution:**
 
@@ -110,6 +111,7 @@ Error: Google Sheets API has not been used in project...
 
 - Drive API: 12,000 requests per minute
 - Docs/Sheets/Slides: 300 requests per minute
+- People API: 90 requests per minute (per user)
 
 **Solution:**
 

@@ -26,7 +26,15 @@ describe("Service Configuration", () => {
 
   describe("SERVICE_NAMES", () => {
     it("contains all expected services", () => {
-      expect(SERVICE_NAMES).toEqual(["drive", "docs", "sheets", "slides", "calendar", "gmail"]);
+      expect(SERVICE_NAMES).toEqual([
+        "drive",
+        "docs",
+        "sheets",
+        "slides",
+        "calendar",
+        "gmail",
+        "contacts",
+      ]);
     });
   });
 
@@ -34,9 +42,9 @@ describe("Service Configuration", () => {
     it("enables all services when env var is not set", () => {
       delete process.env.GOOGLE_WORKSPACE_SERVICES;
       const enabled = getEnabledServices();
-      expect(enabled.size).toBe(6);
+      expect(enabled.size).toBe(7);
       expect([...enabled].sort()).toEqual(
-        ["calendar", "docs", "drive", "gmail", "sheets", "slides"].sort(),
+        ["calendar", "contacts", "docs", "drive", "gmail", "sheets", "slides"].sort(),
       );
     });
 
@@ -91,7 +99,7 @@ describe("Service Configuration", () => {
       expect(warnSpy).toHaveBeenCalledOnce();
       expect(warnSpy.mock.calls[0][0]).toContain("Unknown services: foo, bar");
       expect(warnSpy.mock.calls[0][0]).toContain(
-        "Valid: drive, docs, sheets, slides, calendar, gmail",
+        "Valid: drive, docs, sheets, slides, calendar, gmail, contacts",
       );
 
       warnSpy.mockRestore();

@@ -5,7 +5,15 @@
  * of services to enable (e.g., "drive,gmail"). If not set, all services are enabled.
  */
 
-export const SERVICE_NAMES = ["drive", "docs", "sheets", "slides", "calendar", "gmail"] as const;
+export const SERVICE_NAMES = [
+  "drive",
+  "docs",
+  "sheets",
+  "slides",
+  "calendar",
+  "gmail",
+  "contacts",
+] as const;
 export type ServiceName = (typeof SERVICE_NAMES)[number];
 
 /** Unified tools require all these services to function */
