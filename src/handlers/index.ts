@@ -101,6 +101,16 @@ export {
   handleDeleteFilter,
 } from "./gmail.js";
 
+// Contacts handlers
+export {
+  handleListContacts,
+  handleGetContact,
+  handleSearchContacts,
+  handleCreateContact,
+  handleUpdateContact,
+  handleDeleteContact,
+} from "./contacts.js";
+
 // Discovery handlers
 export { handleListTools } from "./discovery.js";
 

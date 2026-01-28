@@ -8,7 +8,7 @@ import open from "open";
 import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
 
-// OAuth scopes for Google Drive, Docs, Sheets, Slides, Calendar, and Gmail
+// OAuth scopes for Google Drive, Docs, Sheets, Slides, Calendar, Gmail, and Contacts
 const SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/drive.file",
@@ -20,6 +20,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://mail.google.com/", // Required for message deletion
   "https://www.googleapis.com/auth/gmail.settings.basic",
+  "https://www.googleapis.com/auth/contacts",
 ];
 
 export class AuthServer {
