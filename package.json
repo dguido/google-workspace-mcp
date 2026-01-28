@@ -64,7 +64,7 @@
     "@types/node": "25.0.9",
     "@vitest/coverage-v8": "4.0.17",
     "esbuild": "0.27.2",
-    "oxfmt": "^0.24.0",
+    "oxfmt": "^0.26.0",
     "oxlint": "1.41.0",
     "typescript": "5.9.3",
     "vitest": "4.0.17"
