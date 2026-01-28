@@ -1,5 +1,12 @@
 import type { people_v1 } from "googleapis";
-import { log, successResponse, structuredResponse, validateArgs, toToon } from "../utils/index.js";
+import {
+  log,
+  successResponse,
+  structuredResponse,
+  validateArgs,
+  toToon,
+  withTimeout,
+} from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
   ListContactsSchema,
@@ -69,13 +76,17 @@ export async function handleListContacts(
   if (!validation.success) return validation.response;
   const { pageSize, pageToken, sortOrder } = validation.data;
 
-  const response = await people.people.connections.list({
-    resourceName: "people/me",
-    pageSize,
-    pageToken,
-    personFields: PERSON_FIELDS,
-    sortOrder,
-  });
+  const response = await withTimeout(
+    people.people.connections.list({
+      resourceName: "people/me",
+      pageSize,
+      pageToken,
+      personFields: PERSON_FIELDS,
+      sortOrder,
+    }),
+    30000,
+    "List contacts",
+  );
 
   const connections = response.data.connections || [];
 
@@ -107,10 +118,14 @@ export async function handleGetContact(
   if (!validation.success) return validation.response;
   const { resourceName } = validation.data;
 
-  const response = await people.people.get({
-    resourceName,
-    personFields: PERSON_FIELDS,
-  });
+  const response = await withTimeout(
+    people.people.get({
+      resourceName,
+      personFields: PERSON_FIELDS,
+    }),
+    30000,
+    "Get contact",
+  );
 
   const person = response.data;
   const contactData = extractContactData(person);
@@ -153,11 +168,15 @@ export async function handleSearchContacts(
   if (!validation.success) return validation.response;
   const { query, pageSize } = validation.data;
 
-  const response = await people.people.searchContacts({
-    query,
-    pageSize,
-    readMask: PERSON_FIELDS,
-  });
+  const response = await withTimeout(
+    people.people.searchContacts({
+      query,
+      pageSize,
+      readMask: PERSON_FIELDS,
+    }),
+    30000,
+    "Search contacts",
+  );
 
   const results = response.data.results || [];
 

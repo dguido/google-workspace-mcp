@@ -3607,13 +3607,6 @@ export const contactsTools: ToolDefinition[] = [
       },
       required: ["resourceName"],
     },
-    outputSchema: {
-      type: "object",
-      properties: {
-        deleted: { type: "boolean", description: "Whether the deletion succeeded" },
-        resourceName: { type: "string", description: "Deleted contact resource name" },
-      },
-    },
   },
 ];
 
