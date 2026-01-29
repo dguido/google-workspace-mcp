@@ -8,6 +8,8 @@ import { GoogleAuthError } from "./google-auth-error.js";
 const CONSOLE_URL = "https://console.cloud.google.com";
 const ACCOUNT_URL = "https://myaccount.google.com";
 const STATUS_URL = "https://status.cloud.google.com";
+const GOOGLE_OAUTH_DOCS = "https://developers.google.com/identity/protocols/oauth2";
+const GOOGLE_OAUTH_SCOPES = "https://developers.google.com/identity/protocols/oauth2/scopes";
 
 interface MapperContext {
   account?: string;
@@ -115,7 +117,7 @@ function createRedirectUriMismatchError(
       { label: "Google Cloud Credentials", url: `${CONSOLE_URL}/apis/credentials` },
       {
         label: "OAuth Setup Guide",
-        url: "https://developers.google.com/identity/protocols/oauth2",
+        url: GOOGLE_OAUTH_DOCS,
       },
     ],
     originalError,
@@ -147,13 +149,13 @@ function createInvalidClientError(
 }
 
 function createInvalidGrantError(
-  _description: string,
+  description: string,
   originalError: Error,
   context: MapperContext,
 ): GoogleAuthError {
   return new GoogleAuthError({
     code: "INVALID_GRANT",
-    reason: "Your authentication token has been revoked or expired",
+    reason: `Your authentication token has been revoked or expired: ${description}`,
     fix: [
       "Run the authentication flow again: npx @dguido/google-workspace-mcp auth",
       "When prompted, click 'Allow' to grant permissions",
@@ -192,13 +194,13 @@ function createAccessDeniedError(
 }
 
 function createTokenExpiredError(
-  _description: string,
+  description: string,
   originalError: Error,
   context: MapperContext,
 ): GoogleAuthError {
   return new GoogleAuthError({
     code: "TOKEN_EXPIRED",
-    reason: "Your access token has expired and could not be refreshed",
+    reason: `Your access token has expired and could not be refreshed: ${description}`,
     fix: [
       "Run authentication again: npx @dguido/google-workspace-mcp auth",
       "Ensure you have a stable internet connection",
@@ -226,7 +228,7 @@ function createInsufficientScopeError(
     links: [
       {
         label: "OAuth Scopes Reference",
-        url: "https://developers.google.com/identity/protocols/oauth2/scopes",
+        url: GOOGLE_OAUTH_SCOPES,
       },
     ],
     authUrl: context.authUrl,
@@ -272,13 +274,13 @@ function createApiNotEnabledError(
 }
 
 function createQuotaExceededError(
-  _description: string,
+  description: string,
   originalError: Error,
   context: MapperContext,
 ): GoogleAuthError {
   return new GoogleAuthError({
     code: "QUOTA_EXCEEDED",
-    reason: "API quota has been exceeded",
+    reason: `API quota has been exceeded: ${description}`,
     fix: [
       "Wait a few minutes and try again",
       "Check your API quota usage in Google Cloud Console",

@@ -10,29 +10,24 @@ import { getSecureTokenPath, getKeysFilePath } from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
 import { GetStatusSchema } from "../schemas/status.js";
-import type { OAuth2Client, Credentials } from "google-auth-library";
+import type { StoredCredentials, CredentialsFile } from "../types/credentials.js";
+import type { OAuth2Client } from "google-auth-library";
 import type { drive_v3 } from "googleapis";
-
-/** Extended credentials with scope string and creation time */
-interface StoredTokens extends Credentials {
-  scope?: string;
-  created_at?: string;
-}
 
 /** Days after which testing OAuth apps expire tokens */
 const TESTING_APP_EXPIRY_DAYS = 7;
 
-/** Days before expiry to start warning users */
-const WARNING_THRESHOLD_DAYS = 6;
+/**
+ * Days before expiry to start warning users.
+ * Set to 6 days to give 1 day buffer before 7-day testing app token expiry.
+ */
+const WARNING_THRESHOLD_DAYS = TESTING_APP_EXPIRY_DAYS - 1;
 
-/** Structure of credentials JSON file */
-interface CredentialsFile {
-  installed?: { client_id?: string };
-  web?: { client_id?: string };
-  client_id?: string;
-}
-
-/** Server start time for uptime tracking */
+/**
+ * Captures time when this module is first loaded.
+ * For MCP servers, this effectively equals server start time since
+ * the module is loaded during server initialization.
+ */
 const SERVER_START_TIME = Date.now();
 
 /** Get server uptime in seconds */
@@ -117,7 +112,7 @@ async function getTokenInfo(): Promise<{
 
   try {
     const content = await fs.readFile(tokenPath, "utf-8");
-    const tokens = JSON.parse(content) as StoredTokens | null;
+    const tokens = JSON.parse(content) as StoredCredentials | null;
 
     if (!tokens || typeof tokens !== "object") {
       return {
@@ -268,7 +263,7 @@ async function checkTokenFile(): Promise<{ check: ConfigCheck; tokenInfo: TokenC
 
   try {
     const content = await fs.readFile(tokenPath, "utf-8");
-    const tokens = JSON.parse(content) as StoredTokens;
+    const tokens = JSON.parse(content) as StoredCredentials;
 
     const hasAccessToken = !!tokens.access_token;
     const hasRefreshToken = !!tokens.refresh_token;

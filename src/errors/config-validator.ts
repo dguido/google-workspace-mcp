@@ -6,29 +6,15 @@
 import * as fs from "fs/promises";
 import { getKeysFilePath, getSecureTokenPath } from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
+import type { CredentialsFile } from "../types/credentials.js";
 
 const CONSOLE_URL = "https://console.cloud.google.com";
+const GITHUB_SETUP_GUIDE = "https://github.com/dguido/google-workspace-mcp#getting-started";
 
 export interface ValidationResult {
   valid: boolean;
   errors: GoogleAuthError[];
   warnings: string[];
-}
-
-interface CredentialsFile {
-  installed?: {
-    client_id?: string;
-    client_secret?: string;
-    redirect_uris?: string[];
-  };
-  web?: {
-    client_id?: string;
-    client_secret?: string;
-    redirect_uris?: string[];
-  };
-  client_id?: string;
-  client_secret?: string;
-  redirect_uris?: string[];
 }
 
 /**
@@ -60,7 +46,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
           { label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` },
           {
             label: "Setup Guide",
-            url: "https://github.com/dguido/google-workspace-mcp#getting-started",
+            url: GITHUB_SETUP_GUIDE,
           },
         ],
       }),

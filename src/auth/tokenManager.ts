@@ -4,11 +4,9 @@ import * as path from "path";
 import { getSecureTokenPath } from "./utils.js";
 import { log, isNodeError } from "../utils/index.js";
 import { mapGoogleError, type GoogleAuthError } from "../errors/index.js";
+import { parseStoredCredentials, type StoredCredentials } from "../types/credentials.js";
 
-/** Extended credentials with our metadata */
-export interface StoredCredentials extends Credentials {
-  created_at?: string;
-}
+export type { StoredCredentials };
 
 /** Last auth error for diagnostic purposes */
 let lastAuthError: GoogleAuthError | null = null;
@@ -27,6 +25,7 @@ export class TokenManager {
   private oauth2Client: OAuth2Client;
   private tokenPath: string;
   private accountEmail?: string;
+  private refreshInProgress: Promise<boolean> | null = null;
 
   constructor(oauth2Client: OAuth2Client, accountEmail?: string) {
     this.oauth2Client = oauth2Client;
@@ -45,6 +44,22 @@ export class TokenManager {
     this.accountEmail = email;
   }
 
+  /**
+   * Atomically write token content using temp file + rename pattern.
+   * This prevents corrupted token files if the process crashes mid-write.
+   */
+  private async atomicWriteTokens(content: string): Promise<void> {
+    const tempPath = `${this.tokenPath}.${Date.now()}.tmp`;
+    try {
+      await fs.writeFile(tempPath, content, { mode: 0o600 });
+      await fs.rename(tempPath, this.tokenPath);
+    } catch (error) {
+      // Clean up temp file on failure
+      await fs.unlink(tempPath).catch(() => {});
+      throw error;
+    }
+  }
+
   private async ensureTokenDirectoryExists(): Promise<void> {
     try {
       const dir = path.dirname(this.tokenPath);
@@ -58,13 +73,23 @@ export class TokenManager {
     }
   }
 
+  /**
+   * Sets up automatic token persistence when OAuth2Client emits 'tokens' events.
+   *
+   * Note: This handler has a potential race condition if multiple token refresh
+   * events fire rapidly (the file read/merge/write is not atomic). This is
+   * acceptable for single-user CLI usage but would need a mutex for multi-process
+   * scenarios.
+   */
   private setupTokenRefresh(): void {
     this.oauth2Client.on("tokens", async (newTokens) => {
       try {
         await this.ensureTokenDirectoryExists();
-        const currentTokens = JSON.parse(
-          await fs.readFile(this.tokenPath, "utf-8"),
-        ) as StoredCredentials;
+        const content = await fs.readFile(this.tokenPath, "utf-8");
+        const currentTokens = parseStoredCredentials(content);
+        if (!currentTokens) {
+          throw new Error("Invalid token file format");
+        }
         const updatedTokens: StoredCredentials = {
           ...currentTokens,
           ...newTokens,
@@ -72,9 +97,7 @@ export class TokenManager {
           // Preserve original created_at from when tokens were first obtained
           created_at: currentTokens.created_at,
         };
-        await fs.writeFile(this.tokenPath, JSON.stringify(updatedTokens, null, 2), {
-          mode: 0o600,
-        });
+        await this.atomicWriteTokens(JSON.stringify(updatedTokens, null, 2));
         log("Tokens updated and saved");
       } catch (error: unknown) {
         // Handle case where currentTokens might not exist yet
@@ -84,9 +107,7 @@ export class TokenManager {
               ...newTokens,
               created_at: new Date().toISOString(),
             };
-            await fs.writeFile(this.tokenPath, JSON.stringify(tokensWithTimestamp, null, 2), {
-              mode: 0o600,
-            });
+            await this.atomicWriteTokens(JSON.stringify(tokensWithTimestamp, null, 2));
             log("New tokens saved");
           } catch (writeError) {
             log("Error saving initial tokens:", writeError);
@@ -113,9 +134,10 @@ export class TokenManager {
         return false;
       }
 
-      const tokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8")) as Credentials;
+      const content = await fs.readFile(this.tokenPath, "utf-8");
+      const tokens = parseStoredCredentials(content);
 
-      if (!tokens || typeof tokens !== "object") {
+      if (!tokens) {
         log("Invalid token format in file:", this.tokenPath);
         return false;
       }
@@ -139,6 +161,21 @@ export class TokenManager {
   }
 
   async refreshTokensIfNeeded(): Promise<boolean> {
+    // If refresh already in progress, wait for it
+    if (this.refreshInProgress) {
+      return this.refreshInProgress;
+    }
+
+    // Start refresh and store promise
+    this.refreshInProgress = this._doRefreshTokens();
+    try {
+      return await this.refreshInProgress;
+    } finally {
+      this.refreshInProgress = null;
+    }
+  }
+
+  private async _doRefreshTokens(): Promise<boolean> {
     const expiryDate = this.oauth2Client.credentials.expiry_date;
     const isExpired = expiryDate
       ? Date.now() >= expiryDate - 5 * 60 * 1000 // 5 minute buffer
@@ -201,9 +238,7 @@ export class TokenManager {
         ...tokens,
         created_at: new Date().toISOString(),
       };
-      await fs.writeFile(this.tokenPath, JSON.stringify(tokensWithTimestamp, null, 2), {
-        mode: 0o600,
-      });
+      await this.atomicWriteTokens(JSON.stringify(tokensWithTimestamp, null, 2));
       this.oauth2Client.setCredentials(tokens);
       log("Tokens saved successfully to:", this.tokenPath);
     } catch (error: unknown) {

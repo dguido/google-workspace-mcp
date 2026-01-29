@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "fs/promises";
 import { OAuth2Client, Credentials } from "google-auth-library";
-import { TokenManager } from "./tokenManager.js";
+import { TokenManager, getLastTokenAuthError, clearLastTokenAuthError } from "./tokenManager.js";
 
 // Mock the fs module
 vi.mock("fs/promises");
@@ -115,16 +115,24 @@ describe("auth/tokenManager", () => {
   });
 
   describe("saveTokens", () => {
-    it("saves tokens to secure path with proper permissions", async () => {
+    it("saves tokens atomically with proper permissions", async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+      vi.mocked(fs.rename).mockResolvedValue(undefined);
 
       await tokenManager.saveTokens(validTokens);
 
+      // Atomic write: writes to temp file first
       expect(fs.writeFile).toHaveBeenCalledWith(
-        "/mock/path/.config/google-workspace-mcp/tokens.json",
+        expect.stringMatching(/\.tmp$/),
         expect.any(String),
         { mode: 0o600 },
+      );
+
+      // Then renames to final path
+      expect(fs.rename).toHaveBeenCalledWith(
+        expect.stringMatching(/\.tmp$/),
+        "/mock/path/.config/google-workspace-mcp/tokens.json",
       );
 
       // Verify the saved content includes original tokens and created_at timestamp
@@ -280,6 +288,43 @@ describe("auth/tokenManager", () => {
 
       expect(result).toBe(true);
       expect(oauth2Client.refreshAccessToken).toHaveBeenCalled();
+    });
+  });
+
+  describe("auth error tracking", () => {
+    beforeEach(() => {
+      // Clear any previous error state
+      clearLastTokenAuthError();
+    });
+
+    it("stores last auth error on refresh failure", async () => {
+      oauth2Client.setCredentials(expiredTokens);
+      oauth2Client.refreshAccessToken = vi.fn().mockRejectedValue(new Error("invalid_grant"));
+
+      await tokenManager.refreshTokensIfNeeded();
+
+      const lastError = getLastTokenAuthError();
+      expect(lastError).not.toBeNull();
+      expect(lastError?.code).toBeDefined();
+    });
+
+    it("clears last auth error", () => {
+      // First, trigger an error by simulating a failed refresh
+      oauth2Client.setCredentials(expiredTokens);
+      oauth2Client.refreshAccessToken = vi.fn().mockRejectedValue(new Error("token_expired"));
+
+      // Run refresh to set the error
+      tokenManager.refreshTokensIfNeeded();
+
+      // Clear the error
+      clearLastTokenAuthError();
+
+      // Verify it's cleared
+      expect(getLastTokenAuthError()).toBeNull();
+    });
+
+    it("returns null when no auth error has occurred", () => {
+      expect(getLastTokenAuthError()).toBeNull();
     });
   });
 
