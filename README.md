@@ -200,6 +200,8 @@ rm ~/.config/google-workspace-mcp/tokens.json
 npx @dguido/google-workspace-mcp auth
 ```
 
+**To avoid weekly re-authentication:** Publish your OAuth app (see [Avoiding Token Expiry](#avoiding-token-expiry) below).
+
 ### "API not enabled"
 
 Enable the missing API in [Google Cloud Console](https://console.cloud.google.com) > APIs & Services > Library.
@@ -219,6 +221,51 @@ Revoke app access at [Google Account Permissions](https://myaccount.google.com/p
 - Tokens stored with 0600 permissions
 - All processing happens locally
 - Never commit `gcp-oauth.keys.json` or tokens to version control
+
+## Avoiding Token Expiry
+
+OAuth apps in "Testing" status automatically expire tokens after 7 days. To avoid weekly re-authentication:
+
+### Option 1: Publish Your OAuth App (Recommended)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) > APIs & Services > OAuth consent screen
+2. Click "PUBLISH APP"
+3. For personal use, you don't need to complete Google's verification process
+4. Published apps keep tokens valid until explicitly revoked
+
+**Note:** Publishing makes your app available to any Google user, but since you control the OAuth credentials, only you can authenticate.
+
+### Option 2: Use Internal App (Workspace Only)
+
+If you have a Google Workspace account:
+
+1. Set User Type to "Internal" on the OAuth consent screen
+2. Internal apps don't expire tokens and don't require publishing
+
+### Monitoring Token Age
+
+Use `get_status` with `diagnose: true` to check token age:
+
+```
+# Tokens older than 6 days will show a warning
+# Token created_at timestamp is tracked automatically
+```
+
+## Scope Filtering
+
+When you limit services via `GOOGLE_WORKSPACE_SERVICES`, only the OAuth scopes for those services are requested during authentication. This provides:
+
+- **Cleaner consent screen** - Users see only the permissions they need
+- **Principle of least privilege** - App only has access to enabled services
+
+For example, setting `GOOGLE_WORKSPACE_SERVICES=drive,calendar` will only request Drive and Calendar scopes, not Gmail or Contacts.
+
+**Note:** If you change enabled services, re-authenticate to update granted scopes:
+
+```bash
+rm ~/.config/google-workspace-mcp/tokens.json
+npx @dguido/google-workspace-mcp auth
+```
 
 ## Development
 

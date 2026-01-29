@@ -123,9 +123,18 @@ describe("auth/tokenManager", () => {
 
       expect(fs.writeFile).toHaveBeenCalledWith(
         "/mock/path/.config/google-workspace-mcp/tokens.json",
-        JSON.stringify(validTokens, null, 2),
+        expect.any(String),
         { mode: 0o600 },
       );
+
+      // Verify the saved content includes original tokens and created_at timestamp
+      const savedContent = vi.mocked(fs.writeFile).mock.calls[0][1] as string;
+      const savedTokens = JSON.parse(savedContent);
+      expect(savedTokens.access_token).toBe("test-access-token");
+      expect(savedTokens.refresh_token).toBe("test-refresh-token");
+      expect(savedTokens.created_at).toBeDefined();
+      expect(new Date(savedTokens.created_at).getTime()).not.toBeNaN();
+
       expect(oauth2Client.credentials.access_token).toBe("test-access-token");
     });
 

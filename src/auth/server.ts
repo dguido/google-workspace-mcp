@@ -9,21 +9,7 @@ import open from "open";
 import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
 import { mapGoogleError } from "../errors/index.js";
-
-// OAuth scopes for Google Drive, Docs, Sheets, Slides, Calendar, Gmail, and Contacts
-const SCOPES = [
-  "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-  "https://www.googleapis.com/auth/documents",
-  "https://www.googleapis.com/auth/spreadsheets",
-  "https://www.googleapis.com/auth/presentations",
-  "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/gmail.modify",
-  "https://mail.google.com/", // Required for message deletion
-  "https://www.googleapis.com/auth/gmail.settings.basic",
-  "https://www.googleapis.com/auth/contacts",
-];
+import { getScopesForEnabledServices } from "../config/scopes.js";
 
 export class AuthServer {
   private flowOAuth2Client: OAuth2Client | null = null; // Used specifically for the auth code flow
@@ -51,7 +37,7 @@ export class AuthServer {
         }
         const authUrl = this.flowOAuth2Client.generateAuthUrl({
           access_type: "offline",
-          scope: SCOPES,
+          scope: getScopesForEnabledServices(),
           prompt: "consent",
           code_challenge_method: CodeChallengeMethod.S256,
           code_challenge: this.codeChallenge!,
@@ -261,7 +247,7 @@ export class AuthServer {
       // Generate Auth URL using the newly created flow client with PKCE and state
       const authorizeUrl = this.flowOAuth2Client.generateAuthUrl({
         access_type: "offline",
-        scope: SCOPES,
+        scope: getScopesForEnabledServices(),
         prompt: "consent",
         code_challenge_method: CodeChallengeMethod.S256,
         code_challenge: this.codeChallenge!,

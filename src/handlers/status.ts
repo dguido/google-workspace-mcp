@@ -13,10 +13,17 @@ import { GetStatusSchema } from "../schemas/status.js";
 import type { OAuth2Client, Credentials } from "google-auth-library";
 import type { drive_v3 } from "googleapis";
 
-/** Extended credentials with scope string */
+/** Extended credentials with scope string and creation time */
 interface StoredTokens extends Credentials {
   scope?: string;
+  created_at?: string;
 }
+
+/** Days after which testing OAuth apps expire tokens */
+const TESTING_APP_EXPIRY_DAYS = 7;
+
+/** Days before expiry to start warning users */
+const WARNING_THRESHOLD_DAYS = 6;
 
 /** Type guard for NodeJS errors with code property */
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -54,6 +61,9 @@ export interface TokenCheck {
   is_expired: boolean;
   expires_at: string | null;
   scopes: string[];
+  created_at: string | null;
+  age_days: number | null;
+  approaching_expiry: boolean;
 }
 
 export interface StatusData extends Record<string, unknown> {
@@ -271,12 +281,27 @@ async function checkTokenFile(): Promise<{ check: ConfigCheck; tokenInfo: TokenC
     const isExpired = expiryDate ? Date.now() > expiryDate : false;
     const scopes = tokens.scope?.split(" ") || [];
 
+    // Calculate token age
+    const createdAt = tokens.created_at || null;
+    let ageDays: number | null = null;
+    let approachingExpiry = false;
+
+    if (createdAt) {
+      const createdDate = new Date(createdAt);
+      const now = new Date();
+      ageDays = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+      approachingExpiry = ageDays >= WARNING_THRESHOLD_DAYS;
+    }
+
     const tokenInfo: TokenCheck = {
       has_access_token: hasAccessToken,
       has_refresh_token: hasRefreshToken,
       is_expired: isExpired,
       expires_at: expiryDate ? new Date(expiryDate).toISOString() : null,
       scopes,
+      created_at: createdAt,
+      age_days: ageDays,
+      approaching_expiry: approachingExpiry,
     };
 
     if (!hasAccessToken && !hasRefreshToken) {
@@ -309,6 +334,23 @@ async function checkTokenFile(): Promise<{ check: ConfigCheck; tokenInfo: TokenC
           name: "token_file",
           status: "warning",
           message: "Access token expired but refresh token available",
+        },
+        tokenInfo,
+      };
+    }
+
+    // Warn if token is approaching 7-day expiry for testing apps
+    if (approachingExpiry) {
+      const daysLeft = TESTING_APP_EXPIRY_DAYS - (ageDays ?? 0);
+      return {
+        check: {
+          name: "token_file",
+          status: "warning",
+          message: `Token is ${ageDays} days old (${daysLeft} days until testing app expiry)`,
+          fix: [
+            "Publish your OAuth app to avoid 7-day token expiry",
+            "Or re-authenticate soon: npx @dguido/google-workspace-mcp auth",
+          ],
         },
         tokenInfo,
       };
@@ -385,6 +427,20 @@ function generateRecommendations(
   // Check for expired tokens
   if (tokenCheck?.is_expired && !tokenCheck.has_refresh_token) {
     recommendations.push("Your session has expired - re-authenticate to continue");
+  }
+
+  // Check for token approaching 7-day expiry
+  if (tokenCheck?.approaching_expiry && tokenCheck.age_days !== null) {
+    const daysLeft = TESTING_APP_EXPIRY_DAYS - tokenCheck.age_days;
+    if (daysLeft <= 0) {
+      recommendations.push(
+        "Token may have expired (7-day limit for testing apps). Re-authenticate or publish your OAuth app.",
+      );
+    } else {
+      recommendations.push(
+        `Token expires in ~${daysLeft} day(s) (testing app limit). Publish your OAuth app to avoid weekly re-auth.`,
+      );
+    }
   }
 
   // Check for last error

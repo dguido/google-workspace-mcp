@@ -5,6 +5,11 @@ import { getSecureTokenPath } from "./utils.js";
 import { log } from "../utils/logging.js";
 import { mapGoogleError, type GoogleAuthError } from "../errors/index.js";
 
+/** Extended credentials with our metadata */
+export interface StoredCredentials extends Credentials {
+  created_at?: string;
+}
+
 /** Type guard for NodeJS errors with a `code` property (e.g., ENOENT, EEXIST) */
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
@@ -62,11 +67,15 @@ export class TokenManager {
     this.oauth2Client.on("tokens", async (newTokens) => {
       try {
         await this.ensureTokenDirectoryExists();
-        const currentTokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8")) as Credentials;
-        const updatedTokens: Credentials = {
+        const currentTokens = JSON.parse(
+          await fs.readFile(this.tokenPath, "utf-8"),
+        ) as StoredCredentials;
+        const updatedTokens: StoredCredentials = {
           ...currentTokens,
           ...newTokens,
           refresh_token: newTokens.refresh_token || currentTokens.refresh_token,
+          // Preserve original created_at from when tokens were first obtained
+          created_at: currentTokens.created_at,
         };
         await fs.writeFile(this.tokenPath, JSON.stringify(updatedTokens, null, 2), {
           mode: 0o600,
@@ -76,7 +85,13 @@ export class TokenManager {
         // Handle case where currentTokens might not exist yet
         if (isNodeError(error) && error.code === "ENOENT") {
           try {
-            await fs.writeFile(this.tokenPath, JSON.stringify(newTokens, null, 2), { mode: 0o600 });
+            const tokensWithTimestamp: StoredCredentials = {
+              ...newTokens,
+              created_at: new Date().toISOString(),
+            };
+            await fs.writeFile(this.tokenPath, JSON.stringify(tokensWithTimestamp, null, 2), {
+              mode: 0o600,
+            });
             log("New tokens saved");
           } catch (writeError) {
             log("Error saving initial tokens:", writeError);
@@ -187,7 +202,11 @@ export class TokenManager {
   async saveTokens(tokens: Credentials): Promise<void> {
     try {
       await this.ensureTokenDirectoryExists();
-      await fs.writeFile(this.tokenPath, JSON.stringify(tokens, null, 2), {
+      const tokensWithTimestamp: StoredCredentials = {
+        ...tokens,
+        created_at: new Date().toISOString(),
+      };
+      await fs.writeFile(this.tokenPath, JSON.stringify(tokensWithTimestamp, null, 2), {
         mode: 0o600,
       });
       this.oauth2Client.setCredentials(tokens);
