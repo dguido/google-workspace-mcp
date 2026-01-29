@@ -7,4 +7,4 @@ export {
   resetServiceConfig,
 } from "./services.js";
 
-export { getScopesForEnabledServices, getAllScopes } from "./scopes.js";
+export { getScopesForEnabledServices } from "./scopes.js";

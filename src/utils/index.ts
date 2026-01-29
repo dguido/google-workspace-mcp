@@ -1,4 +1,5 @@
 export { log } from "./logging.js";
+export { isNodeError } from "./node-errors.js";
 export {
   successResponse,
   structuredResponse,

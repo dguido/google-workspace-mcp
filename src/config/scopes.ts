@@ -57,18 +57,3 @@ export function getScopesForEnabledServices(): string[] {
 
   return [...scopes];
 }
-
-/**
- * Get all possible OAuth scopes (for documentation/debugging).
- */
-export function getAllScopes(): string[] {
-  const scopes = new Set<string>();
-
-  for (const serviceScopes of Object.values(SERVICE_SCOPES)) {
-    for (const scope of serviceScopes) {
-      scopes.add(toScopeUrl(scope));
-    }
-  }
-
-  return [...scopes];
-}

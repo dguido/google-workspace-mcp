@@ -50,7 +50,7 @@ export class AuthServer {
       } else if (url.pathname === "/oauth2callback") {
         // Validate state parameter (CSRF protection per RFC 8252 section 8.9)
         const receivedState = url.searchParams.get("state");
-        if (this.expectedState && receivedState !== this.expectedState) {
+        if (!this.expectedState || receivedState !== this.expectedState) {
           res.writeHead(400, { "Content-Type": "text/html" });
           res.end(`
             <!DOCTYPE html>

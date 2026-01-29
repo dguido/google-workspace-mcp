@@ -4,7 +4,7 @@
 
 import * as fs from "fs/promises";
 import { structuredResponse, type ToolResponse } from "../utils/responses.js";
-import { validateArgs } from "../utils/validation.js";
+import { validateArgs, isNodeError } from "../utils/index.js";
 import { getEnabledServices, SERVICE_NAMES, type ServiceName } from "../config/services.js";
 import { getSecureTokenPath, getKeysFilePath } from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
@@ -24,11 +24,6 @@ const TESTING_APP_EXPIRY_DAYS = 7;
 
 /** Days before expiry to start warning users */
 const WARNING_THRESHOLD_DAYS = 6;
-
-/** Type guard for NodeJS errors with code property */
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
 
 /** Structure of credentials JSON file */
 interface CredentialsFile {

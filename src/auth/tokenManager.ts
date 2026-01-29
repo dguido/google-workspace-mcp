@@ -2,17 +2,12 @@ import { OAuth2Client, Credentials } from "google-auth-library";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { getSecureTokenPath } from "./utils.js";
-import { log } from "../utils/logging.js";
+import { log, isNodeError } from "../utils/index.js";
 import { mapGoogleError, type GoogleAuthError } from "../errors/index.js";
 
 /** Extended credentials with our metadata */
 export interface StoredCredentials extends Credentials {
   created_at?: string;
-}
-
-/** Type guard for NodeJS errors with a `code` property (e.g., ENOENT, EEXIST) */
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
 }
 
 /** Last auth error for diagnostic purposes */
