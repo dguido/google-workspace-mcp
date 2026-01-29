@@ -1,5 +1,6 @@
 import { isToonEnabled } from "../config/services.js";
 import { log } from "./logging.js";
+import type { GoogleAuthError } from "../errors/google-auth-error.js";
 
 /**
  * Maximum character limit for response content.
@@ -75,7 +76,10 @@ export function successResponse(text: string): ToolResponse {
  * Includes both human-readable text and machine-parseable structured data.
  * Use this for tools that return structured data (metadata, lists, quotas, etc.).
  */
-export function structuredResponse(text: string, data: Record<string, unknown>): ToolResponse {
+export function structuredResponse<T extends Record<string, unknown>>(
+  text: string,
+  data: T,
+): ToolResponse {
   const response: ToolResponse = {
     content: [{ type: "text", text }],
     isError: false,
@@ -113,4 +117,18 @@ export function errorResponse(message: string, options?: ErrorOptions): ToolResp
   }
 
   return response;
+}
+
+/**
+ * Create an error response from a GoogleAuthError.
+ * Provides actionable guidance for authentication errors.
+ */
+export function authErrorResponse(error: GoogleAuthError): ToolResponse {
+  log("Auth error", error.toToolResponse());
+
+  return {
+    content: [{ type: "text", text: error.toDisplayString() }],
+    isError: true,
+    structuredContent: error.toToolResponse(),
+  };
 }

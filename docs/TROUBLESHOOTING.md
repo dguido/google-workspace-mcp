@@ -25,19 +25,13 @@ OAuth credentials not found. Please provide credentials using one of these metho
 **Possible causes:**
 
 1. **Wrong credential type**: Must be "Desktop app", not "Web application"
-2. **Port blocked**: Ports 3000-3004 must be available
-3. **Test user not added**: Add your email in OAuth consent screen
+2. **Test user not added**: Add your email in OAuth consent screen
 
 **Solution:**
 
+The authentication server uses an ephemeral port assigned by the OS, so no specific ports need to be available. Verify your credentials are the correct type and re-run:
+
 ```bash
-# Check if ports are in use
-lsof -i :3000-3004
-
-# Kill processes if needed
-kill -9 <PID>
-
-# Re-run authentication
 npx @dguido/google-workspace-mcp auth
 ```
 

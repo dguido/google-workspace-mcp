@@ -16,6 +16,24 @@ vi.mock("./auth/utils.js", async () => {
   };
 });
 
+// Mock the errors module to skip validation in tests
+vi.mock("./errors/index.js", () => ({
+  validateOAuthConfig: vi.fn(() => Promise.resolve({ valid: true, errors: [], warnings: [] })),
+  GoogleAuthError: class extends Error {
+    code: string;
+    reason: string;
+    fix: string[];
+    constructor(ctx: { code: string; reason: string; fix: string[] }) {
+      super(ctx.reason);
+      this.code = ctx.code;
+      this.reason = ctx.reason;
+      this.fix = ctx.fix;
+    }
+  },
+  mapGoogleError: vi.fn(),
+  isGoogleApiError: vi.fn(() => false),
+}));
+
 // Mock the logging module
 vi.mock("./utils/logging.js", () => ({
   log: vi.fn(),

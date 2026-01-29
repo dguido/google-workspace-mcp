@@ -5,6 +5,8 @@ import { AuthServer } from "./auth/server.js";
 import { TokenManager } from "./auth/tokenManager.js";
 import { log } from "./utils/logging.js";
 
+const AUTH_FLOW_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
 export { TokenManager } from "./auth/tokenManager.js";
 export { initializeOAuth2Client } from "./auth/client.js";
 export { AuthServer } from "./auth/server.js";
@@ -36,16 +38,27 @@ export async function authenticate(): Promise<OAuth2Client> {
     throw new Error("Authentication failed. Please check your credentials and try again.");
   }
 
-  // Wait for authentication to complete
-  await new Promise<void>((resolve) => {
-    const checkInterval = setInterval(async () => {
+  // Wait for authentication to complete with timeout
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error("Authentication timed out after 5 minutes. Please try again."));
+    }, AUTH_FLOW_TIMEOUT_MS);
+  });
+
+  const completionPromise = new Promise<void>((resolve) => {
+    const checkInterval = setInterval(() => {
       if (authServer.authCompletedSuccessfully) {
         clearInterval(checkInterval);
-        await authServer.stop();
         resolve();
       }
     }, 1000);
   });
+
+  try {
+    await Promise.race([completionPromise, timeoutPromise]);
+  } finally {
+    await authServer.stop();
+  }
 
   return oauth2Client;
 }

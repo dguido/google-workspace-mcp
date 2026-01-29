@@ -14,6 +14,28 @@ List available tools, optionally filtered by service or keyword.
 | `keyword`        | string  | No       | Filter by keyword in tool name or description                                      |
 | `includeSchemas` | boolean | No       | Include full input/output schemas (default: false)                                 |
 
+### get_status
+
+Get server status including health, authentication, and enabled services.
+
+| Parameter           | Type    | Required | Description                                                |
+| ------------------- | ------- | -------- | ---------------------------------------------------------- |
+| `diagnose`          | boolean | No       | Run full diagnostic with recommendations (default: false)  |
+| `validate_with_api` | boolean | No       | Validate with API call when diagnose=true (default: false) |
+
+**Response fields:**
+
+| Field               | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `status`            | Overall status: ok, warning, or error                |
+| `version`           | Server version                                       |
+| `uptime_seconds`    | Server uptime in seconds                             |
+| `auth.configured`   | Whether OAuth credentials are configured             |
+| `auth.token_status` | Token status: valid, expired, missing, or invalid    |
+| `enabled_services`  | List of enabled Google Workspace services            |
+| `config_checks`     | Configuration checks (only when diagnose=true)       |
+| `recommendations`   | Actionable recommendations (only when diagnose=true) |
+
 ## Drive (29 tools)
 
 ### search

@@ -2,27 +2,47 @@ import { OAuth2Client, Credentials } from "google-auth-library";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { getSecureTokenPath } from "./utils.js";
-import { GaxiosError } from "gaxios";
 import { log } from "../utils/logging.js";
+import { mapGoogleError, type GoogleAuthError } from "../errors/index.js";
 
 /** Type guard for NodeJS errors with a `code` property (e.g., ENOENT, EEXIST) */
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
+/** Last auth error for diagnostic purposes */
+let lastAuthError: GoogleAuthError | null = null;
+
+/** Get the last auth error that occurred */
+export function getLastTokenAuthError(): GoogleAuthError | null {
+  return lastAuthError;
+}
+
+/** Clear the last auth error */
+export function clearLastTokenAuthError(): void {
+  lastAuthError = null;
+}
+
 export class TokenManager {
   private oauth2Client: OAuth2Client;
   private tokenPath: string;
+  private accountEmail?: string;
 
-  constructor(oauth2Client: OAuth2Client) {
+  constructor(oauth2Client: OAuth2Client, accountEmail?: string) {
     this.oauth2Client = oauth2Client;
     this.tokenPath = getSecureTokenPath();
+    this.accountEmail = accountEmail;
     this.setupTokenRefresh();
   }
 
-  // Method to expose the token path
+  /** Method to expose the token path */
   public getTokenPath(): string {
     return this.tokenPath;
+  }
+
+  /** Set the account email for error context */
+  public setAccountEmail(email: string): void {
+    this.accountEmail = email;
   }
 
   private async ensureTokenDirectoryExists(): Promise<void> {
@@ -42,8 +62,8 @@ export class TokenManager {
     this.oauth2Client.on("tokens", async (newTokens) => {
       try {
         await this.ensureTokenDirectoryExists();
-        const currentTokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8"));
-        const updatedTokens = {
+        const currentTokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8")) as Credentials;
+        const updatedTokens: Credentials = {
           ...currentTokens,
           ...newTokens,
           refresh_token: newTokens.refresh_token || currentTokens.refresh_token,
@@ -83,7 +103,7 @@ export class TokenManager {
         return false;
       }
 
-      const tokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8"));
+      const tokens = JSON.parse(await fs.readFile(this.tokenPath, "utf-8")) as Credentials;
 
       if (!tokens || typeof tokens !== "object") {
         log("Invalid token format in file:", this.tokenPath);
@@ -128,21 +148,15 @@ export class TokenManager {
         log("Token refreshed successfully");
         return true;
       } catch (refreshError) {
-        if (
-          refreshError instanceof GaxiosError &&
-          refreshError.response?.data?.error === "invalid_grant"
-        ) {
-          log(
-            "Error refreshing auth token: Invalid grant. Token likely expired or revoked. Please re-authenticate.",
-          );
-          // Optionally clear the potentially invalid tokens here
+        const authError = mapGoogleError(refreshError, { account: this.accountEmail });
+        lastAuthError = authError;
+        log("Token refresh failed:", authError.toToolResponse());
+
+        if (authError.code === "INVALID_GRANT" || authError.code === "TOKEN_REVOKED") {
           await this.clearTokens();
-          return false; // Indicate failure due to invalid grant
-        } else {
-          // Handle other refresh errors
-          log("Error refreshing auth token:", refreshError);
-          return false;
         }
+
+        return false;
       }
     } else if (
       !this.oauth2Client.credentials.access_token &&

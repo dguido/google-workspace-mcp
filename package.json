@@ -48,9 +48,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "oxlint .",
+    "lint:types": "oxlint --type-aware .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "check": "npm run typecheck && npm run lint && npm run format:check"
+    "check": "npm run typecheck && npm run lint:types && npm run format:check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.25.3",
@@ -66,6 +67,7 @@
     "esbuild": "0.27.2",
     "oxfmt": "^0.26.0",
     "oxlint": "1.41.0",
+    "oxlint-tsgolint": "0.11.3",
     "typescript": "5.9.3",
     "vitest": "4.0.17"
   },

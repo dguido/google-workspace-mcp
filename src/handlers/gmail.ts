@@ -484,10 +484,12 @@ export async function handleModifyEmail(
         item.result.status === "rejected",
     )
     .map((item) => {
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- PromiseRejectedResult.reason is unknown
       const errorMsg = item.result.reason?.message || String(item.result.reason) || "Unknown error";
       return {
         threadId: item.id,
         category: categorizeError(errorMsg),
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- errorMsg is derived from unknown
         error: errorMsg,
       };
     });
@@ -512,10 +514,12 @@ export async function handleModifyEmail(
         acc[f.category].push(f.threadId);
         return acc;
       },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Initial accumulator type
       {} as Record<FailureCategory, string[]>,
     );
 
     // Build categorized failure text
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Object.entries loses type info
     const categoryLines = (Object.entries(failuresByCategory) as [FailureCategory, string[]][])
       .map(([category, threadIds]) => {
         const suggestion = CATEGORY_SUGGESTIONS[category];

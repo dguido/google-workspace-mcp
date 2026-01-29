@@ -15,6 +15,16 @@ vi.mock("./utils.js", async () => {
   };
 });
 
+// Mock the errors module to skip validation in tests
+vi.mock("../errors/index.js", () => ({
+  validateOAuthConfig: vi.fn(() => Promise.resolve({ valid: true, errors: [], warnings: [] })),
+  GoogleAuthError: class extends Error {
+    constructor(ctx: { reason: string }) {
+      super(ctx.reason);
+    }
+  },
+}));
+
 describe("auth/client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -218,7 +228,7 @@ describe("auth/client", () => {
       const client = await initializeOAuth2Client();
 
       expect(client).toBeDefined();
-      // Note: redirectUri is private, but defaults to localhost:3000
+      // Note: redirectUri is private, defaults to 127.0.0.1 (RFC 8252 loopback)
       expect(client._clientId).toBe("test-client-id");
     });
 

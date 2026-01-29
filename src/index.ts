@@ -22,6 +22,7 @@ import { join, dirname } from "path";
 import {
   log,
   errorResponse,
+  authErrorResponse,
   getDocsService,
   getSheetsService,
   getSlidesService,
@@ -31,10 +32,16 @@ import {
 } from "./utils/index.js";
 
 // Import service configuration
-import { isServiceEnabled, areUnifiedToolsEnabled } from "./config/index.js";
+import { isServiceEnabled, areUnifiedToolsEnabled, getEnabledServices } from "./config/index.js";
+
+// Import auth utilities for startup logging
+import { getSecureTokenPath, getKeysFilePath } from "./auth/utils.js";
 
 // Import all tool definitions
 import { getAllTools } from "./tools/index.js";
+
+// Import error utilities
+import { mapGoogleError, isGoogleApiError, GoogleAuthError } from "./errors/index.js";
 
 // Import prompts
 import { PROMPTS, generatePromptMessages } from "./prompts/index.js";
@@ -136,6 +143,8 @@ import {
   handleDeleteContact,
   // Discovery handlers
   handleListTools,
+  // Status handler
+  handleGetStatus,
 } from "./handlers/index.js";
 import type { HandlerContext } from "./handlers/index.js";
 
@@ -154,7 +163,8 @@ let authenticationPromise: Promise<OAuth2Client> | null = null;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageJsonPath = join(__dirname, "..", "package.json");
-const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Package.json structure is known
+const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version: string };
 const VERSION = packageJson.version;
 
 // -----------------------------------------------------------------------------
@@ -201,6 +211,7 @@ async function verifyAuthHealth(): Promise<boolean> {
     lastAuthError = null;
     return true;
   } catch (error: unknown) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Accessing error properties
     const err = error as {
       message?: string;
       response?: { status: number; statusText: string };
@@ -393,6 +404,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           {
             uri: request.params.uri,
             mimeType: contentMime,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
             text: Buffer.from(res.data as ArrayBuffer).toString("utf-8"),
           },
         ],
@@ -403,6 +415,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           {
             uri: request.params.uri,
             mimeType: contentMime,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
             blob: Buffer.from(res.data as ArrayBuffer).toString("base64"),
           },
         ],
@@ -472,9 +485,10 @@ type ToolHandler = (services: ToolServices, args: unknown) => Promise<ToolRespon
 function createToolRegistry(): Record<string, ToolHandler> {
   const registry: Record<string, ToolHandler> = {};
 
-  // Discovery tools (always available)
+  // Discovery and status tools (always available, no auth required for status)
   Object.assign(registry, {
     list_tools: (_services, args) => handleListTools(args),
+    get_status: ({ drive }, args) => handleGetStatus(authClient, drive, VERSION, args),
   } satisfies Record<string, ToolHandler>);
 
   // Drive tools
@@ -655,6 +669,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     return handler(services, args);
   } catch (error: unknown) {
+    // Check if it's a GoogleAuthError (already mapped)
+    if (error instanceof GoogleAuthError) {
+      return authErrorResponse(error);
+    }
+
+    // Check if it's a Google API error and map it
+    if (isGoogleApiError(error)) {
+      const authError = mapGoogleError(error);
+      return authErrorResponse(authError);
+    }
+
+    // Generic error handling
     const message = error instanceof Error ? error.message : String(error);
     log("Tool error", { error: message });
     return errorResponse(message);
@@ -798,7 +824,26 @@ async function main() {
         log("Starting Google Workspace MCP server...");
         const transport = new StdioServerTransport();
         await server.connect(transport);
-        log("Server started successfully");
+
+        // Enhanced startup logging
+        const enabledServices = Array.from(getEnabledServices());
+        log("Server started", {
+          version: VERSION,
+          node: process.version,
+          services: enabledServices,
+          token_path: getSecureTokenPath(),
+        });
+
+        // Log OAuth config status (warning if missing)
+        const credentialsPath = getKeysFilePath();
+        try {
+          await import("fs").then((fs) => fs.promises.access(credentialsPath));
+        } catch {
+          log("Warning: OAuth credentials not configured", {
+            hint: "Set GOOGLE_DRIVE_OAUTH_CREDENTIALS or create gcp-oauth.keys.json",
+            credentials_path: credentialsPath,
+          });
+        }
 
         // Set up graceful shutdown
         process.on("SIGINT", async () => {

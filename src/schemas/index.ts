@@ -239,3 +239,8 @@ export type {
   UpdateContactInput,
   DeleteContactInput,
 } from "./contacts.js";
+
+// Status schema
+export { GetStatusSchema } from "./status.js";
+
+export type { GetStatusInput } from "./status.js";

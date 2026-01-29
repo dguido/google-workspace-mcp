@@ -189,7 +189,7 @@ Set `GOOGLE_DRIVE_OAUTH_CREDENTIALS` environment variable or place `gcp-oauth.ke
 
 ### "Authentication failed" or browser doesn't open
 
-Ensure credential type is "Desktop app" (not "Web application") and ports 3000-3004 are available.
+Ensure credential type is "Desktop app" (not "Web application"). The server uses an ephemeral port assigned by the OS, so no specific ports need to be available.
 
 ### "Tokens expired" or "Invalid grant"
 
@@ -212,7 +212,10 @@ Revoke app access at [Google Account Permissions](https://myaccount.google.com/p
 
 ## Security
 
-- OAuth 2.0 with automatic token refresh
+- RFC 8252-compliant OAuth 2.0 with PKCE (Proof Key for Code Exchange)
+- Loopback-only authentication server (127.0.0.1)
+- State parameter for CSRF protection
+- Automatic token refresh
 - Tokens stored with 0600 permissions
 - All processing happens locally
 - Never commit `gcp-oauth.keys.json` or tokens to version control
