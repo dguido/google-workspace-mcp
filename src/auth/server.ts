@@ -11,6 +11,22 @@ import { log } from "../utils/logging.js";
 import { mapGoogleError } from "../errors/index.js";
 import { getScopesForEnabledServices } from "../config/scopes.js";
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export class AuthServer {
   private flowOAuth2Client: OAuth2Client | null = null; // Used specifically for the auth code flow
   private server: http.Server | null = null;
@@ -35,13 +51,18 @@ export class AuthServer {
           res.end("Authentication server is starting. Please wait and refresh.");
           return;
         }
+        if (!this.codeChallenge || !this.expectedState) {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+          res.end("PKCE not initialized - call start() first");
+          return;
+        }
         const authUrl = this.flowOAuth2Client.generateAuthUrl({
           access_type: "offline",
           scope: getScopesForEnabledServices(),
           prompt: "consent",
           code_challenge_method: CodeChallengeMethod.S256,
-          code_challenge: this.codeChallenge!,
-          state: this.expectedState!,
+          code_challenge: this.codeChallenge,
+          state: this.expectedState,
         });
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end(
@@ -50,7 +71,11 @@ export class AuthServer {
       } else if (url.pathname === "/oauth2callback") {
         // Validate state parameter (CSRF protection per RFC 8252 section 8.9)
         const receivedState = url.searchParams.get("state");
-        if (!this.expectedState || receivedState !== this.expectedState) {
+        if (
+          !this.expectedState ||
+          !receivedState ||
+          !timingSafeEqual(receivedState, this.expectedState)
+        ) {
           res.writeHead(400, { "Content-Type": "text/html" });
           res.end(`
             <!DOCTYPE html>
@@ -93,7 +118,7 @@ export class AuthServer {
 
           // Schedule server shutdown after response completes
           setTimeout(() => {
-            this.stop().catch(() => {});
+            this.stop().catch((err) => log("Auth server shutdown error:", err));
           }, 2000);
 
           // Get the path where tokens were saved
@@ -107,7 +132,7 @@ export class AuthServer {
             ? `
                     <div class="warning">
                         <p><strong>⚠️ Security:</strong> Add your credentials directory to .gitignore:</p>
-                        <p><code>${credentialsDir}/</code></p>
+                        <p><code>${escapeHtml(credentialsDir)}/</code></p>
                     </div>`
             : "";
 
@@ -134,7 +159,7 @@ export class AuthServer {
                 <div class="container">
                     <h1>Authentication Successful!</h1>
                     <p>Your authentication tokens have been saved successfully to:</p>
-                    <p><code>${tokenPath}</code></p>${gitignoreWarning}
+                    <p><code>${escapeHtml(tokenPath)}</code></p>${gitignoreWarning}
                     <p style="margin-top: 1em;">You can now close this browser window.</p>
                 </div>
             </body>
@@ -151,13 +176,16 @@ export class AuthServer {
           const authError = mapGoogleError(error);
           log("OAuth callback error:", authError.toToolResponse());
 
-          // Build fix steps HTML
+          // Build fix steps HTML (escape all dynamic content)
           const fixStepsHtml = authError.fix
-            .map((step, i) => `<li>${i + 1}. ${step}</li>`)
+            .map((step, i) => `<li>${i + 1}. ${escapeHtml(step)}</li>`)
             .join("");
           const linksHtml = authError.links
             ? authError.links
-                .map((link) => `<li><a href="${link.url}" target="_blank">${link.label}</a></li>`)
+                .map(
+                  (link) =>
+                    `<li><a href="${escapeHtml(link.url)}" target="_blank">${escapeHtml(link.label)}</a></li>`,
+                )
                 .join("")
             : "";
 
@@ -187,8 +215,8 @@ export class AuthServer {
             <body>
                 <div class="container">
                     <h1>Authentication Failed</h1>
-                    <div class="error-code">${authError.code}</div>
-                    <p class="reason">${authError.reason}</p>
+                    <div class="error-code">${escapeHtml(authError.code)}</div>
+                    <p class="reason">${escapeHtml(authError.reason)}</p>
                     <h2>How to fix:</h2>
                     <ol>${fixStepsHtml}</ol>
                     ${linksHtml ? `<h2>Helpful links:</h2><ul>${linksHtml}</ul>` : ""}
@@ -244,14 +272,18 @@ export class AuthServer {
     }
 
     if (openBrowser) {
+      // PKCE was just generated above, so these should always be set
+      if (!this.codeChallenge || !this.expectedState) {
+        throw new Error("PKCE not initialized - internal error");
+      }
       // Generate Auth URL using the newly created flow client with PKCE and state
       const authorizeUrl = this.flowOAuth2Client.generateAuthUrl({
         access_type: "offline",
         scope: getScopesForEnabledServices(),
         prompt: "consent",
         code_challenge_method: CodeChallengeMethod.S256,
-        code_challenge: this.codeChallenge!,
-        state: this.expectedState!,
+        code_challenge: this.codeChallenge,
+        state: this.expectedState,
       });
 
       console.error("\n🔐 AUTHENTICATION REQUIRED");
