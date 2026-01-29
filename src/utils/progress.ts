@@ -50,6 +50,7 @@ export function createProgressReporter(
 ): ProgressReporter {
   // Access the notification method on the server
   // The Server class has a notification method inherited from Protocol
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Accessing internal MCP Server method
   const serverAny = server as unknown as {
     notification(notification: { method: string; params: unknown }): Promise<void>;
   };

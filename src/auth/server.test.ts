@@ -101,22 +101,32 @@ describe("auth/server", () => {
         vi.mocked(fs.access).mockRejectedValue(fileError);
       });
 
-      it("starts server on available port", async () => {
+      it("starts server on ephemeral port", async () => {
         const result = await authServer.start(false);
 
         expect(result).toBe(true);
-        expect(authServer.getRunningPort()).toBeGreaterThanOrEqual(3000);
-        expect(authServer.getRunningPort()).toBeLessThanOrEqual(3004);
+        const port = authServer.getRunningPort();
+        expect(port).not.toBeNull();
+        // Ephemeral port should be > 0 (assigned by OS)
+        expect(port).toBeGreaterThan(0);
       });
 
-      it("returns port within expected range", async () => {
+      it("binds to 127.0.0.1 loopback address", async () => {
         await authServer.start(false);
 
         const port = authServer.getRunningPort();
         expect(port).not.toBeNull();
-        if (port !== null) {
-          expect(port >= 3000 && port <= 3004).toBe(true);
-        }
+
+        // Verify we can connect to 127.0.0.1 but the server is listening
+        const response = await new Promise<{ statusCode: number }>((resolve, reject) => {
+          const req = http.request(
+            { hostname: "127.0.0.1", port: port!, path: "/", method: "GET" },
+            (res) => resolve({ statusCode: res.statusCode || 0 }),
+          );
+          req.on("error", reject);
+          req.end();
+        });
+        expect(response.statusCode).toBe(200);
       });
     });
   });
@@ -172,7 +182,7 @@ describe("auth/server", () => {
       return new Promise((resolve, reject) => {
         const req = http.request(
           {
-            hostname: "localhost",
+            hostname: "127.0.0.1",
             port: serverPort,
             path,
             method: "GET",
@@ -204,8 +214,8 @@ describe("auth/server", () => {
     });
   });
 
-  describe("port availability", () => {
-    it("tries next port when current port is in use", async () => {
+  describe("ephemeral port binding", () => {
+    it("multiple servers get different ephemeral ports", async () => {
       const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
       fileError.code = "ENOENT";
 
@@ -217,7 +227,7 @@ describe("auth/server", () => {
       await server1.start(false);
       const port1 = server1.getRunningPort();
 
-      // Start second server (should use different port)
+      // Start second server (should get different ephemeral port)
       const server2 = new AuthServer(new OAuth2Client("test-client-id", "test-client-secret"));
       await server2.start(false);
       const port2 = server2.getRunningPort();
@@ -225,6 +235,9 @@ describe("auth/server", () => {
       expect(port1).not.toBeNull();
       expect(port2).not.toBeNull();
       expect(port1).not.toBe(port2);
+      // Both should be ephemeral ports (> 0)
+      expect(port1).toBeGreaterThan(0);
+      expect(port2).toBeGreaterThan(0);
 
       // Cleanup
       await server1.stop();
@@ -251,6 +264,136 @@ describe("auth/server", () => {
       await authServer.start(false);
 
       expect(authServer.authCompletedSuccessfully).toBe(true);
+    });
+  });
+
+  describe("PKCE (RFC 7636)", () => {
+    let localAuthServer: AuthServer;
+    let serverPort: number;
+
+    beforeEach(async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
+
+      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+      vi.mocked(fs.access).mockRejectedValue(fileError);
+
+      localAuthServer = new AuthServer(new OAuth2Client("test-client-id", "test-client-secret"));
+      await localAuthServer.start(false);
+      serverPort = localAuthServer.getRunningPort() as number;
+    });
+
+    afterEach(async () => {
+      await localAuthServer.stop();
+    });
+
+    it("includes code_challenge and code_challenge_method in auth URL", async () => {
+      const response = await new Promise<{ body: string }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: "127.0.0.1", port: serverPort, path: "/", method: "GET" },
+          (res) => {
+            let body = "";
+            res.on("data", (chunk) => (body += chunk));
+            res.on("end", () => resolve({ body }));
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+
+      // The auth URL in the page should contain PKCE parameters
+      expect(response.body).toContain("code_challenge=");
+      expect(response.body).toContain("code_challenge_method=S256");
+    });
+
+    it("includes state parameter in auth URL", async () => {
+      const response = await new Promise<{ body: string }>((resolve, reject) => {
+        const req = http.request(
+          { hostname: "127.0.0.1", port: serverPort, path: "/", method: "GET" },
+          (res) => {
+            let body = "";
+            res.on("data", (chunk) => (body += chunk));
+            res.on("end", () => resolve({ body }));
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+
+      // The auth URL should contain state parameter for CSRF protection
+      expect(response.body).toContain("state=");
+    });
+  });
+
+  describe("state validation (RFC 8252 section 8.9)", () => {
+    let localAuthServer: AuthServer;
+    let serverPort: number;
+
+    beforeEach(async () => {
+      const fileError = new Error("ENOENT") as NodeJS.ErrnoException;
+      fileError.code = "ENOENT";
+
+      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+      vi.mocked(fs.access).mockRejectedValue(fileError);
+
+      localAuthServer = new AuthServer(new OAuth2Client("test-client-id", "test-client-secret"));
+      await localAuthServer.start(false);
+      serverPort = localAuthServer.getRunningPort() as number;
+    });
+
+    afterEach(async () => {
+      await localAuthServer.stop();
+    });
+
+    it("rejects callback with mismatched state parameter", async () => {
+      const response = await new Promise<{ statusCode: number; body: string }>(
+        (resolve, reject) => {
+          const req = http.request(
+            {
+              hostname: "127.0.0.1",
+              port: serverPort,
+              path: "/oauth2callback?code=test-code&state=invalid-state",
+              method: "GET",
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (chunk) => (body += chunk));
+              res.on("end", () => resolve({ statusCode: res.statusCode || 0, body }));
+            },
+          );
+          req.on("error", reject);
+          req.end();
+        },
+      );
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toContain("Invalid state parameter");
+      expect(response.body).toContain("CSRF");
+    });
+
+    it("rejects callback with missing state parameter when state is expected", async () => {
+      const response = await new Promise<{ statusCode: number; body: string }>(
+        (resolve, reject) => {
+          const req = http.request(
+            {
+              hostname: "127.0.0.1",
+              port: serverPort,
+              path: "/oauth2callback?code=test-code",
+              method: "GET",
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (chunk) => (body += chunk));
+              res.on("end", () => resolve({ statusCode: res.statusCode || 0, body }));
+            },
+          );
+          req.on("error", reject);
+          req.end();
+        },
+      );
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toContain("Invalid state parameter");
     });
   });
 });

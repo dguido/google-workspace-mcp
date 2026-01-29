@@ -587,6 +587,7 @@ export async function handleExportFile(
     { responseType: "arraybuffer" },
   );
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
   const buffer = Buffer.from(response.data as ArrayBuffer);
 
   // If outputPath is provided, save to file
@@ -847,6 +848,7 @@ export async function handleRestoreRevision(
 
   // Update file with revision content
   const { Readable } = await import("stream");
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
   const stream = Readable.from(Buffer.from(revisionContent.data as ArrayBuffer));
 
   await drive.files.update({
@@ -919,6 +921,7 @@ export async function handleDownloadFile(
     { responseType: "arraybuffer" },
   );
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
   const buffer = Buffer.from(response.data as ArrayBuffer);
 
   // If outputPath provided, save to file

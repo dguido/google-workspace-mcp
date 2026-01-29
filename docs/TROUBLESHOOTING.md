@@ -25,19 +25,13 @@ OAuth credentials not found. Please provide credentials using one of these metho
 **Possible causes:**
 
 1. **Wrong credential type**: Must be "Desktop app", not "Web application"
-2. **Port blocked**: Ports 3000-3004 must be available
-3. **Test user not added**: Add your email in OAuth consent screen
+2. **Test user not added**: Add your email in OAuth consent screen
 
 **Solution:**
 
+The authentication server uses an ephemeral port assigned by the OS, so no specific ports need to be available. Verify your credentials are the correct type and re-run:
+
 ```bash
-# Check if ports are in use
-lsof -i :3000-3004
-
-# Kill processes if needed
-kill -9 <PID>
-
-# Re-run authentication
 npx @dguido/google-workspace-mcp auth
 ```
 
@@ -47,6 +41,7 @@ npx @dguido/google-workspace-mcp auth
 
 - Google automatically expires refresh tokens after 7 days
 - You'll need to re-authenticate weekly until you publish your app
+- Use `get_status` with `diagnose: true` to check token age and get warnings before expiry
 
 **Solution:**
 
@@ -56,10 +51,22 @@ rm ~/.config/google-workspace-mcp/tokens.json
 npx @dguido/google-workspace-mcp auth
 ```
 
-**For production:**
+**To avoid weekly re-authentication:**
 
-- Move app to "Published" status in Google Cloud Console
-- Complete OAuth verification process
+1. **Publish your OAuth app** (recommended for personal use):
+   - Go to Google Cloud Console > APIs & Services > OAuth consent screen
+   - Click "PUBLISH APP"
+   - You don't need to complete Google's verification for personal use
+   - Published apps keep tokens valid indefinitely
+
+2. **Use Internal app type** (Google Workspace only):
+   - Set User Type to "Internal" on OAuth consent screen
+   - Internal apps never expire tokens
+
+**For production/public apps:**
+
+- Complete OAuth verification process to remove user limits
+- See [Google's OAuth verification guide](https://support.google.com/cloud/answer/9110914)
 
 ### "Login Required" error even with valid tokens
 

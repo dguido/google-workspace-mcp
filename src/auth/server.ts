@@ -1,4 +1,5 @@
-import { OAuth2Client } from "google-auth-library";
+import crypto from "crypto";
+import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
 import { TokenManager } from "./tokenManager.js";
 import http from "http";
 import os from "os";
@@ -7,53 +8,87 @@ import { URL } from "url";
 import open from "open";
 import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
+import { mapGoogleError } from "../errors/index.js";
+import { getScopesForEnabledServices } from "../config/scopes.js";
 
-// OAuth scopes for Google Drive, Docs, Sheets, Slides, Calendar, Gmail, and Contacts
-const SCOPES = [
-  "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly",
-  "https://www.googleapis.com/auth/documents",
-  "https://www.googleapis.com/auth/spreadsheets",
-  "https://www.googleapis.com/auth/presentations",
-  "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/gmail.modify",
-  "https://mail.google.com/", // Required for message deletion
-  "https://www.googleapis.com/auth/gmail.settings.basic",
-  "https://www.googleapis.com/auth/contacts",
-];
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export class AuthServer {
-  private baseOAuth2Client: OAuth2Client; // Used by TokenManager for validation/refresh
   private flowOAuth2Client: OAuth2Client | null = null; // Used specifically for the auth code flow
   private server: http.Server | null = null;
   private tokenManager: TokenManager;
-  private portRange: { start: number; end: number };
+  private codeVerifier: string | null = null;
+  private codeChallenge: string | null = null;
+  private expectedState: string | null = null;
   public authCompletedSuccessfully = false; // Flag for standalone script
 
   constructor(oauth2Client: OAuth2Client) {
-    this.baseOAuth2Client = oauth2Client;
     this.tokenManager = new TokenManager(oauth2Client);
-    this.portRange = { start: 3000, end: 3004 };
   }
 
   private createServer(): http.Server {
     return http.createServer(async (req, res) => {
-      const url = new URL(req.url || "/", `http://localhost`);
+      const url = new URL(req.url || "/", `http://127.0.0.1`);
 
       if (url.pathname === "/") {
-        // Handle root - show auth link
-        const clientForUrl = this.flowOAuth2Client || this.baseOAuth2Client;
-        const authUrl = clientForUrl.generateAuthUrl({
+        // Handle root - show auth link (only if auth flow is properly initialized)
+        if (!this.flowOAuth2Client) {
+          res.writeHead(503, { "Content-Type": "text/plain" });
+          res.end("Authentication server is starting. Please wait and refresh.");
+          return;
+        }
+        if (!this.codeChallenge || !this.expectedState) {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+          res.end("PKCE not initialized - call start() first");
+          return;
+        }
+        const authUrl = this.flowOAuth2Client.generateAuthUrl({
           access_type: "offline",
-          scope: SCOPES,
+          scope: getScopesForEnabledServices(),
           prompt: "consent",
+          code_challenge_method: CodeChallengeMethod.S256,
+          code_challenge: this.codeChallenge,
+          state: this.expectedState,
         });
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end(
           `<h1>Google Drive Authentication</h1><a href="${authUrl}">Authenticate with Google</a>`,
         );
       } else if (url.pathname === "/oauth2callback") {
+        // Validate state parameter (CSRF protection per RFC 8252 section 8.9)
+        const receivedState = url.searchParams.get("state");
+        if (
+          !this.expectedState ||
+          !receivedState ||
+          !timingSafeEqual(receivedState, this.expectedState)
+        ) {
+          res.writeHead(400, { "Content-Type": "text/html" });
+          res.end(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><title>Authentication Failed</title>
+            <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f4f4f4;margin:0}.container{text-align:center;padding:2em;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}h1{color:#F44336}</style>
+            </head>
+            <body><div class="container"><h1>Authentication Failed</h1><p>Invalid state parameter. This may indicate a CSRF attack.</p><p>Please close this window and try again.</p></div></body>
+            </html>
+          `);
+          return;
+        }
+
         // Handle OAuth callback
         const code = url.searchParams.get("code");
         if (!code) {
@@ -68,10 +103,23 @@ export class AuthServer {
           return;
         }
         try {
-          const { tokens } = await this.flowOAuth2Client.getToken(code);
+          const { tokens } = await this.flowOAuth2Client.getToken({
+            code,
+            codeVerifier: this.codeVerifier || undefined,
+          });
           // Save tokens using the TokenManager (which uses the base client)
           await this.tokenManager.saveTokens(tokens);
           this.authCompletedSuccessfully = true;
+
+          // Clear sensitive PKCE/state values after use
+          this.codeVerifier = null;
+          this.codeChallenge = null;
+          this.expectedState = null;
+
+          // Schedule server shutdown after response completes
+          setTimeout(() => {
+            this.stop().catch((err) => log("Auth server shutdown error:", err));
+          }, 2000);
 
           // Get the path where tokens were saved
           const tokenPath = this.tokenManager.getTokenPath();
@@ -84,7 +132,7 @@ export class AuthServer {
             ? `
                     <div class="warning">
                         <p><strong>⚠️ Security:</strong> Add your credentials directory to .gitignore:</p>
-                        <p><code>${credentialsDir}/</code></p>
+                        <p><code>${escapeHtml(credentialsDir)}/</code></p>
                     </div>`
             : "";
 
@@ -111,7 +159,7 @@ export class AuthServer {
                 <div class="container">
                     <h1>Authentication Successful!</h1>
                     <p>Your authentication tokens have been saved successfully to:</p>
-                    <p><code>${tokenPath}</code></p>${gitignoreWarning}
+                    <p><code>${escapeHtml(tokenPath)}</code></p>${gitignoreWarning}
                     <p style="margin-top: 1em;">You can now close this browser window.</p>
                 </div>
             </body>
@@ -119,8 +167,29 @@ export class AuthServer {
           `);
         } catch (error: unknown) {
           this.authCompletedSuccessfully = false;
-          const message = error instanceof Error ? error.message : "Unknown error";
-          // Send an HTML error response
+          // Clear sensitive PKCE/state values on error as well
+          this.codeVerifier = null;
+          this.codeChallenge = null;
+          this.expectedState = null;
+
+          // Map the error to get actionable guidance
+          const authError = mapGoogleError(error);
+          log("OAuth callback error:", authError.toToolResponse());
+
+          // Build fix steps HTML (escape all dynamic content)
+          const fixStepsHtml = authError.fix
+            .map((step, i) => `<li>${i + 1}. ${escapeHtml(step)}</li>`)
+            .join("");
+          const linksHtml = authError.links
+            ? authError.links
+                .map(
+                  (link) =>
+                    `<li><a href="${escapeHtml(link.url)}" target="_blank">${escapeHtml(link.label)}</a></li>`,
+                )
+                .join("")
+            : "";
+
+          // Send an HTML error response with actionable guidance
           res.writeHead(500, { "Content-Type": "text/html" });
           res.end(`
             <!DOCTYPE html>
@@ -130,18 +199,27 @@ export class AuthServer {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Authentication Failed</title>
                 <style>
-                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f4; margin: 0; }
-                    .container { text-align: center; padding: 2em; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                    h1 { color: #F44336; }
-                    p { color: #333; }
+                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f4f4f4; margin: 0; padding: 1em; }
+                    .container { text-align: left; padding: 2em; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; }
+                    h1 { color: #F44336; text-align: center; }
+                    .error-code { background-color: #ffebee; color: #c62828; padding: 0.5em 1em; border-radius: 4px; font-family: monospace; margin: 1em 0; }
+                    .reason { color: #333; margin-bottom: 1.5em; }
+                    h2 { color: #1976d2; font-size: 1.1em; margin-top: 1.5em; }
+                    ol { padding-left: 1.5em; }
+                    li { margin-bottom: 0.5em; color: #555; }
+                    ul { padding-left: 1em; list-style: none; }
+                    ul li { margin-bottom: 0.3em; }
+                    a { color: #1976d2; }
                 </style>
             </head>
             <body>
                 <div class="container">
                     <h1>Authentication Failed</h1>
-                    <p>An error occurred during authentication:</p>
-                    <p><code>${message}</code></p>
-                    <p>Please try again or check the server logs.</p>
+                    <div class="error-code">${escapeHtml(authError.code)}</div>
+                    <p class="reason">${escapeHtml(authError.reason)}</p>
+                    <h2>How to fix:</h2>
+                    <ol>${fixStepsHtml}</ol>
+                    ${linksHtml ? `<h2>Helpful links:</h2><ul>${linksHtml}</ul>` : ""}
                 </div>
             </body>
             </html>
@@ -170,11 +248,21 @@ export class AuthServer {
     // Successfully started server on `port`. Now create the flow-specific OAuth client.
     try {
       const { client_id, client_secret } = await loadCredentials();
+      // Use 127.0.0.1 loopback only (RFC 8252 section 7.3)
       this.flowOAuth2Client = new OAuth2Client(
         client_id,
         client_secret || undefined,
-        `http://localhost:${port}/oauth2callback`,
+        `http://127.0.0.1:${port}/oauth2callback`,
       );
+
+      // Generate PKCE parameters (RFC 7636)
+      const { codeVerifier, codeChallenge } =
+        await this.flowOAuth2Client.generateCodeVerifierAsync();
+      this.codeVerifier = codeVerifier ?? null;
+      this.codeChallenge = codeChallenge ?? null;
+
+      // Generate state for CSRF protection (RFC 8252 section 8.9)
+      this.expectedState = crypto.randomBytes(32).toString("base64url");
     } catch (error) {
       // Could not load credentials, cannot proceed with auth flow
       log("Failed to load credentials for auth flow:", error);
@@ -184,11 +272,18 @@ export class AuthServer {
     }
 
     if (openBrowser) {
-      // Generate Auth URL using the newly created flow client
+      // PKCE was just generated above, so these should always be set
+      if (!this.codeChallenge || !this.expectedState) {
+        throw new Error("PKCE not initialized - internal error");
+      }
+      // Generate Auth URL using the newly created flow client with PKCE and state
       const authorizeUrl = this.flowOAuth2Client.generateAuthUrl({
         access_type: "offline",
-        scope: SCOPES,
+        scope: getScopesForEnabledServices(),
         prompt: "consent",
+        code_challenge_method: CodeChallengeMethod.S256,
+        code_challenge: this.codeChallenge,
+        state: this.expectedState,
       });
 
       console.error("\n🔐 AUTHENTICATION REQUIRED");
@@ -203,46 +298,30 @@ export class AuthServer {
   }
 
   private async startServerOnAvailablePort(): Promise<number | null> {
-    for (let port = this.portRange.start; port <= this.portRange.end; port++) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          // Create a new server instance for this port attempt
-          const testServer = this.createServer();
-          testServer.listen(port, () => {
-            this.server = testServer; // Assign to class property *only* if successful
-            console.error(`Authentication server listening on http://localhost:${port}`);
-            resolve();
-          });
-          testServer.on("error", (err: NodeJS.ErrnoException) => {
-            if (err.code === "EADDRINUSE") {
-              // Port is in use, close the test server and reject
-              testServer.close(() => reject(err));
-            } else {
-              // Other error, reject
-              reject(err);
-            }
-          });
-        });
-        return port; // Port successfully bound
-      } catch (error: unknown) {
-        // Check if it's EADDRINUSE, otherwise rethrow or handle
-        const nodeErr = error as NodeJS.ErrnoException;
-        if (nodeErr.code !== "EADDRINUSE") {
-          // An unexpected error occurred during server start
-          log("Failed to start auth server:", error);
-          return null;
+    return new Promise<number>((resolve, reject) => {
+      const server = this.createServer();
+
+      // Bind to port 0 on 127.0.0.1 only (RFC 8252 section 7.3)
+      // Port 0 tells the OS to assign an available ephemeral port
+      server.listen(0, "127.0.0.1", () => {
+        this.server = server;
+        const address = server.address();
+        if (typeof address === "object" && address !== null) {
+          console.error(`Authentication server listening on http://127.0.0.1:${address.port}`);
+          resolve(address.port);
+        } else {
+          reject(new Error("Failed to get server address"));
         }
-        // EADDRINUSE occurred, loop continues
-      }
-    }
-    console.error(
-      "No available ports for authentication server (tried ports",
-      this.portRange.start,
-      "-",
-      this.portRange.end,
-      ")",
-    );
-    return null; // No port found
+      });
+
+      server.on("error", (err) => {
+        log("Failed to start auth server:", err);
+        reject(err);
+      });
+    }).catch((err) => {
+      log("Failed to start auth server:", err);
+      return null;
+    });
   }
 
   public getRunningPort(): number | null {

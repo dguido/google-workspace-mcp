@@ -16,6 +16,11 @@ export const SERVICE_NAMES = [
 ] as const;
 export type ServiceName = (typeof SERVICE_NAMES)[number];
 
+/** Type guard to check if a string is a valid service name */
+function isServiceName(value: string): value is ServiceName {
+  return (SERVICE_NAMES as readonly string[]).includes(value);
+}
+
 /** Unified tools require all these services to function */
 const UNIFIED_REQUIRED_SERVICES: ServiceName[] = ["drive", "docs", "sheets", "slides"];
 
@@ -56,8 +61,8 @@ export function getEnabledServices(): Set<ServiceName> {
   const unknown: string[] = [];
 
   for (const service of requested) {
-    if (SERVICE_NAMES.includes(service as ServiceName)) {
-      valid.add(service as ServiceName);
+    if (isServiceName(service)) {
+      valid.add(service);
     } else {
       unknown.push(service);
     }

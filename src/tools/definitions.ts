@@ -3705,6 +3705,121 @@ export const discoveryTools: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: "get_status",
+    description:
+      "Get server status including health, authentication, and enabled services. " +
+      "Use diagnose=true for full diagnostic with actionable recommendations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        diagnose: {
+          type: "boolean",
+          description: "Run full diagnostic with recommendations (default: false)",
+          default: false,
+        },
+        validate_with_api: {
+          type: "boolean",
+          description: "Validate with API call when diagnose=true (default: false)",
+          default: false,
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "string",
+          enum: ["ok", "warning", "error"],
+          description: "Overall status",
+        },
+        version: { type: "string", description: "Server version" },
+        uptime_seconds: { type: "number", description: "Server uptime in seconds" },
+        timestamp: { type: "string", description: "ISO 8601 timestamp" },
+        auth: {
+          type: "object",
+          description: "Authentication status",
+          properties: {
+            configured: {
+              type: "boolean",
+              description: "Whether OAuth credentials are configured",
+            },
+            token_status: {
+              type: "string",
+              enum: ["valid", "expired", "missing", "invalid"],
+              description: "Token status",
+            },
+            token_expires_at: {
+              type: "string",
+              description: "ISO 8601 timestamp when token expires (null if not available)",
+            },
+            has_refresh_token: { type: "boolean", description: "Whether a refresh token exists" },
+            scopes: {
+              type: "array",
+              items: { type: "string" },
+              description: "OAuth scopes granted",
+            },
+          },
+        },
+        enabled_services: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of enabled Google Workspace services",
+        },
+        config_checks: {
+          type: "array",
+          description: "Configuration checks (only when diagnose=true)",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Check name" },
+              status: { type: "string", enum: ["ok", "warning", "error"] },
+              message: { type: "string", description: "Status message" },
+              fix: {
+                type: "array",
+                items: { type: "string" },
+                description: "Fix steps if status is not ok",
+              },
+            },
+          },
+        },
+        token_check: {
+          type: "object",
+          description: "Detailed token info (only when diagnose=true)",
+          properties: {
+            has_access_token: { type: "boolean" },
+            has_refresh_token: { type: "boolean" },
+            is_expired: { type: "boolean" },
+            expires_at: { type: "string", description: "ISO 8601 timestamp or null" },
+            scopes: { type: "array", items: { type: "string" } },
+          },
+        },
+        last_error: {
+          type: "object",
+          description: "Last auth error (only when diagnose=true)",
+          properties: {
+            code: { type: "string", description: "Error code" },
+            reason: { type: "string", description: "Error reason" },
+            fix: { type: "array", items: { type: "string" }, description: "Fix steps" },
+          },
+        },
+        api_validation: {
+          type: "object",
+          description: "API validation result (only when validate_with_api=true)",
+          properties: {
+            success: { type: "boolean" },
+            user_email: { type: "string", description: "Authenticated user email if successful" },
+            error: { type: "string", description: "Error message if failed" },
+          },
+        },
+        recommendations: {
+          type: "array",
+          description: "Actionable recommendations (only when diagnose=true)",
+          items: { type: "string" },
+        },
+      },
+    },
+  },
 ];
 
 /**

@@ -39,6 +39,7 @@ export interface ElicitConfirmationResult {
  */
 export function supportsFormElicitation(server: Server): boolean {
   // Access the private _clientCapabilities field
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Accessing private _clientCapabilities
   const serverAny = server as unknown as {
     _clientCapabilities?: { elicitation?: { form?: boolean } };
   };

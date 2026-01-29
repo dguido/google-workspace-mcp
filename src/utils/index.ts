@@ -1,8 +1,10 @@
 export { log } from "./logging.js";
+export { isNodeError } from "./node-errors.js";
 export {
   successResponse,
   structuredResponse,
   errorResponse,
+  authErrorResponse,
   truncateResponse,
 } from "./responses.js";
 export type { ToolResponse, ErrorCode, ErrorOptions, TruncationResult } from "./responses.js";

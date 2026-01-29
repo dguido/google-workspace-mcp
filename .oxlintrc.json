@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "rules": {
+    "no-console": "off",
+    "typescript/no-unsafe-type-assertion": "warn",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-unsafe-assignment": "warn",
+    "typescript/no-unsafe-return": "warn",
+    "typescript/unbound-method": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/no-base-to-string": "off"
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**"]
+}

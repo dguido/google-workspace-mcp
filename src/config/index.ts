@@ -6,3 +6,5 @@ export {
   areUnifiedToolsEnabled,
   resetServiceConfig,
 } from "./services.js";
+
+export { getScopesForEnabledServices } from "./scopes.js";

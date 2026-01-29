@@ -114,6 +114,9 @@ export {
 // Discovery handlers
 export { handleListTools } from "./discovery.js";
 
+// Status handler
+export { handleGetStatus } from "./status.js";
+
 // Helper utilities
 export {
   FOLDER_MIME_TYPE,
