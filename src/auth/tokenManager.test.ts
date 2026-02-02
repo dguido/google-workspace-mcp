@@ -154,6 +154,7 @@ describe("auth/tokenManager", () => {
 
       expect(fs.mkdir).toHaveBeenCalledWith("/mock/path/.config/google-workspace-mcp", {
         recursive: true,
+        mode: 0o700,
       });
     });
 

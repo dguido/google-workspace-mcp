@@ -1,6 +1,7 @@
 import { OAuth2Client, Credentials } from "google-auth-library";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { Mutex } from "async-mutex";
 import { getSecureTokenPath } from "./utils.js";
 import { log, isNodeError } from "../utils/index.js";
 import { mapGoogleError, type GoogleAuthError } from "../errors/index.js";
@@ -8,17 +9,17 @@ import { parseStoredCredentials, type StoredCredentials } from "../types/credent
 
 export type { StoredCredentials };
 
-/** Last auth error for diagnostic purposes */
-let lastAuthError: GoogleAuthError | null = null;
+/** Singleton TokenManager instance for module-level error access */
+let activeTokenManager: TokenManager | null = null;
 
-/** Get the last auth error that occurred */
+/** Get the last auth error that occurred (from active TokenManager) */
 export function getLastTokenAuthError(): GoogleAuthError | null {
-  return lastAuthError;
+  return activeTokenManager?.getLastError() ?? null;
 }
 
-/** Clear the last auth error */
+/** Clear the last auth error (from active TokenManager) */
 export function clearLastTokenAuthError(): void {
-  lastAuthError = null;
+  activeTokenManager?.clearLastError();
 }
 
 export class TokenManager {
@@ -26,12 +27,26 @@ export class TokenManager {
   private tokenPath: string;
   private accountEmail?: string;
   private refreshInProgress: Promise<boolean> | null = null;
+  private lastAuthError: GoogleAuthError | null = null;
+  private tokenFileMutex = new Mutex();
 
   constructor(oauth2Client: OAuth2Client, accountEmail?: string) {
     this.oauth2Client = oauth2Client;
     this.tokenPath = getSecureTokenPath();
     this.accountEmail = accountEmail;
     this.setupTokenRefresh();
+    // Register as active manager for module-level error access
+    activeTokenManager = this;
+  }
+
+  /** Get the last auth error that occurred */
+  public getLastError(): GoogleAuthError | null {
+    return this.lastAuthError;
+  }
+
+  /** Clear the last auth error */
+  public clearLastError(): void {
+    this.lastAuthError = null;
   }
 
   /** Method to expose the token path */
@@ -63,7 +78,7 @@ export class TokenManager {
   private async ensureTokenDirectoryExists(): Promise<void> {
     try {
       const dir = path.dirname(this.tokenPath);
-      await fs.mkdir(dir, { recursive: true });
+      await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     } catch (error: unknown) {
       // Ignore errors if directory already exists, re-throw others
       if (isNodeError(error) && error.code !== "EEXIST") {
@@ -75,14 +90,20 @@ export class TokenManager {
 
   /**
    * Sets up automatic token persistence when OAuth2Client emits 'tokens' events.
-   *
-   * Note: This handler has a potential race condition if multiple token refresh
-   * events fire rapidly (the file read/merge/write is not atomic). This is
-   * acceptable for single-user CLI usage but would need a mutex for multi-process
-   * scenarios.
+   * Uses a mutex to prevent race conditions when multiple refresh events fire rapidly.
    */
   private setupTokenRefresh(): void {
-    this.oauth2Client.on("tokens", async (newTokens) => {
+    this.oauth2Client.on("tokens", (newTokens) => {
+      void this.updateTokensFile(newTokens);
+    });
+  }
+
+  /**
+   * Safely update the token file with new tokens, using mutex to prevent races.
+   * Merges new tokens with existing ones, preserving refresh_token and created_at.
+   */
+  private async updateTokensFile(newTokens: Credentials): Promise<void> {
+    await this.tokenFileMutex.runExclusive(async () => {
       try {
         await this.ensureTokenDirectoryExists();
         const content = await fs.readFile(this.tokenPath, "utf-8");
@@ -196,10 +217,10 @@ export class TokenManager {
         return true;
       } catch (refreshError) {
         const authError = mapGoogleError(refreshError, { account: this.accountEmail });
-        lastAuthError = authError;
+        this.lastAuthError = authError;
         log("Token refresh failed:", authError.toToolResponse());
 
-        if (authError.code === "INVALID_GRANT" || authError.code === "TOKEN_REVOKED") {
+        if (authError.requiresTokenClear()) {
           await this.clearTokens();
         }
 

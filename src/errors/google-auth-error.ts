@@ -7,6 +7,7 @@ export type AuthErrorCode =
   | "OAUTH_NOT_CONFIGURED"
   | "REDIRECT_URI_MISMATCH"
   | "INVALID_CLIENT"
+  | "DELETED_CLIENT"
   | "INVALID_GRANT"
   | "ACCESS_DENIED"
   | "TOKEN_EXPIRED"
@@ -62,6 +63,20 @@ export class GoogleAuthError extends Error {
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, GoogleAuthError);
     }
+  }
+
+  /** Check if this error indicates the OAuth client is invalid/deleted */
+  isClientInvalid(): boolean {
+    return this.code === "DELETED_CLIENT" || this.code === "INVALID_CLIENT";
+  }
+
+  /** Check if this error requires clearing stored tokens */
+  requiresTokenClear(): boolean {
+    return (
+      this.code === "INVALID_GRANT" ||
+      this.code === "TOKEN_REVOKED" ||
+      this.code === "DELETED_CLIENT"
+    );
   }
 
   /**

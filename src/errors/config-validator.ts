@@ -4,7 +4,7 @@
  */
 
 import * as fs from "fs/promises";
-import { getKeysFilePath, getSecureTokenPath } from "../auth/utils.js";
+import { getKeysFilePath, getSecureTokenPath, extractCredentials } from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
 import type { CredentialsFile } from "../types/credentials.js";
 
@@ -75,14 +75,10 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
     return { valid: false, errors, warnings };
   }
 
-  // Extract client_id from various credential formats
-  const clientId =
-    credentials.installed?.client_id || credentials.web?.client_id || credentials.client_id;
-
-  const clientSecret =
-    credentials.installed?.client_secret ||
-    credentials.web?.client_secret ||
-    credentials.client_secret;
+  // Extract credentials using shared helper
+  const extracted = extractCredentials(credentials);
+  const clientId = extracted?.client_id;
+  const clientSecret = extracted?.client_secret;
 
   // Validate client_id exists
   if (!clientId) {

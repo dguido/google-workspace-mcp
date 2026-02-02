@@ -64,6 +64,8 @@ export function mapGoogleError(error: unknown, context: MapperContext = {}): Goo
       return createRedirectUriMismatchError(description, error, context);
     case "invalid_client":
       return createInvalidClientError(description, error, context);
+    case "deleted_client":
+      return createDeletedClientError(description, error, context);
     case "invalid_grant":
       return createInvalidGrantError(description, error, context);
     case "access_denied":
@@ -143,6 +145,27 @@ function createInvalidClientError(
       { label: "Google Cloud Credentials", url: `${CONSOLE_URL}/apis/credentials` },
       { label: "Download Credentials Help", url: `${CONSOLE_URL}/apis/credentials` },
     ],
+    originalError,
+    ...context,
+  });
+}
+
+function createDeletedClientError(
+  description: string,
+  originalError: Error,
+  context: MapperContext,
+): GoogleAuthError {
+  return new GoogleAuthError({
+    code: "DELETED_CLIENT",
+    reason: `OAuth client has been deleted from Google Cloud: ${description}`,
+    fix: [
+      "The OAuth client in your credentials file no longer exists in Google Cloud",
+      "Go to Google Cloud Console > APIs & Services > Credentials",
+      "Create a new OAuth 2.0 Client ID (Desktop app type)",
+      "Download and save as gcp-oauth.keys.json",
+      "Delete existing tokens and re-authenticate",
+    ],
+    links: [{ label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` }],
     originalError,
     ...context,
   });
