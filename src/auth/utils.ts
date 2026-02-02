@@ -1,5 +1,27 @@
 import * as path from "path";
 import * as os from "os";
+import * as fs from "fs/promises";
+
+/**
+ * Get the config directory following XDG Base Directory spec.
+ * XDG_CONFIG_HOME must be absolute path per spec; falls back to ~/.config if invalid.
+ */
+export function getConfigDirectory(): string {
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+  const configHome =
+    xdgConfigHome && path.isAbsolute(xdgConfigHome)
+      ? xdgConfigHome
+      : path.join(os.homedir(), ".config");
+  return path.join(configHome, "google-workspace-mcp");
+}
+
+/**
+ * Get the legacy keys file path (cwd-based, pre-3.x behavior).
+ * Used for migration fallback to maintain backwards compatibility.
+ */
+export function getLegacyKeysFilePath(): string {
+  return path.join(process.cwd(), "gcp-oauth.keys.json");
+}
 
 // Returns the absolute path for the saved token file.
 // Uses XDG Base Directory spec with fallback to home directory
@@ -23,20 +45,22 @@ export function getSecureTokenPath(): string {
   return path.join(tokenDir, "tokens.json");
 }
 
-// Returns the absolute path for the GCP OAuth keys file with priority:
-// 1. Environment variable GOOGLE_DRIVE_OAUTH_CREDENTIALS (highest priority)
-// 2. Current working directory (works for both local dev and npx)
+/**
+ * Returns the absolute path for the GCP OAuth keys file with priority:
+ * 1. Environment variable GOOGLE_DRIVE_OAUTH_CREDENTIALS (highest priority, for power users)
+ * 2. New default in config directory: ~/.config/google-workspace-mcp/credentials.json
+ *
+ * Legacy fallback to ./gcp-oauth.keys.json is handled in loadCredentialsWithFallback().
+ */
 export function getKeysFilePath(): string {
-  // Priority 1: Environment variable
+  // Priority 1: Environment variable (power users)
   const envCredentialsPath = process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
   if (envCredentialsPath) {
     return path.resolve(envCredentialsPath);
   }
 
-  // Priority 2: Current working directory
-  // For local dev: user runs from project root, so cwd has the keys
-  // For npx: user runs from a directory where they've placed their keys
-  return path.join(process.cwd(), "gcp-oauth.keys.json");
+  // Priority 2: New default in config directory
+  return path.join(getConfigDirectory(), "credentials.json");
 }
 
 // Interface for OAuth credentials
@@ -93,15 +117,18 @@ export function extractCredentials(keys: CredentialsFileInput): OAuthCredentials
 
 // Generate helpful error message for missing credentials
 export function generateCredentialsErrorMessage(): string {
+  const configDir = getConfigDirectory();
+  const defaultPath = path.join(configDir, "credentials.json");
+
   return `
 OAuth credentials not found. Please provide credentials using one of these methods:
 
-1. Environment variable:
-   Set GOOGLE_DRIVE_OAUTH_CREDENTIALS to the path of your credentials file:
-   export GOOGLE_DRIVE_OAUTH_CREDENTIALS="/path/to/gcp-oauth.keys.json"
+1. Default location (recommended):
+   Save your credentials file to: ${defaultPath}
 
-2. Default file path:
-   Place your gcp-oauth.keys.json file in the package root directory.
+2. Environment variable (for custom paths):
+   Set GOOGLE_DRIVE_OAUTH_CREDENTIALS to the path of your credentials file:
+   export GOOGLE_DRIVE_OAUTH_CREDENTIALS="/path/to/credentials.json"
 
 Token storage:
 - Tokens are saved to: ${getSecureTokenPath()}
@@ -112,6 +139,33 @@ To get OAuth credentials:
 2. Create or select a project
 3. Enable the Google Drive, Docs, Sheets, and Slides APIs
 4. Create OAuth 2.0 credentials (Desktop app type)
-5. Download the credentials file as gcp-oauth.keys.json
+5. Download the credentials file and save to: ${defaultPath}
 `.trim();
+}
+
+export interface ResolvedCredentialsPath {
+  path: string;
+  isLegacy: boolean;
+  exists: boolean;
+}
+
+/**
+ * Resolve the actual credentials path, checking new default then legacy locations.
+ * Returns the path that exists (preferring new location), whether it's legacy, and if it exists.
+ */
+export async function resolveCredentialsPath(): Promise<ResolvedCredentialsPath> {
+  const keysPath = getKeysFilePath();
+  const legacyPath = getLegacyKeysFilePath();
+
+  try {
+    await fs.access(keysPath);
+    return { path: keysPath, isLegacy: false, exists: true };
+  } catch {
+    try {
+      await fs.access(legacyPath);
+      return { path: legacyPath, isLegacy: true, exists: true };
+    } catch {
+      return { path: keysPath, isLegacy: false, exists: false };
+    }
+  }
 }

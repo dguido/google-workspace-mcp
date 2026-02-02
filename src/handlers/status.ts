@@ -6,7 +6,7 @@ import * as fs from "fs/promises";
 import { structuredResponse, type ToolResponse } from "../utils/responses.js";
 import { validateArgs, isNodeError } from "../utils/index.js";
 import { getEnabledServices, SERVICE_NAMES, type ServiceName } from "../config/services.js";
-import { getSecureTokenPath, getKeysFilePath } from "../auth/utils.js";
+import { getSecureTokenPath, getKeysFilePath, resolveCredentialsPath } from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
 import { GetStatusSchema } from "../schemas/status.js";
@@ -87,14 +87,11 @@ export interface StatusData extends Record<string, unknown> {
 
 /**
  * Check if OAuth credentials file exists.
+ * Checks both new default location and legacy location.
  */
 async function credentialsFileExists(): Promise<boolean> {
-  try {
-    await fs.access(getKeysFilePath());
-    return true;
-  } catch {
-    return false;
-  }
+  const resolved = await resolveCredentialsPath();
+  return resolved.exists;
 }
 
 /**
@@ -180,13 +177,13 @@ async function getTokenInfo(): Promise<{
 
 /**
  * Check if credentials file exists and is valid (for diagnostic mode).
+ * Checks both new default location and legacy location.
  */
 async function checkCredentialsFile(): Promise<ConfigCheck> {
   const keysPath = getKeysFilePath();
+  const resolved = await resolveCredentialsPath();
 
-  try {
-    await fs.access(keysPath);
-  } catch {
+  if (!resolved.exists) {
     return {
       name: "credentials_file",
       status: "error",
@@ -201,7 +198,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
   }
 
   try {
-    const content = await fs.readFile(keysPath, "utf-8");
+    const content = await fs.readFile(resolved.path, "utf-8");
     const parsed = JSON.parse(content) as CredentialsFile;
     const clientId = parsed.installed?.client_id || parsed.web?.client_id || parsed.client_id;
 
@@ -226,10 +223,23 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
       };
     }
 
+    // Valid credentials found
+    if (resolved.isLegacy) {
+      return {
+        name: "credentials_file",
+        status: "warning",
+        message: `Using legacy credentials location: ${resolved.path}`,
+        fix: [
+          `Move credentials to: ${keysPath}`,
+          "This silences this warning and follows the new default",
+        ],
+      };
+    }
+
     return {
       name: "credentials_file",
       status: "ok",
-      message: `Valid credentials file at: ${keysPath}`,
+      message: `Valid credentials file at: ${resolved.path}`,
     };
   } catch (parseError) {
     return {

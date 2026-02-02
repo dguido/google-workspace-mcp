@@ -4,7 +4,13 @@
  */
 
 import * as fs from "fs/promises";
-import { getKeysFilePath, getSecureTokenPath, extractCredentials } from "../auth/utils.js";
+import * as path from "path";
+import {
+  getKeysFilePath,
+  getSecureTokenPath,
+  extractCredentials,
+  resolveCredentialsPath,
+} from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
 import type { CredentialsFile } from "../types/credentials.js";
 
@@ -15,6 +21,8 @@ export interface ValidationResult {
   valid: boolean;
   errors: GoogleAuthError[];
   warnings: string[];
+  /** The path where credentials were actually found (may differ from getKeysFilePath() if using legacy) */
+  resolvedCredentialsPath?: string;
 }
 
 /**
@@ -27,10 +35,11 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   const keysPath = getKeysFilePath();
   const tokenPath = getSecureTokenPath();
 
-  // Check if credentials file exists
-  try {
-    await fs.access(keysPath);
-  } catch {
+  // Check if credentials file exists (try new location first, then legacy)
+  const resolved = await resolveCredentialsPath();
+  const resolvedCredentialsPath = resolved.path;
+
+  if (!resolved.exists) {
     errors.push(
       new GoogleAuthError({
         code: "OAUTH_NOT_CONFIGURED",
@@ -54,10 +63,16 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
     return { valid: false, errors, warnings };
   }
 
+  if (resolved.isLegacy) {
+    warnings.push(
+      `Using legacy credentials location: ${resolved.path}. Please move to: ${keysPath}`,
+    );
+  }
+
   // Read and parse credentials file
   let credentials: CredentialsFile;
   try {
-    const content = await fs.readFile(keysPath, "utf-8");
+    const content = await fs.readFile(resolvedCredentialsPath, "utf-8");
     credentials = JSON.parse(content) as CredentialsFile;
   } catch (parseError) {
     errors.push(
@@ -72,7 +87,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
         links: [{ label: "Download Credentials", url: `${CONSOLE_URL}/apis/credentials` }],
       }),
     );
-    return { valid: false, errors, warnings };
+    return { valid: false, errors, warnings, resolvedCredentialsPath };
   }
 
   // Extract credentials using shared helper
@@ -130,13 +145,12 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   }
 
   // Check token path is writable
+  const tokenDir = path.dirname(tokenPath);
   try {
-    const tokenDir = tokenPath.substring(0, tokenPath.lastIndexOf("/"));
     await fs.access(tokenDir, fs.constants.W_OK);
   } catch {
     // Directory might not exist yet - try to create it
     try {
-      const tokenDir = tokenPath.substring(0, tokenPath.lastIndexOf("/"));
       await fs.mkdir(tokenDir, { recursive: true });
     } catch {
       warnings.push(`Token directory may not be writable: ${tokenPath}`);
@@ -147,19 +161,17 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
     valid: errors.length === 0,
     errors,
     warnings,
+    resolvedCredentialsPath,
   };
 }
 
 /**
  * Check if OAuth is configured (credentials file exists).
+ * Checks both new default location and legacy location.
  */
 export async function isOAuthConfigured(): Promise<boolean> {
-  try {
-    await fs.access(getKeysFilePath());
-    return true;
-  } catch {
-    return false;
-  }
+  const resolved = await resolveCredentialsPath();
+  return resolved.exists;
 }
 
 /**
