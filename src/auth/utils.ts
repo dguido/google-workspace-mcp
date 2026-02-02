@@ -1,12 +1,17 @@
 import * as path from "path";
 import * as os from "os";
+import * as fs from "fs/promises";
 
 /**
  * Get the config directory following XDG Base Directory spec.
- * Returns ~/.config/google-workspace-mcp by default, or uses XDG_CONFIG_HOME if set.
+ * XDG_CONFIG_HOME must be absolute path per spec; falls back to ~/.config if invalid.
  */
 export function getConfigDirectory(): string {
-  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+  const configHome =
+    xdgConfigHome && path.isAbsolute(xdgConfigHome)
+      ? xdgConfigHome
+      : path.join(os.homedir(), ".config");
   return path.join(configHome, "google-workspace-mcp");
 }
 
@@ -136,4 +141,31 @@ To get OAuth credentials:
 4. Create OAuth 2.0 credentials (Desktop app type)
 5. Download the credentials file and save to: ${defaultPath}
 `.trim();
+}
+
+export interface ResolvedCredentialsPath {
+  path: string;
+  isLegacy: boolean;
+  exists: boolean;
+}
+
+/**
+ * Resolve the actual credentials path, checking new default then legacy locations.
+ * Returns the path that exists (preferring new location), whether it's legacy, and if it exists.
+ */
+export async function resolveCredentialsPath(): Promise<ResolvedCredentialsPath> {
+  const keysPath = getKeysFilePath();
+  const legacyPath = getLegacyKeysFilePath();
+
+  try {
+    await fs.access(keysPath);
+    return { path: keysPath, isLegacy: false, exists: true };
+  } catch {
+    try {
+      await fs.access(legacyPath);
+      return { path: legacyPath, isLegacy: true, exists: true };
+    } catch {
+      return { path: keysPath, isLegacy: false, exists: false };
+    }
+  }
 }

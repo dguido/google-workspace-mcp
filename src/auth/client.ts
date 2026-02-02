@@ -11,63 +11,49 @@ import { validateOAuthConfig, GoogleAuthError } from "../errors/index.js";
 import { log } from "../utils/logging.js";
 import { parseCredentialsFile } from "../types/credentials.js";
 
-async function loadCredentialsFromFile(): Promise<OAuthCredentials> {
-  const keysContent = await fs.readFile(getKeysFilePath(), "utf-8");
-  const keys = parseCredentialsFile(keysContent);
-  const credentials = extractCredentials(keys);
-
-  if (!credentials) {
-    throw new Error(
-      'Invalid credentials file format. Expected either "installed", "web" object or direct client_id field.',
-    );
-  }
-
-  return credentials;
+interface CredentialsSource {
+  path: string;
+  isLegacy: boolean;
+  name: string;
 }
 
 async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
-  try {
-    return await loadCredentialsFromFile();
-  } catch (newPathError) {
-    // Check legacy location: ./gcp-oauth.keys.json (pre-3.x behavior)
-    const legacyPath = getLegacyKeysFilePath();
+  const sources: CredentialsSource[] = [
+    { path: getKeysFilePath(), isLegacy: false, name: "default" },
+    { path: getLegacyKeysFilePath(), isLegacy: true, name: "gcp-oauth.keys.json" },
+    {
+      path: process.env.GOOGLE_CLIENT_SECRET_PATH || "client_secret.json",
+      isLegacy: true,
+      name: "client_secret.json",
+    },
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const source of sources) {
     try {
-      const content = await fs.readFile(legacyPath, "utf-8");
+      const content = await fs.readFile(source.path, "utf-8");
       const keys = parseCredentialsFile(content);
 
-      log("MIGRATION NOTICE: Found credentials at legacy location");
-      log(`  Current: ${legacyPath}`);
-      log(`  Recommended: ${getKeysFilePath()}`);
-      log("  Move credentials to the recommended location to silence this warning.");
+      if (source.isLegacy) {
+        log(`MIGRATION NOTICE: Found credentials at legacy location (${source.name})`);
+        log(`  Current: ${source.path}`);
+        log(`  Recommended: ${getKeysFilePath()}`);
+        log("  Move credentials to the recommended location to silence this warning.");
+      }
 
       const credentials = extractCredentials(keys);
       if (!credentials) {
-        throw new Error("Invalid credentials format in legacy file");
+        throw new Error(`Invalid credentials format in ${source.name}`);
       }
       return credentials;
-    } catch {
-      // Also check for very old legacy client_secret.json
-      const veryOldLegacyPath = process.env.GOOGLE_CLIENT_SECRET_PATH || "client_secret.json";
-      try {
-        const legacyContent = await fs.readFile(veryOldLegacyPath, "utf-8");
-        const legacyKeys = parseCredentialsFile(legacyContent);
-        log("Warning: Using legacy client_secret.json. Please migrate to new location.");
-        log(`  Recommended: ${getKeysFilePath()}`);
-
-        const credentials = extractCredentials(legacyKeys);
-        if (!credentials) {
-          throw new Error("Invalid legacy credentials format");
-        }
-        return credentials;
-      } catch {
-        // Generate helpful error message
-        const errorMessage = generateCredentialsErrorMessage();
-        throw new Error(
-          `${errorMessage}\n\nOriginal error: ${newPathError instanceof Error ? newPathError.message : String(newPathError)}`,
-        );
-      }
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
     }
   }
+
+  const errorMessage = generateCredentialsErrorMessage();
+  throw new Error(`${errorMessage}\n\nOriginal error: ${lastError?.message || "Unknown"}`);
 }
 
 export async function initializeOAuth2Client(): Promise<OAuth2Client> {

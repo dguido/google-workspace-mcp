@@ -12,7 +12,9 @@ vi.mock("fs/promises", () => ({
 vi.mock("../auth/utils.js", () => ({
   getSecureTokenPath: vi.fn(() => "/mock/.tokens/google-workspace-mcp.json"),
   getKeysFilePath: vi.fn(() => "/mock/gcp-oauth.keys.json"),
-  getLegacyKeysFilePath: vi.fn(() => "/mock/legacy-gcp-oauth.keys.json"),
+  resolveCredentialsPath: vi.fn(() =>
+    Promise.resolve({ path: "/mock/gcp-oauth.keys.json", isLegacy: false, exists: true }),
+  ),
 }));
 
 vi.mock("../auth/tokenManager.js", () => ({
@@ -82,6 +84,14 @@ describe("handleGetStatus", () => {
       refresh_token: "refresh-token",
     });
     fs = await import("fs/promises");
+
+    // Reset resolveCredentialsPath mock to default (credentials exist at default path)
+    const { resolveCredentialsPath } = await import("../auth/utils.js");
+    vi.mocked(resolveCredentialsPath).mockResolvedValue({
+      path: "/mock/gcp-oauth.keys.json",
+      isLegacy: false,
+      exists: true,
+    });
   });
 
   afterEach(() => {
@@ -114,6 +124,13 @@ describe("handleGetStatus", () => {
     });
 
     it("returns error status when credentials file is missing", async () => {
+      const { resolveCredentialsPath } = await import("../auth/utils.js");
+      vi.mocked(resolveCredentialsPath).mockResolvedValue({
+        path: "/mock/gcp-oauth.keys.json",
+        isLegacy: false,
+        exists: false,
+      });
+
       vi.mocked(fs.access).mockRejectedValue(
         Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
       );
@@ -405,6 +422,13 @@ describe("handleGetStatus", () => {
 
   describe("checkCredentialsFile (via diagnose mode)", () => {
     it("returns error when credentials file does not exist", async () => {
+      const { resolveCredentialsPath } = await import("../auth/utils.js");
+      vi.mocked(resolveCredentialsPath).mockResolvedValue({
+        path: "/mock/gcp-oauth.keys.json",
+        isLegacy: false,
+        exists: false,
+      });
+
       vi.mocked(fs.access).mockImplementation(async (path) => {
         if (String(path).includes("keys")) {
           throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
@@ -527,6 +551,47 @@ describe("handleGetStatus", () => {
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("ok");
       expect(credCheck?.message).toContain("Valid credentials file");
+    });
+
+    it("returns warning status when credentials found at legacy location", async () => {
+      const { resolveCredentialsPath } = await import("../auth/utils.js");
+      vi.mocked(resolveCredentialsPath).mockResolvedValue({
+        path: "/mock/legacy-gcp-oauth.keys.json",
+        isLegacy: true,
+        exists: true,
+      });
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        if (String(filePath).includes("legacy")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        });
+      });
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
+        diagnose: true,
+      });
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      expect(credCheck).toBeDefined();
+      expect(credCheck?.status).toBe("warning");
+      expect(credCheck?.message).toContain("legacy");
+      expect(credCheck?.fix).toBeDefined();
+      expect(credCheck?.fix?.some((f) => f.includes("Move credentials"))).toBe(true);
     });
 
     it("returns error when credentials file has parse error", async () => {

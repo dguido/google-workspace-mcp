@@ -4,11 +4,12 @@
  */
 
 import * as fs from "fs/promises";
+import * as path from "path";
 import {
   getKeysFilePath,
-  getLegacyKeysFilePath,
   getSecureTokenPath,
   extractCredentials,
+  resolveCredentialsPath,
 } from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
 import type { CredentialsFile } from "../types/credentials.js";
@@ -32,45 +33,40 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   const warnings: string[] = [];
 
   const keysPath = getKeysFilePath();
-  const legacyPath = getLegacyKeysFilePath();
   const tokenPath = getSecureTokenPath();
 
   // Check if credentials file exists (try new location first, then legacy)
-  let resolvedCredentialsPath = keysPath;
+  const resolved = await resolveCredentialsPath();
+  const resolvedCredentialsPath = resolved.path;
 
-  try {
-    await fs.access(keysPath);
-  } catch {
-    // Try legacy location
-    try {
-      await fs.access(legacyPath);
-      resolvedCredentialsPath = legacyPath;
-      warnings.push(
-        `Using legacy credentials location: ${legacyPath}. ` + `Please move to: ${keysPath}`,
-      );
-    } catch {
-      errors.push(
-        new GoogleAuthError({
-          code: "OAUTH_NOT_CONFIGURED",
-          reason: `OAuth credentials file not found at: ${keysPath}`,
-          fix: [
-            "Go to Google Cloud Console > APIs & Services > Credentials",
-            'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
-            "Download the credentials JSON file",
-            `Save it as: ${keysPath}`,
-            "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var to point to your credentials file",
-          ],
-          links: [
-            { label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` },
-            {
-              label: "Setup Guide",
-              url: GITHUB_SETUP_GUIDE,
-            },
-          ],
-        }),
-      );
-      return { valid: false, errors, warnings };
-    }
+  if (!resolved.exists) {
+    errors.push(
+      new GoogleAuthError({
+        code: "OAUTH_NOT_CONFIGURED",
+        reason: `OAuth credentials file not found at: ${keysPath}`,
+        fix: [
+          "Go to Google Cloud Console > APIs & Services > Credentials",
+          'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
+          "Download the credentials JSON file",
+          `Save it as: ${keysPath}`,
+          "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var to point to your credentials file",
+        ],
+        links: [
+          { label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` },
+          {
+            label: "Setup Guide",
+            url: GITHUB_SETUP_GUIDE,
+          },
+        ],
+      }),
+    );
+    return { valid: false, errors, warnings };
+  }
+
+  if (resolved.isLegacy) {
+    warnings.push(
+      `Using legacy credentials location: ${resolved.path}. Please move to: ${keysPath}`,
+    );
   }
 
   // Read and parse credentials file
@@ -149,13 +145,12 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   }
 
   // Check token path is writable
+  const tokenDir = path.dirname(tokenPath);
   try {
-    const tokenDir = tokenPath.substring(0, tokenPath.lastIndexOf("/"));
     await fs.access(tokenDir, fs.constants.W_OK);
   } catch {
     // Directory might not exist yet - try to create it
     try {
-      const tokenDir = tokenPath.substring(0, tokenPath.lastIndexOf("/"));
       await fs.mkdir(tokenDir, { recursive: true });
     } catch {
       warnings.push(`Token directory may not be writable: ${tokenPath}`);
@@ -175,18 +170,8 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
  * Checks both new default location and legacy location.
  */
 export async function isOAuthConfigured(): Promise<boolean> {
-  try {
-    await fs.access(getKeysFilePath());
-    return true;
-  } catch {
-    // Check legacy location
-    try {
-      await fs.access(getLegacyKeysFilePath());
-      return true;
-    } catch {
-      return false;
-    }
-  }
+  const resolved = await resolveCredentialsPath();
+  return resolved.exists;
 }
 
 /**
