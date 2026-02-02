@@ -46,6 +46,51 @@ export interface OAuthCredentials {
   redirect_uris?: string[];
 }
 
+// Credentials file format (supports installed, web, and flat formats)
+export interface CredentialsFileInput {
+  installed?: { client_id?: string; client_secret?: string; redirect_uris?: string[] };
+  web?: { client_id?: string; client_secret?: string; redirect_uris?: string[] };
+  client_id?: string;
+  client_secret?: string;
+  redirect_uris?: string[];
+}
+
+/**
+ * Extract OAuth credentials from various credential file formats.
+ * Supports: installed (Desktop app), web (Web app), and flat (simplified) formats.
+ * @returns OAuthCredentials if extraction succeeds, null if no client_id found
+ */
+export function extractCredentials(keys: CredentialsFileInput): OAuthCredentials | null {
+  // Try installed format first (most common for desktop apps)
+  if (keys.installed?.client_id) {
+    return {
+      client_id: keys.installed.client_id,
+      client_secret: keys.installed.client_secret,
+      redirect_uris: keys.installed.redirect_uris,
+    };
+  }
+
+  // Try web format
+  if (keys.web?.client_id) {
+    return {
+      client_id: keys.web.client_id,
+      client_secret: keys.web.client_secret,
+      redirect_uris: keys.web.redirect_uris,
+    };
+  }
+
+  // Try flat format (direct client_id at root)
+  if (keys.client_id) {
+    return {
+      client_id: keys.client_id,
+      client_secret: keys.client_secret,
+      redirect_uris: keys.redirect_uris || ["http://127.0.0.1/oauth2callback"],
+    };
+  }
+
+  return null;
+}
+
 // Generate helpful error message for missing credentials
 export function generateCredentialsErrorMessage(): string {
   return `

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
-import { TokenManager } from "./tokenManager.js";
+import { TokenManager, getLastTokenAuthError } from "./tokenManager.js";
 import http from "http";
 import os from "os";
 import path from "path";
@@ -10,15 +10,12 @@ import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
 import { mapGoogleError } from "../errors/index.js";
 import { getScopesForEnabledServices } from "../config/scopes.js";
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import {
+  renderSuccessPage,
+  renderErrorPage,
+  renderCsrfErrorPage,
+  buildGitignoreWarning,
+} from "./templates.js";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -40,191 +37,114 @@ export class AuthServer {
     this.tokenManager = new TokenManager(oauth2Client);
   }
 
+  private isClientInvalidError(): boolean {
+    const lastError = getLastTokenAuthError();
+    return lastError?.isClientInvalid() ?? false;
+  }
+
+  /** Handle root request - show auth link page */
+  private handleRootRequest(res: http.ServerResponse): void {
+    if (!this.flowOAuth2Client) {
+      res.writeHead(503, { "Content-Type": "text/plain" });
+      res.end("Authentication server is starting. Please wait and refresh.");
+      return;
+    }
+    if (!this.codeChallenge || !this.expectedState) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("PKCE not initialized - call start() first");
+      return;
+    }
+    const authUrl = this.flowOAuth2Client.generateAuthUrl({
+      access_type: "offline",
+      scope: getScopesForEnabledServices(),
+      prompt: "consent",
+      code_challenge_method: CodeChallengeMethod.S256,
+      code_challenge: this.codeChallenge,
+      state: this.expectedState,
+    });
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(
+      `<h1>Google Drive Authentication</h1><a href="${authUrl}">Authenticate with Google</a>`,
+    );
+  }
+
+  /** Handle OAuth callback - exchange code for tokens */
+  private async handleOAuthCallback(url: URL, res: http.ServerResponse): Promise<void> {
+    // Validate state parameter (CSRF protection per RFC 8252 section 8.9)
+    const receivedState = url.searchParams.get("state");
+    if (
+      !this.expectedState ||
+      !receivedState ||
+      !timingSafeEqual(receivedState, this.expectedState)
+    ) {
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(renderCsrfErrorPage());
+      return;
+    }
+
+    const code = url.searchParams.get("code");
+    if (!code) {
+      res.writeHead(400, { "Content-Type": "text/plain" });
+      res.end("Authorization code missing");
+      return;
+    }
+
+    if (!this.flowOAuth2Client) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Authentication flow not properly initiated.");
+      return;
+    }
+
+    try {
+      const { tokens } = await this.flowOAuth2Client.getToken({
+        code,
+        codeVerifier: this.codeVerifier || undefined,
+      });
+      await this.tokenManager.saveTokens(tokens);
+      this.authCompletedSuccessfully = true;
+      this.clearPkceState();
+
+      // Schedule server shutdown after response completes
+      setTimeout(() => {
+        this.stop().catch((err) => log("Auth server shutdown error:", err));
+      }, 2000);
+
+      // Build success response with gitignore warning if needed
+      const tokenPath = this.tokenManager.getTokenPath();
+      const homeConfig = path.join(os.homedir(), ".config");
+      const isProjectLevel = !tokenPath.startsWith(homeConfig);
+      const credentialsDir = path.basename(path.dirname(tokenPath));
+      const gitignoreWarning = isProjectLevel ? buildGitignoreWarning(credentialsDir) : "";
+
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(renderSuccessPage(tokenPath, gitignoreWarning));
+    } catch (error: unknown) {
+      this.authCompletedSuccessfully = false;
+      this.clearPkceState();
+
+      const authError = mapGoogleError(error);
+      log("OAuth callback error:", authError.toToolResponse());
+
+      res.writeHead(500, { "Content-Type": "text/html" });
+      res.end(renderErrorPage(authError));
+    }
+  }
+
+  /** Clear sensitive PKCE/state values */
+  private clearPkceState(): void {
+    this.codeVerifier = null;
+    this.codeChallenge = null;
+    this.expectedState = null;
+  }
+
   private createServer(): http.Server {
     return http.createServer(async (req, res) => {
       const url = new URL(req.url || "/", `http://127.0.0.1`);
 
       if (url.pathname === "/") {
-        // Handle root - show auth link (only if auth flow is properly initialized)
-        if (!this.flowOAuth2Client) {
-          res.writeHead(503, { "Content-Type": "text/plain" });
-          res.end("Authentication server is starting. Please wait and refresh.");
-          return;
-        }
-        if (!this.codeChallenge || !this.expectedState) {
-          res.writeHead(500, { "Content-Type": "text/plain" });
-          res.end("PKCE not initialized - call start() first");
-          return;
-        }
-        const authUrl = this.flowOAuth2Client.generateAuthUrl({
-          access_type: "offline",
-          scope: getScopesForEnabledServices(),
-          prompt: "consent",
-          code_challenge_method: CodeChallengeMethod.S256,
-          code_challenge: this.codeChallenge,
-          state: this.expectedState,
-        });
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(
-          `<h1>Google Drive Authentication</h1><a href="${authUrl}">Authenticate with Google</a>`,
-        );
+        this.handleRootRequest(res);
       } else if (url.pathname === "/oauth2callback") {
-        // Validate state parameter (CSRF protection per RFC 8252 section 8.9)
-        const receivedState = url.searchParams.get("state");
-        if (
-          !this.expectedState ||
-          !receivedState ||
-          !timingSafeEqual(receivedState, this.expectedState)
-        ) {
-          res.writeHead(400, { "Content-Type": "text/html" });
-          res.end(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head><title>Authentication Failed</title>
-            <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f4f4f4;margin:0}.container{text-align:center;padding:2em;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}h1{color:#F44336}</style>
-            </head>
-            <body><div class="container"><h1>Authentication Failed</h1><p>Invalid state parameter. This may indicate a CSRF attack.</p><p>Please close this window and try again.</p></div></body>
-            </html>
-          `);
-          return;
-        }
-
-        // Handle OAuth callback
-        const code = url.searchParams.get("code");
-        if (!code) {
-          res.writeHead(400, { "Content-Type": "text/plain" });
-          res.end("Authorization code missing");
-          return;
-        }
-        // IMPORTANT: Use the flowOAuth2Client to exchange the code
-        if (!this.flowOAuth2Client) {
-          res.writeHead(500, { "Content-Type": "text/plain" });
-          res.end("Authentication flow not properly initiated.");
-          return;
-        }
-        try {
-          const { tokens } = await this.flowOAuth2Client.getToken({
-            code,
-            codeVerifier: this.codeVerifier || undefined,
-          });
-          // Save tokens using the TokenManager (which uses the base client)
-          await this.tokenManager.saveTokens(tokens);
-          this.authCompletedSuccessfully = true;
-
-          // Clear sensitive PKCE/state values after use
-          this.codeVerifier = null;
-          this.codeChallenge = null;
-          this.expectedState = null;
-
-          // Schedule server shutdown after response completes
-          setTimeout(() => {
-            this.stop().catch((err) => log("Auth server shutdown error:", err));
-          }, 2000);
-
-          // Get the path where tokens were saved
-          const tokenPath = this.tokenManager.getTokenPath();
-
-          // Detect if tokens are stored in a project directory (not ~/.config)
-          const homeConfig = path.join(os.homedir(), ".config");
-          const isProjectLevel = !tokenPath.startsWith(homeConfig);
-          const credentialsDir = path.basename(path.dirname(tokenPath));
-          const gitignoreWarning = isProjectLevel
-            ? `
-                    <div class="warning">
-                        <p><strong>⚠️ Security:</strong> Add your credentials directory to .gitignore:</p>
-                        <p><code>${escapeHtml(credentialsDir)}/</code></p>
-                    </div>`
-            : "";
-
-          // Send a more informative HTML response including the path
-          res.writeHead(200, { "Content-Type": "text/html" });
-          res.end(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Authentication Successful</title>
-                <style>
-                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f4; margin: 0; }
-                    .container { text-align: center; padding: 2em; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; }
-                    h1 { color: #4CAF50; }
-                    p { color: #333; margin-bottom: 0.5em; }
-                    code { background-color: #eee; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
-                    .warning { background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 1em; margin-top: 1em; }
-                    .warning p { color: #856404; margin: 0.3em 0; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>Authentication Successful!</h1>
-                    <p>Your authentication tokens have been saved successfully to:</p>
-                    <p><code>${escapeHtml(tokenPath)}</code></p>${gitignoreWarning}
-                    <p style="margin-top: 1em;">You can now close this browser window.</p>
-                </div>
-            </body>
-            </html>
-          `);
-        } catch (error: unknown) {
-          this.authCompletedSuccessfully = false;
-          // Clear sensitive PKCE/state values on error as well
-          this.codeVerifier = null;
-          this.codeChallenge = null;
-          this.expectedState = null;
-
-          // Map the error to get actionable guidance
-          const authError = mapGoogleError(error);
-          log("OAuth callback error:", authError.toToolResponse());
-
-          // Build fix steps HTML (escape all dynamic content)
-          const fixStepsHtml = authError.fix
-            .map((step, i) => `<li>${i + 1}. ${escapeHtml(step)}</li>`)
-            .join("");
-          const linksHtml = authError.links
-            ? authError.links
-                .map(
-                  (link) =>
-                    `<li><a href="${escapeHtml(link.url)}" target="_blank">${escapeHtml(link.label)}</a></li>`,
-                )
-                .join("")
-            : "";
-
-          // Send an HTML error response with actionable guidance
-          res.writeHead(500, { "Content-Type": "text/html" });
-          res.end(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Authentication Failed</title>
-                <style>
-                    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f4f4f4; margin: 0; padding: 1em; }
-                    .container { text-align: left; padding: 2em; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; }
-                    h1 { color: #F44336; text-align: center; }
-                    .error-code { background-color: #ffebee; color: #c62828; padding: 0.5em 1em; border-radius: 4px; font-family: monospace; margin: 1em 0; }
-                    .reason { color: #333; margin-bottom: 1.5em; }
-                    h2 { color: #1976d2; font-size: 1.1em; margin-top: 1.5em; }
-                    ol { padding-left: 1.5em; }
-                    li { margin-bottom: 0.5em; color: #555; }
-                    ul { padding-left: 1em; list-style: none; }
-                    ul li { margin-bottom: 0.3em; }
-                    a { color: #1976d2; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>Authentication Failed</h1>
-                    <div class="error-code">${escapeHtml(authError.code)}</div>
-                    <p class="reason">${escapeHtml(authError.reason)}</p>
-                    <h2>How to fix:</h2>
-                    <ol>${fixStepsHtml}</ol>
-                    ${linksHtml ? `<h2>Helpful links:</h2><ul>${linksHtml}</ul>` : ""}
-                </div>
-            </body>
-            </html>
-          `);
-        }
+        await this.handleOAuthCallback(url, res);
       } else {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("Not Found");
@@ -272,6 +192,24 @@ export class AuthServer {
     }
 
     if (openBrowser) {
+      // Check if the last auth error indicates a deleted/invalid client
+      if (this.isClientInvalidError()) {
+        const lastError = getLastTokenAuthError();
+        console.error("\n❌ AUTHENTICATION BLOCKED");
+        console.error("══════════════════════════════════════════");
+        console.error(`\nError: ${lastError?.reason}`);
+        console.error("\nHow to fix:");
+        lastError?.fix.forEach((step, i) => console.error(`  ${i + 1}. ${step}`));
+        if (lastError?.links && lastError.links.length > 0) {
+          console.error("\nHelpful links:");
+          lastError.links.forEach((link) => console.error(`  - ${link.label}: ${link.url}`));
+        }
+        console.error("");
+        this.authCompletedSuccessfully = false;
+        await this.stop();
+        return false;
+      }
+
       // PKCE was just generated above, so these should always be set
       if (!this.codeChallenge || !this.expectedState) {
         throw new Error("PKCE not initialized - internal error");

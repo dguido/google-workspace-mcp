@@ -78,6 +78,17 @@ describe("mapGoogleError", () => {
       expect(result.reason).toContain("invalid");
     });
 
+    it("maps deleted_client to DELETED_CLIENT", () => {
+      const error = createGaxiosError("deleted_client", "The OAuth client was deleted");
+      const result = mapGoogleError(error);
+
+      expect(result.code).toBe("DELETED_CLIENT");
+      expect(result.reason).toContain("deleted");
+      expect(result.fix).toContainEqual(expect.stringContaining("Google Cloud Console"));
+      expect(result.links).toBeDefined();
+      expect(result.links?.some((l) => l.url.includes("credentials"))).toBe(true);
+    });
+
     it("maps insufficient_scope to INSUFFICIENT_SCOPE", () => {
       const error = createGaxiosError("insufficient_scope", "Missing drive.readonly scope");
       const result = mapGoogleError(error);

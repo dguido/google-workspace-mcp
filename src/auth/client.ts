@@ -1,6 +1,11 @@
 import { OAuth2Client } from "google-auth-library";
 import * as fs from "fs/promises";
-import { getKeysFilePath, generateCredentialsErrorMessage, OAuthCredentials } from "./utils.js";
+import {
+  getKeysFilePath,
+  generateCredentialsErrorMessage,
+  extractCredentials,
+  type OAuthCredentials,
+} from "./utils.js";
 import { validateOAuthConfig, GoogleAuthError } from "../errors/index.js";
 import { log } from "../utils/logging.js";
 import { parseCredentialsFile } from "../types/credentials.js";
@@ -8,33 +13,15 @@ import { parseCredentialsFile } from "../types/credentials.js";
 async function loadCredentialsFromFile(): Promise<OAuthCredentials> {
   const keysContent = await fs.readFile(getKeysFilePath(), "utf-8");
   const keys = parseCredentialsFile(keysContent);
+  const credentials = extractCredentials(keys);
 
-  if (keys.installed?.client_id) {
-    // Standard OAuth credentials file format
-    return {
-      client_id: keys.installed.client_id,
-      client_secret: keys.installed.client_secret,
-      redirect_uris: keys.installed.redirect_uris,
-    };
-  } else if (keys.web?.client_id) {
-    // Web application credentials format
-    return {
-      client_id: keys.web.client_id,
-      client_secret: keys.web.client_secret,
-      redirect_uris: keys.web.redirect_uris,
-    };
-  } else if (keys.client_id) {
-    // Direct format (simplified)
-    return {
-      client_id: keys.client_id,
-      client_secret: keys.client_secret,
-      redirect_uris: keys.redirect_uris || ["http://127.0.0.1/oauth2callback"],
-    };
-  } else {
+  if (!credentials) {
     throw new Error(
       'Invalid credentials file format. Expected either "installed", "web" object or direct client_id field.',
     );
   }
+
+  return credentials;
 }
 
 async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
@@ -48,21 +35,12 @@ async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
       const legacyKeys = parseCredentialsFile(legacyContent);
       log("Warning: Using legacy client_secret.json. Please migrate to gcp-oauth.keys.json");
 
-      if (legacyKeys.installed?.client_id) {
-        return {
-          client_id: legacyKeys.installed.client_id,
-          client_secret: legacyKeys.installed.client_secret,
-          redirect_uris: legacyKeys.installed.redirect_uris,
-        };
-      } else if (legacyKeys.web?.client_id) {
-        return {
-          client_id: legacyKeys.web.client_id,
-          client_secret: legacyKeys.web.client_secret,
-          redirect_uris: legacyKeys.web.redirect_uris,
-        };
-      } else {
+      const credentials = extractCredentials(legacyKeys);
+      if (!credentials) {
         throw new Error("Invalid legacy credentials format");
       }
+
+      return credentials;
     } catch {
       // Generate helpful error message
       const errorMessage = generateCredentialsErrorMessage();

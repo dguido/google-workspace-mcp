@@ -912,6 +912,8 @@ describe("handleGetStatus", () => {
         name: "GoogleAuthError",
         toToolResponse: () => ({ isError: true, content: [{ type: "text", text: "error" }] }),
         toDisplayString: () => "Error: Token was revoked",
+        isClientInvalid: () => false,
+        requiresTokenClear: () => true,
       });
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
