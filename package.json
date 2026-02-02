@@ -1,6 +1,6 @@
 {
   "name": "@dguido/google-workspace-mcp",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Google Workspace MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, Slides, Calendar, and Gmail through MCP clients e.g. Claude Desktop",
   "keywords": [
     "ai",
