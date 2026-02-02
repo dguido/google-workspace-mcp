@@ -2,6 +2,7 @@ import { OAuth2Client } from "google-auth-library";
 import * as fs from "fs/promises";
 import {
   getKeysFilePath,
+  getLegacyKeysFilePath,
   generateCredentialsErrorMessage,
   extractCredentials,
   type OAuthCredentials,
@@ -27,26 +28,44 @@ async function loadCredentialsFromFile(): Promise<OAuthCredentials> {
 async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
   try {
     return await loadCredentialsFromFile();
-  } catch (fileError) {
-    // Check for legacy client_secret.json
-    const legacyPath = process.env.GOOGLE_CLIENT_SECRET_PATH || "client_secret.json";
+  } catch (newPathError) {
+    // Check legacy location: ./gcp-oauth.keys.json (pre-3.x behavior)
+    const legacyPath = getLegacyKeysFilePath();
     try {
-      const legacyContent = await fs.readFile(legacyPath, "utf-8");
-      const legacyKeys = parseCredentialsFile(legacyContent);
-      log("Warning: Using legacy client_secret.json. Please migrate to gcp-oauth.keys.json");
+      const content = await fs.readFile(legacyPath, "utf-8");
+      const keys = parseCredentialsFile(content);
 
-      const credentials = extractCredentials(legacyKeys);
+      log("MIGRATION NOTICE: Found credentials at legacy location");
+      log(`  Current: ${legacyPath}`);
+      log(`  Recommended: ${getKeysFilePath()}`);
+      log("  Move credentials to the recommended location to silence this warning.");
+
+      const credentials = extractCredentials(keys);
       if (!credentials) {
-        throw new Error("Invalid legacy credentials format");
+        throw new Error("Invalid credentials format in legacy file");
       }
-
       return credentials;
     } catch {
-      // Generate helpful error message
-      const errorMessage = generateCredentialsErrorMessage();
-      throw new Error(
-        `${errorMessage}\n\nOriginal error: ${fileError instanceof Error ? fileError.message : String(fileError)}`,
-      );
+      // Also check for very old legacy client_secret.json
+      const veryOldLegacyPath = process.env.GOOGLE_CLIENT_SECRET_PATH || "client_secret.json";
+      try {
+        const legacyContent = await fs.readFile(veryOldLegacyPath, "utf-8");
+        const legacyKeys = parseCredentialsFile(legacyContent);
+        log("Warning: Using legacy client_secret.json. Please migrate to new location.");
+        log(`  Recommended: ${getKeysFilePath()}`);
+
+        const credentials = extractCredentials(legacyKeys);
+        if (!credentials) {
+          throw new Error("Invalid legacy credentials format");
+        }
+        return credentials;
+      } catch {
+        // Generate helpful error message
+        const errorMessage = generateCredentialsErrorMessage();
+        throw new Error(
+          `${errorMessage}\n\nOriginal error: ${newPathError instanceof Error ? newPathError.message : String(newPathError)}`,
+        );
+      }
     }
   }
 }

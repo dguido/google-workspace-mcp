@@ -4,7 +4,12 @@
  */
 
 import * as fs from "fs/promises";
-import { getKeysFilePath, getSecureTokenPath, extractCredentials } from "../auth/utils.js";
+import {
+  getKeysFilePath,
+  getLegacyKeysFilePath,
+  getSecureTokenPath,
+  extractCredentials,
+} from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
 import type { CredentialsFile } from "../types/credentials.js";
 
@@ -15,6 +20,8 @@ export interface ValidationResult {
   valid: boolean;
   errors: GoogleAuthError[];
   warnings: string[];
+  /** The path where credentials were actually found (may differ from getKeysFilePath() if using legacy) */
+  resolvedCredentialsPath?: string;
 }
 
 /**
@@ -25,39 +32,51 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   const warnings: string[] = [];
 
   const keysPath = getKeysFilePath();
+  const legacyPath = getLegacyKeysFilePath();
   const tokenPath = getSecureTokenPath();
 
-  // Check if credentials file exists
+  // Check if credentials file exists (try new location first, then legacy)
+  let resolvedCredentialsPath = keysPath;
+
   try {
     await fs.access(keysPath);
   } catch {
-    errors.push(
-      new GoogleAuthError({
-        code: "OAUTH_NOT_CONFIGURED",
-        reason: `OAuth credentials file not found at: ${keysPath}`,
-        fix: [
-          "Go to Google Cloud Console > APIs & Services > Credentials",
-          'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
-          "Download the credentials JSON file",
-          `Save it as: ${keysPath}`,
-          "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var to point to your credentials file",
-        ],
-        links: [
-          { label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` },
-          {
-            label: "Setup Guide",
-            url: GITHUB_SETUP_GUIDE,
-          },
-        ],
-      }),
-    );
-    return { valid: false, errors, warnings };
+    // Try legacy location
+    try {
+      await fs.access(legacyPath);
+      resolvedCredentialsPath = legacyPath;
+      warnings.push(
+        `Using legacy credentials location: ${legacyPath}. ` + `Please move to: ${keysPath}`,
+      );
+    } catch {
+      errors.push(
+        new GoogleAuthError({
+          code: "OAUTH_NOT_CONFIGURED",
+          reason: `OAuth credentials file not found at: ${keysPath}`,
+          fix: [
+            "Go to Google Cloud Console > APIs & Services > Credentials",
+            'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
+            "Download the credentials JSON file",
+            `Save it as: ${keysPath}`,
+            "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var to point to your credentials file",
+          ],
+          links: [
+            { label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` },
+            {
+              label: "Setup Guide",
+              url: GITHUB_SETUP_GUIDE,
+            },
+          ],
+        }),
+      );
+      return { valid: false, errors, warnings };
+    }
   }
 
   // Read and parse credentials file
   let credentials: CredentialsFile;
   try {
-    const content = await fs.readFile(keysPath, "utf-8");
+    const content = await fs.readFile(resolvedCredentialsPath, "utf-8");
     credentials = JSON.parse(content) as CredentialsFile;
   } catch (parseError) {
     errors.push(
@@ -72,7 +91,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
         links: [{ label: "Download Credentials", url: `${CONSOLE_URL}/apis/credentials` }],
       }),
     );
-    return { valid: false, errors, warnings };
+    return { valid: false, errors, warnings, resolvedCredentialsPath };
   }
 
   // Extract credentials using shared helper
@@ -147,18 +166,26 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
     valid: errors.length === 0,
     errors,
     warnings,
+    resolvedCredentialsPath,
   };
 }
 
 /**
  * Check if OAuth is configured (credentials file exists).
+ * Checks both new default location and legacy location.
  */
 export async function isOAuthConfigured(): Promise<boolean> {
   try {
     await fs.access(getKeysFilePath());
     return true;
   } catch {
-    return false;
+    // Check legacy location
+    try {
+      await fs.access(getLegacyKeysFilePath());
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

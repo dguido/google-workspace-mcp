@@ -14,7 +14,19 @@ MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calend
 
 See [Google Cloud Setup](#google-cloud-setup) below for detailed instructions.
 
-### 2. Authenticate
+### 2. Save Credentials
+
+Download your OAuth credentials from Google Cloud Console and save to the default location:
+
+```bash
+# Create config directory
+mkdir -p ~/.config/google-workspace-mcp
+
+# Save your downloaded credentials file as:
+# ~/.config/google-workspace-mcp/credentials.json
+```
+
+### 3. Authenticate
 
 ```bash
 npx @dguido/google-workspace-mcp auth
@@ -22,7 +34,7 @@ npx @dguido/google-workspace-mcp auth
 
 This opens your browser for Google OAuth consent. Tokens are saved to `~/.config/google-workspace-mcp/tokens.json`.
 
-### 3. Configure Claude Desktop
+### 4. Configure Claude Desktop
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -34,13 +46,14 @@ This opens your browser for Google OAuth consent. Tokens are saved to `~/.config
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/your/gcp-oauth.keys.json",
         "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar"
       }
     }
   }
 }
 ```
+
+No credential path needed when using the default location (`~/.config/google-workspace-mcp/credentials.json`).
 
 ## What You Can Do
 
@@ -86,14 +99,22 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 
 ## Configuration
 
-| Method                            | Description                                       |
-| --------------------------------- | ------------------------------------------------- |
-| `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Environment variable pointing to credentials file |
-| `gcp-oauth.keys.json`             | Default file in project root                      |
-| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                     |
-| `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable        |
+### File Locations
 
-Tokens are stored at `~/.config/google-workspace-mcp/tokens.json` by default.
+Both credentials and tokens are stored in `~/.config/google-workspace-mcp/` by default:
+
+| File              | Default Path                                      |
+| ----------------- | ------------------------------------------------- |
+| OAuth credentials | `~/.config/google-workspace-mcp/credentials.json` |
+| Auth tokens       | `~/.config/google-workspace-mcp/tokens.json`      |
+
+### Environment Variables
+
+| Variable                          | Description                                         |
+| --------------------------------- | --------------------------------------------------- |
+| `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Custom path to credentials file (overrides default) |
+| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                       |
+| `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable          |
 
 ### Token-Efficient Output (TOON)
 
@@ -106,7 +127,6 @@ For LLM-optimized responses that reduce token usage by 20-50%, enable TOON forma
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/gcp-oauth.keys.json",
         "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar",
         "GOOGLE_WORKSPACE_TOON_FORMAT": "true"
       }
@@ -130,7 +150,6 @@ To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/path/to/gcp-oauth.keys.json",
         "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar,docs,sheets,slides"
       }
     }
@@ -185,7 +204,7 @@ See [Advanced Configuration](docs/ADVANCED.md) for multi-account setup and envir
 
 ### "OAuth credentials not found"
 
-Set `GOOGLE_DRIVE_OAUTH_CREDENTIALS` environment variable or place `gcp-oauth.keys.json` in project root.
+Save your credentials file to `~/.config/google-workspace-mcp/credentials.json`, or set `GOOGLE_DRIVE_OAUTH_CREDENTIALS` environment variable to a custom path.
 
 ### "Authentication failed" or browser doesn't open
 
@@ -220,7 +239,7 @@ Revoke app access at [Google Account Permissions](https://myaccount.google.com/p
 - Automatic token refresh
 - Tokens stored with 0600 permissions
 - All processing happens locally
-- Never commit `gcp-oauth.keys.json` or tokens to version control
+- Never commit credentials or tokens to version control
 
 ## Avoiding Token Expiry
 

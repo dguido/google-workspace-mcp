@@ -35,7 +35,7 @@ import {
 import { isServiceEnabled, areUnifiedToolsEnabled, getEnabledServices } from "./config/index.js";
 
 // Import auth utilities for startup logging
-import { getSecureTokenPath, getKeysFilePath } from "./auth/utils.js";
+import { getSecureTokenPath, getKeysFilePath, getConfigDirectory } from "./auth/utils.js";
 
 // Import all tool definitions
 import { getAllTools } from "./tools/index.js";
@@ -692,6 +692,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // -----------------------------------------------------------------------------
 
 function showHelp(): void {
+  const configDir = getConfigDirectory();
   console.log(`
 Google Workspace MCP Server v${VERSION}
 
@@ -705,21 +706,25 @@ Commands:
   help     Show this help message
 
 Auth Options:
-  --token-path <path>        Save tokens to custom path (e.g., .credentials/tokens.json)
+  --token-path <path>        Save tokens to custom path
   --credentials-path <path>  Use custom OAuth credentials file
+
+Default Paths:
+  Credentials: ${configDir}/credentials.json
+  Tokens:      ${configDir}/tokens.json
 
 Examples:
   npx @dguido/google-workspace-mcp auth
   npx @dguido/google-workspace-mcp auth --token-path .credentials/tokens.json
   npx @dguido/google-workspace-mcp auth \\
-    --credentials-path .credentials/gcp-oauth.keys.json \\
+    --credentials-path .credentials/credentials.json \\
     --token-path .credentials/tokens.json
   npx @dguido/google-workspace-mcp start
   npx @dguido/google-workspace-mcp
 
 Environment Variables:
-  GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file
-  GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens
+  GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file (overrides default)
+  GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides default)
 
 Multi-Account Setup:
   For project-level credential storage (useful with multiple Google accounts):
@@ -827,10 +832,12 @@ async function main() {
 
         // Enhanced startup logging
         const enabledServices = Array.from(getEnabledServices());
+        const configDir = getConfigDirectory();
         log("Server started", {
           version: VERSION,
           node: process.version,
           services: enabledServices,
+          config_dir: configDir,
           token_path: getSecureTokenPath(),
         });
 
@@ -840,7 +847,7 @@ async function main() {
           await import("fs").then((fs) => fs.promises.access(credentialsPath));
         } catch {
           log("Warning: OAuth credentials not configured", {
-            hint: "Set GOOGLE_DRIVE_OAUTH_CREDENTIALS or create gcp-oauth.keys.json",
+            hint: `Save credentials to ${credentialsPath}`,
             credentials_path: credentialsPath,
           });
         }

@@ -12,6 +12,7 @@ vi.mock("fs/promises", () => ({
 vi.mock("../auth/utils.js", () => ({
   getSecureTokenPath: vi.fn(() => "/mock/.tokens/google-workspace-mcp.json"),
   getKeysFilePath: vi.fn(() => "/mock/gcp-oauth.keys.json"),
+  getLegacyKeysFilePath: vi.fn(() => "/mock/legacy-gcp-oauth.keys.json"),
 }));
 
 vi.mock("../auth/tokenManager.js", () => ({
