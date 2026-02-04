@@ -110,10 +110,12 @@ export async function handleSearch(drive: drive_v3.Drive, args: unknown): Promis
     textResponse += `\n\nMore results available. Use pageToken: ${res.data.nextPageToken}`;
   }
 
-  return structuredResponse(textResponse, {
-    files,
-    nextPageToken: res.data.nextPageToken || null,
-  });
+  const responseData: { files: typeof files; nextPageToken?: string } = { files };
+  if (res.data.nextPageToken) {
+    responseData.nextPageToken = res.data.nextPageToken;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleCreateTextFile(
@@ -271,19 +273,38 @@ export async function handleListFolder(
     });
 
     const files = res.data.files || [];
-    const formattedFiles = files
-      .map((file: drive_v3.Schema$File) => {
-        const isFolder = file.mimeType === FOLDER_MIME_TYPE;
-        return `${isFolder ? "📁" : "📄"} ${file.name} (ID: ${file.id})`;
-      })
-      .join("\n");
+    const items: Array<{
+      id: string;
+      name: string;
+      mimeType: string;
+      modifiedTime?: string | null;
+      size?: string | null;
+    }> = [];
+    const formattedLines: string[] = [];
 
-    let response = `Contents of folder:\n\n${formattedFiles}`;
-    if (res.data.nextPageToken) {
-      response += `\n\nMore items available. Use pageToken: ${res.data.nextPageToken}`;
+    for (const file of files) {
+      items.push({
+        id: file.id!,
+        name: file.name!,
+        mimeType: file.mimeType!,
+        modifiedTime: file.modifiedTime,
+        size: file.size,
+      });
+      const isFolder = file.mimeType === FOLDER_MIME_TYPE;
+      formattedLines.push(`${isFolder ? "📁" : "📄"} ${file.name} (ID: ${file.id})`);
     }
 
-    return successResponse(response);
+    let textResponse = `Contents of folder:\n\n${formattedLines.join("\n")}`;
+    if (res.data.nextPageToken) {
+      textResponse += `\n\nMore items available. Use pageToken: ${res.data.nextPageToken}`;
+    }
+
+    const responseData: { items: typeof items; nextPageToken?: string } = { items };
+    if (res.data.nextPageToken) {
+      responseData.nextPageToken = res.data.nextPageToken;
+    }
+
+    return structuredResponse(textResponse, responseData);
   } catch (error) {
     // Handle 404 error with clearer message including folder ID
     if (error instanceof Error && error.message.includes("not found")) {
@@ -1678,7 +1699,6 @@ export async function handleListTrash(drive: drive_v3.Drive, args: unknown): Pro
   if (files.length === 0) {
     return structuredResponse("Trash is empty", {
       files: [],
-      nextPageToken: null,
     });
   }
 
@@ -1696,10 +1716,12 @@ export async function handleListTrash(drive: drive_v3.Drive, args: unknown): Pro
       ? "\n\n(More items available - use nextPageToken to continue)"
       : "");
 
-  return structuredResponse(textResponse, {
-    files: fileData,
-    nextPageToken: response.data.nextPageToken || null,
-  });
+  const responseData: { files: typeof fileData; nextPageToken?: string } = { files: fileData };
+  if (response.data.nextPageToken) {
+    responseData.nextPageToken = response.data.nextPageToken;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleRestoreFromTrash(

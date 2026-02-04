@@ -1,5 +1,5 @@
 import type { calendar_v3 } from "googleapis";
-import { log, successResponse, structuredResponse, validateArgs, toToon } from "../utils/index.js";
+import { log, structuredResponse, validateArgs, toToon } from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
   ListCalendarsSchema,
@@ -84,10 +84,7 @@ export async function handleListEvents(
   const events = response.data.items || [];
 
   if (events.length === 0) {
-    return structuredResponse("No events found.", {
-      events: [],
-      nextPageToken: null,
-    });
+    return structuredResponse("No events found.", { events: [] });
   }
 
   const eventData = events.map((event) => ({
@@ -118,10 +115,12 @@ export async function handleListEvents(
 
   log("Listed events", { calendarId, count: events.length });
 
-  return structuredResponse(textResponse, {
-    events: eventData,
-    nextPageToken: response.data.nextPageToken || null,
-  });
+  const responseData: { events: typeof eventData; nextPageToken?: string } = { events: eventData };
+  if (response.data.nextPageToken) {
+    responseData.nextPageToken = response.data.nextPageToken;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleGetEvent(
@@ -424,7 +423,10 @@ export async function handleDeleteEvent(
 
   log("Deleted event", { calendarId, eventId });
 
-  return successResponse(`Deleted event: ${eventSummary} (ID: ${eventId})`);
+  return structuredResponse(`Deleted event: ${eventSummary} (ID: ${eventId})`, {
+    deleted: 1,
+    eventId,
+  });
 }
 
 export async function handleFindFreeTime(

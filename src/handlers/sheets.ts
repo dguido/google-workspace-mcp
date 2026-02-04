@@ -1,6 +1,5 @@
 import type { drive_v3, sheets_v4 } from "googleapis";
 import {
-  successResponse,
   structuredResponse,
   errorResponse,
   withTimeout,
@@ -129,8 +128,12 @@ export async function handleCreateGoogleSheet(
     requestBody: { values: data.data },
   });
 
-  return successResponse(
+  return structuredResponse(
     `Created Google Sheet: ${data.name}\nID: ${spreadsheet.data.spreadsheetId}`,
+    {
+      id: spreadsheet.data.spreadsheetId!,
+      name: data.name,
+    },
   );
 }
 
@@ -149,7 +152,10 @@ export async function handleUpdateGoogleSheet(
     requestBody: { values: data.data },
   });
 
-  return successResponse(`Updated Google Sheet range: ${data.range}`);
+  return structuredResponse(`Updated Google Sheet range: ${data.range}`, {
+    range: data.range,
+    updated: true,
+  });
 }
 
 export async function handleGetGoogleSheetContent(
@@ -407,7 +413,13 @@ export async function handleFormatGoogleSheetCells(
     requestBody: { requests },
   });
 
-  return successResponse(`Formatted cells in range ${data.range} (${appliedFormats.join(", ")})`);
+  return structuredResponse(
+    `Formatted cells in range ${data.range} (${appliedFormats.join(", ")})`,
+    {
+      range: data.range,
+      applied: true,
+    },
+  );
 }
 
 export async function handleMergeGoogleSheetCells(
@@ -441,7 +453,10 @@ export async function handleMergeGoogleSheetCells(
     requestBody: { requests },
   });
 
-  return successResponse(`Merged cells in range ${data.range} with type ${data.mergeType}`);
+  return structuredResponse(`Merged cells in range ${data.range} with type ${data.mergeType}`, {
+    range: data.range,
+    mergeType: data.mergeType,
+  });
 }
 
 export async function handleAddGoogleSheetConditionalFormat(
@@ -503,7 +518,10 @@ export async function handleAddGoogleSheetConditionalFormat(
     requestBody: { requests },
   });
 
-  return successResponse(`Added conditional formatting to range ${data.range}`);
+  return structuredResponse(`Added conditional formatting to range ${data.range}`, {
+    range: data.range,
+    conditionType: data.condition.type,
+  });
 }
 
 /**
@@ -628,7 +646,11 @@ async function createSheetTab(
 
   clearSheetCache(spreadsheetId);
   const newSheetId = response.data.replies?.[0]?.addSheet?.properties?.sheetId;
-  return successResponse(`Created new sheet tab "${title}" (ID: ${newSheetId})`);
+  return structuredResponse(`Created new sheet tab "${title}" (ID: ${newSheetId})`, {
+    action: "create",
+    sheetId: newSheetId!,
+    title,
+  });
 }
 
 async function deleteSheetTab(
@@ -661,7 +683,11 @@ async function deleteSheetTab(
   }
 
   clearSheetCache(spreadsheetId);
-  return successResponse(`Deleted sheet tab "${title}"`);
+  return structuredResponse(`Deleted sheet tab "${title}"`, {
+    action: "delete",
+    sheetId,
+    title,
+  });
 }
 
 async function renameSheetTab(
@@ -703,5 +729,9 @@ async function renameSheetTab(
   });
 
   clearSheetCache(spreadsheetId);
-  return successResponse(`Renamed sheet tab "${currentTitle}" to "${newTitle}"`);
+  return structuredResponse(`Renamed sheet tab "${currentTitle}" to "${newTitle}"`, {
+    action: "rename",
+    sheetId,
+    title: newTitle,
+  });
 }
