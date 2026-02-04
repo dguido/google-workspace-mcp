@@ -91,7 +91,7 @@ export async function handleListContacts(
   const connections = response.data.connections || [];
 
   if (connections.length === 0) {
-    return structuredResponse("No contacts found.", { contacts: [], nextPageToken: null });
+    return structuredResponse("No contacts found.", { contacts: [] });
   }
 
   const contacts = connections.map(extractContactData);
@@ -103,11 +103,17 @@ export async function handleListContacts(
 
   log("Listed contacts", { count: connections.length });
 
-  return structuredResponse(textResponse, {
-    contacts,
-    nextPageToken: response.data.nextPageToken || null,
-    totalPeople: response.data.totalPeople,
-  });
+  const responseData: { contacts: typeof contacts; nextPageToken?: string; totalPeople?: number } = { 
+    contacts 
+  };
+  if (response.data.nextPageToken) {
+    responseData.nextPageToken = response.data.nextPageToken;
+  }
+  if (response.data.totalPeople !== undefined && response.data.totalPeople !== null) {
+    responseData.totalPeople = response.data.totalPeople;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleGetContact(

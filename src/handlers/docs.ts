@@ -1,7 +1,6 @@
 import type { drive_v3, docs_v1 } from "googleapis";
 import {
   log,
-  successResponse,
   structuredResponse,
   errorResponse,
   withTimeout,
@@ -112,8 +111,13 @@ export async function handleCreateGoogleDoc(
     },
   });
 
-  return successResponse(
+  return structuredResponse(
     `Created Google Doc: ${doc.name}\nID: ${doc.id}\nLink: ${doc.webViewLink}`,
+    {
+      id: doc.id!,
+      name: doc.name!,
+      webViewLink: doc.webViewLink!,
+    },
   );
 }
 
@@ -174,7 +178,10 @@ export async function handleUpdateGoogleDoc(
     },
   });
 
-  return successResponse(`Updated Google Doc: ${document.data.title}`);
+  return structuredResponse(`Updated Google Doc: ${document.data.title}`, {
+    title: document.data.title!,
+    updated: true,
+  });
 }
 
 export async function handleGetGoogleDocContent(
@@ -293,8 +300,12 @@ export async function handleAppendToDoc(docs: docs_v1.Docs, args: unknown): Prom
     textLength: data.text.length,
   });
 
-  return successResponse(
+  return structuredResponse(
     `Appended ${data.text.length} characters to document "${document.data.title}"`,
+    {
+      title: document.data.title!,
+      charactersAdded: data.text.length,
+    },
   );
 }
 
@@ -337,8 +348,13 @@ export async function handleInsertTextInDoc(
     textLength: data.text.length,
   });
 
-  return successResponse(
+  return structuredResponse(
     `Inserted ${data.text.length} characters at index ${data.index} in "${document.data.title}"`,
+    {
+      title: document.data.title!,
+      index: data.index,
+      charactersInserted: data.text.length,
+    },
   );
 }
 
@@ -385,8 +401,14 @@ export async function handleDeleteTextInDoc(
     endIndex: data.endIndex,
   });
 
-  return successResponse(
+  return structuredResponse(
     `Deleted ${charsToDelete} characters (indices ${data.startIndex}-${data.endIndex}) from "${document.data.title}"`,
+    {
+      title: document.data.title!,
+      startIndex: data.startIndex,
+      endIndex: data.endIndex,
+      charactersDeleted: charsToDelete,
+    },
   );
 }
 
@@ -427,13 +449,21 @@ export async function handleReplaceTextInDoc(
   });
 
   if (occurrencesChanged === 0) {
-    return successResponse(
+    return structuredResponse(
       `No occurrences of "${data.searchText}" found in "${document.data.title}"`,
+      {
+        title: document.data.title!,
+        occurrencesChanged: 0,
+      },
     );
   }
 
-  return successResponse(
+  return structuredResponse(
     `Replaced ${occurrencesChanged} occurrence(s) of "${data.searchText}" with "${data.replaceText}" in "${document.data.title}"`,
+    {
+      title: document.data.title!,
+      occurrencesChanged,
+    },
   );
 }
 
@@ -592,7 +622,12 @@ export async function handleFormatGoogleDocRange(
     endIndex,
     formatsApplied,
   });
-  return successResponse(
+  return structuredResponse(
     `Applied formatting to range ${startIndex}-${endIndex}: ${formatsApplied.join(", ")}`,
+    {
+      startIndex,
+      endIndex,
+      formatsApplied,
+    },
   );
 }

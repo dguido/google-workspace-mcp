@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { drive_v3, slides_v1 } from "googleapis";
 import {
-  successResponse,
   structuredResponse,
   errorResponse,
   withTimeout,
@@ -123,10 +122,15 @@ export async function handleCreateGoogleSlides(
     });
   }
 
-  return successResponse(
+  return structuredResponse(
     `Created Google Slides presentation: ${data.name}\n` +
       `ID: ${presentation.data.presentationId}\n` +
       `Link: https://docs.google.com/presentation/d/${presentation.data.presentationId}`,
+    {
+      id: presentation.data.presentationId!,
+      name: data.name,
+      webViewLink: `https://docs.google.com/presentation/d/${presentation.data.presentationId}`,
+    },
   );
 }
 
@@ -284,9 +288,13 @@ export async function handleUpdateGoogleSlides(
     requestBody: { requests },
   });
 
-  return successResponse(
+  return structuredResponse(
     `Updated Google Slides presentation with ${data.slides.length} slide(s)\n` +
       `Link: https://docs.google.com/presentation/d/${data.presentationId}`,
+    {
+      slideCount: data.slides.length,
+      webViewLink: `https://docs.google.com/presentation/d/${data.presentationId}`,
+    },
   );
 }
 
@@ -500,7 +508,10 @@ export async function handleCreateGoogleSlidesTextBox(
     requestBody: { requests },
   });
 
-  return successResponse(`Created text box with ID: ${elementId}`);
+  return structuredResponse(`Created text box with ID: ${elementId}`, {
+    objectId: elementId,
+    pageObjectId: data.pageObjectId,
+  });
 }
 
 export async function handleCreateGoogleSlidesShape(
@@ -565,7 +576,11 @@ export async function handleCreateGoogleSlidesShape(
     requestBody: { requests },
   });
 
-  return successResponse(`Created ${data.shapeType} shape with ID: ${elementId}`);
+  return structuredResponse(`Created ${data.shapeType} shape with ID: ${elementId}`, {
+    objectId: elementId,
+    pageObjectId: data.pageObjectId,
+    shapeType: data.shapeType,
+  });
 }
 
 /**
@@ -595,23 +610,34 @@ export async function handleSlidesSpeakerNotes(
   const notesObjectId = slide.slideProperties?.notesPage?.notesProperties?.speakerNotesObjectId;
 
   if (data.action === "get") {
-    return getSpeakerNotes(slide, notesObjectId);
+    return getSpeakerNotes(slide, notesObjectId, data.slideIndex);
   } else {
-    return updateSpeakerNotes(slides, data.presentationId, slide, notesObjectId, data.notes!);
+    return updateSpeakerNotes(slides, data.presentationId, slide, notesObjectId, data.notes!, data.slideIndex);
   }
 }
 
 function getSpeakerNotes(
   slide: slides_v1.Schema$Page,
   notesObjectId: string | null | undefined,
+  slideIndex: number,
 ): ToolResponse {
   if (!notesObjectId) {
-    return successResponse("No speaker notes found for this slide");
+    return structuredResponse("No speaker notes found for this slide", {
+      action: "get",
+      slideIndex,
+      notes: "",
+      updated: false,
+    });
   }
 
   const notesPage = slide.slideProperties?.notesPage;
   if (!notesPage || !notesPage.pageElements) {
-    return successResponse("No speaker notes found for this slide");
+    return structuredResponse("No speaker notes found for this slide", {
+      action: "get",
+      slideIndex,
+      notes: "",
+      updated: false,
+    });
   }
 
   const speakerNotesElement = notesPage.pageElements.find(
@@ -619,7 +645,12 @@ function getSpeakerNotes(
   );
 
   if (!speakerNotesElement || !speakerNotesElement.shape?.text) {
-    return successResponse("No speaker notes found for this slide");
+    return structuredResponse("No speaker notes found for this slide", {
+      action: "get",
+      slideIndex,
+      notes: "",
+      updated: false,
+    });
   }
 
   let notesText = "";
@@ -630,7 +661,12 @@ function getSpeakerNotes(
     }
   });
 
-  return successResponse(notesText.trim() || "No speaker notes found for this slide");
+  return structuredResponse(notesText.trim() || "No speaker notes found for this slide", {
+    action: "get",
+    slideIndex,
+    notes: notesText.trim(),
+    updated: false,
+  });
 }
 
 async function updateSpeakerNotes(
@@ -639,6 +675,7 @@ async function updateSpeakerNotes(
   slide: slides_v1.Schema$Page,
   notesObjectId: string | null | undefined,
   notes: string,
+  slideIndex: number,
 ): Promise<ToolResponse> {
   if (!notesObjectId) {
     return errorResponse(
@@ -680,7 +717,12 @@ async function updateSpeakerNotes(
     requestBody: { requests },
   });
 
-  return successResponse(`Successfully updated speaker notes for slide`);
+  return structuredResponse(`Successfully updated speaker notes for slide`, {
+    action: "update",
+    slideIndex,
+    notes,
+    updated: true,
+  });
 }
 
 /**
@@ -807,7 +849,10 @@ export async function handleFormatSlidesText(
     requestBody: { requests },
   });
 
-  return successResponse(`Formatted text ${data.objectId}: ${appliedFormats.join(", ")}`);
+  return structuredResponse(`Formatted text ${data.objectId}: ${appliedFormats.join(", ")}`, {
+    objectId: data.objectId,
+    formatsApplied: appliedFormats,
+  });
 }
 
 /**
@@ -883,7 +928,10 @@ export async function handleFormatSlidesShape(
     },
   });
 
-  return successResponse(`Formatted shape ${data.objectId}: ${appliedFormats.join(", ")}`);
+  return structuredResponse(`Formatted shape ${data.objectId}: ${appliedFormats.join(", ")}`, {
+    objectId: data.objectId,
+    formatsApplied: appliedFormats,
+  });
 }
 
 /**
@@ -912,7 +960,9 @@ export async function handleFormatSlideBackground(
     requestBody: { requests },
   });
 
-  return successResponse(`Set background color for ${data.pageObjectIds.length} slide(s)`);
+  return structuredResponse(`Set background color for ${data.pageObjectIds.length} slide(s)`, {
+    slidesFormatted: data.pageObjectIds.length,
+  });
 }
 
 export async function handleListSlidePages(

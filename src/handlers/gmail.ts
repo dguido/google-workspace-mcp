@@ -1,7 +1,6 @@
 import type { gmail_v1 } from "googleapis";
 import {
   log,
-  successResponse,
   structuredResponse,
   errorResponse,
   validateArgs,
@@ -360,11 +359,20 @@ export async function handleSearchEmails(
 
   log("Searched emails", { query, count: messages.length });
 
-  return structuredResponse(textResponse, {
-    messages: messageDetails,
-    nextPageToken: response.data.nextPageToken || null,
-    resultSizeEstimate: response.data.resultSizeEstimate,
-  });
+  const responseData: { 
+    messages: typeof messageDetails; 
+    nextPageToken?: string; 
+    resultSizeEstimate?: number;
+  } = { messages: messageDetails };
+  
+  if (response.data.nextPageToken) {
+    responseData.nextPageToken = response.data.nextPageToken;
+  }
+  if (response.data.resultSizeEstimate !== undefined && response.data.resultSizeEstimate !== null) {
+    responseData.resultSizeEstimate = response.data.resultSizeEstimate;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleDeleteEmail(
@@ -385,7 +393,10 @@ export async function handleDeleteEmail(
       id: messageIds[0],
     });
     log("Deleted email", { messageId: messageIds[0] });
-    return successResponse(`Email ${messageIds[0]} permanently deleted.`);
+    return structuredResponse(`Email ${messageIds[0]} permanently deleted.`, {
+      deleted: 1,
+      messageIds: [messageIds[0]],
+    });
   }
 
   // Batch delete
@@ -418,7 +429,10 @@ export async function handleDeleteEmail(
   }
 
   log("Deleted emails (batch)", { count: messageIds.length });
-  return successResponse(`Successfully deleted ${messageIds.length} email(s).`);
+  return structuredResponse(`Successfully deleted ${messageIds.length} email(s).`, {
+    deleted: messageIds.length,
+    messageIds,
+  });
 }
 
 export async function handleModifyEmail(
@@ -538,10 +552,15 @@ export async function handleModifyEmail(
     );
   }
 
-  return successResponse(
+  return structuredResponse(
     `Successfully modified labels for ${ids.length} thread(s).` +
       (addLabelIds ? `\nAdded labels: ${addLabelIds.join(", ")}` : "") +
       (removeLabelIds ? `\nRemoved labels: ${removeLabelIds.join(", ")}` : ""),
+    {
+      id: ids[0],
+      messageCount: ids.length,
+      labelIds: addLabelIds || [],
+    },
   );
 }
 
@@ -687,7 +706,10 @@ export async function handleDeleteLabel(
 
   log("Deleted label", { labelId });
 
-  return successResponse(`Label ${labelId} deleted successfully.`);
+  return structuredResponse(`Label ${labelId} deleted successfully.`, {
+    deleted: true,
+    labelId,
+  });
 }
 
 export async function handleListLabels(
@@ -996,5 +1018,8 @@ export async function handleDeleteFilter(
 
   log("Deleted filter", { filterId });
 
-  return successResponse(`Filter ${filterId} deleted successfully.`);
+  return structuredResponse(`Filter ${filterId} deleted successfully.`, {
+    deleted: true,
+    filterId,
+  });
 }

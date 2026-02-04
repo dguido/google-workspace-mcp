@@ -110,10 +110,12 @@ export async function handleSearch(drive: drive_v3.Drive, args: unknown): Promis
     textResponse += `\n\nMore results available. Use pageToken: ${res.data.nextPageToken}`;
   }
 
-  return structuredResponse(textResponse, {
-    files,
-    nextPageToken: res.data.nextPageToken || null,
-  });
+  const responseData: { files: typeof files; nextPageToken?: string } = { files };
+  if (res.data.nextPageToken) {
+    responseData.nextPageToken = res.data.nextPageToken;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleCreateTextFile(
@@ -271,6 +273,14 @@ export async function handleListFolder(
     });
 
     const files = res.data.files || [];
+    const items = files.map((file: drive_v3.Schema$File) => ({
+      id: file.id!,
+      name: file.name!,
+      mimeType: file.mimeType!,
+      modifiedTime: file.modifiedTime,
+      size: file.size,
+    }));
+
     const formattedFiles = files
       .map((file: drive_v3.Schema$File) => {
         const isFolder = file.mimeType === FOLDER_MIME_TYPE;
@@ -278,12 +288,17 @@ export async function handleListFolder(
       })
       .join("\n");
 
-    let response = `Contents of folder:\n\n${formattedFiles}`;
+    let textResponse = `Contents of folder:\n\n${formattedFiles}`;
     if (res.data.nextPageToken) {
-      response += `\n\nMore items available. Use pageToken: ${res.data.nextPageToken}`;
+      textResponse += `\n\nMore items available. Use pageToken: ${res.data.nextPageToken}`;
     }
 
-    return successResponse(response);
+    const responseData: { items: typeof items; nextPageToken?: string } = { items };
+    if (res.data.nextPageToken) {
+      responseData.nextPageToken = res.data.nextPageToken;
+    }
+
+    return structuredResponse(textResponse, responseData);
   } catch (error) {
     // Handle 404 error with clearer message including folder ID
     if (error instanceof Error && error.message.includes("not found")) {
@@ -1678,7 +1693,6 @@ export async function handleListTrash(drive: drive_v3.Drive, args: unknown): Pro
   if (files.length === 0) {
     return structuredResponse("Trash is empty", {
       files: [],
-      nextPageToken: null,
     });
   }
 
@@ -1696,10 +1710,12 @@ export async function handleListTrash(drive: drive_v3.Drive, args: unknown): Pro
       ? "\n\n(More items available - use nextPageToken to continue)"
       : "");
 
-  return structuredResponse(textResponse, {
-    files: fileData,
-    nextPageToken: response.data.nextPageToken || null,
-  });
+  const responseData: { files: typeof fileData; nextPageToken?: string } = { files: fileData };
+  if (response.data.nextPageToken) {
+    responseData.nextPageToken = response.data.nextPageToken;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleRestoreFromTrash(
