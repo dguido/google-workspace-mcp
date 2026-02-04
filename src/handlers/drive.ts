@@ -273,22 +273,28 @@ export async function handleListFolder(
     });
 
     const files = res.data.files || [];
-    const items = files.map((file: drive_v3.Schema$File) => ({
-      id: file.id!,
-      name: file.name!,
-      mimeType: file.mimeType!,
-      modifiedTime: file.modifiedTime,
-      size: file.size,
-    }));
+    const items: Array<{
+      id: string;
+      name: string;
+      mimeType: string;
+      modifiedTime?: string | null;
+      size?: string | null;
+    }> = [];
+    const formattedLines: string[] = [];
 
-    const formattedFiles = files
-      .map((file: drive_v3.Schema$File) => {
-        const isFolder = file.mimeType === FOLDER_MIME_TYPE;
-        return `${isFolder ? "📁" : "📄"} ${file.name} (ID: ${file.id})`;
-      })
-      .join("\n");
+    for (const file of files) {
+      items.push({
+        id: file.id!,
+        name: file.name!,
+        mimeType: file.mimeType!,
+        modifiedTime: file.modifiedTime,
+        size: file.size,
+      });
+      const isFolder = file.mimeType === FOLDER_MIME_TYPE;
+      formattedLines.push(`${isFolder ? "📁" : "📄"} ${file.name} (ID: ${file.id})`);
+    }
 
-    let textResponse = `Contents of folder:\n\n${formattedFiles}`;
+    let textResponse = `Contents of folder:\n\n${formattedLines.join("\n")}`;
     if (res.data.nextPageToken) {
       textResponse += `\n\nMore items available. Use pageToken: ${res.data.nextPageToken}`;
     }

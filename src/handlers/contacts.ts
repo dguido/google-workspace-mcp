@@ -103,9 +103,10 @@ export async function handleListContacts(
 
   log("Listed contacts", { count: connections.length });
 
-  const responseData: { contacts: typeof contacts; nextPageToken?: string; totalPeople?: number } = { 
-    contacts 
-  };
+  const responseData: { contacts: typeof contacts; nextPageToken?: string; totalPeople?: number } =
+    {
+      contacts,
+    };
   if (response.data.nextPageToken) {
     responseData.nextPageToken = response.data.nextPageToken;
   }

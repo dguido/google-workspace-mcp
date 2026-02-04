@@ -84,10 +84,7 @@ export async function handleListEvents(
   const events = response.data.items || [];
 
   if (events.length === 0) {
-    return structuredResponse("No events found.", {
-      events: [],
-      nextPageToken: null,
-    });
+    return structuredResponse("No events found.", { events: [] });
   }
 
   const eventData = events.map((event) => ({
@@ -427,7 +424,7 @@ export async function handleDeleteEvent(
   log("Deleted event", { calendarId, eventId });
 
   return structuredResponse(`Deleted event: ${eventSummary} (ID: ${eventId})`, {
-    deleted: true,
+    deleted: 1,
     eventId,
   });
 }

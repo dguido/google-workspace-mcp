@@ -413,10 +413,13 @@ export async function handleFormatGoogleSheetCells(
     requestBody: { requests },
   });
 
-  return structuredResponse(`Formatted cells in range ${data.range} (${appliedFormats.join(", ")})`, {
-    range: data.range,
-    applied: true,
-  });
+  return structuredResponse(
+    `Formatted cells in range ${data.range} (${appliedFormats.join(", ")})`,
+    {
+      range: data.range,
+      applied: true,
+    },
+  );
 }
 
 export async function handleMergeGoogleSheetCells(

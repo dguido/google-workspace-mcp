@@ -2762,7 +2762,7 @@ export const calendarTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        deleted: { type: "boolean", description: "Whether deletion succeeded" },
+        deleted: { type: "number", description: "Number of events deleted" },
         eventId: { type: "string", description: "Deleted event ID" },
       },
     },
@@ -3057,9 +3057,13 @@ export const gmailTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Thread ID" },
-        messageCount: { type: "number", description: "Number of messages in thread" },
-        labelIds: { type: "array", items: { type: "string" }, description: "Current labels" },
+        id: { type: "string", description: "First modified thread ID (for batch: first in list)" },
+        messageCount: { type: "number", description: "Number of threads modified" },
+        labelIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Labels that were added",
+        },
       },
     },
   },
@@ -3130,7 +3134,7 @@ export const gmailTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        deleted: { type: "boolean", description: "Whether the deletion succeeded" },
+        deleted: { type: "number", description: "Number of labels deleted" },
         labelId: { type: "string", description: "Deleted label ID" },
       },
     },
@@ -3290,7 +3294,7 @@ export const gmailTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        deleted: { type: "boolean", description: "Whether the deletion succeeded" },
+        deleted: { type: "number", description: "Number of filters deleted" },
         filterId: { type: "string", description: "Deleted filter ID" },
       },
     },

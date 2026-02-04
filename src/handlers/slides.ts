@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { drive_v3, slides_v1 } from "googleapis";
-import {
-  structuredResponse,
-  errorResponse,
-  withTimeout,
-  validateArgs,
-} from "../utils/index.js";
+import { structuredResponse, errorResponse, withTimeout, validateArgs } from "../utils/index.js";
 import { GOOGLE_MIME_TYPES, getMimeTypeSuggestion } from "../utils/mimeTypes.js";
 import type { ToolResponse } from "../utils/index.js";
 import {
@@ -612,8 +607,24 @@ export async function handleSlidesSpeakerNotes(
   if (data.action === "get") {
     return getSpeakerNotes(slide, notesObjectId, data.slideIndex);
   } else {
-    return updateSpeakerNotes(slides, data.presentationId, slide, notesObjectId, data.notes!, data.slideIndex);
+    return updateSpeakerNotes(
+      slides,
+      data.presentationId,
+      slide,
+      notesObjectId,
+      data.notes!,
+      data.slideIndex,
+    );
   }
+}
+
+function emptyNotesResponse(slideIndex: number): ToolResponse {
+  return structuredResponse("No speaker notes found for this slide", {
+    action: "get",
+    slideIndex,
+    notes: "",
+    updated: false,
+  });
 }
 
 function getSpeakerNotes(
@@ -622,22 +633,12 @@ function getSpeakerNotes(
   slideIndex: number,
 ): ToolResponse {
   if (!notesObjectId) {
-    return structuredResponse("No speaker notes found for this slide", {
-      action: "get",
-      slideIndex,
-      notes: "",
-      updated: false,
-    });
+    return emptyNotesResponse(slideIndex);
   }
 
   const notesPage = slide.slideProperties?.notesPage;
   if (!notesPage || !notesPage.pageElements) {
-    return structuredResponse("No speaker notes found for this slide", {
-      action: "get",
-      slideIndex,
-      notes: "",
-      updated: false,
-    });
+    return emptyNotesResponse(slideIndex);
   }
 
   const speakerNotesElement = notesPage.pageElements.find(
@@ -645,12 +646,7 @@ function getSpeakerNotes(
   );
 
   if (!speakerNotesElement || !speakerNotesElement.shape?.text) {
-    return structuredResponse("No speaker notes found for this slide", {
-      action: "get",
-      slideIndex,
-      notes: "",
-      updated: false,
-    });
+    return emptyNotesResponse(slideIndex);
   }
 
   let notesText = "";
@@ -661,7 +657,11 @@ function getSpeakerNotes(
     }
   });
 
-  return structuredResponse(notesText.trim() || "No speaker notes found for this slide", {
+  if (!notesText.trim()) {
+    return emptyNotesResponse(slideIndex);
+  }
+
+  return structuredResponse(notesText.trim(), {
     action: "get",
     slideIndex,
     notes: notesText.trim(),

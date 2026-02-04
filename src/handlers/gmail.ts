@@ -322,11 +322,7 @@ export async function handleSearchEmails(
   const messages = response.data.messages || [];
 
   if (messages.length === 0) {
-    return structuredResponse(`No emails found matching: ${query}`, {
-      messages: [],
-      nextPageToken: null,
-      resultSizeEstimate: 0,
-    });
+    return structuredResponse(`No emails found matching: ${query}`, { messages: [] });
   }
 
   // Fetch basic metadata for each message
@@ -359,12 +355,12 @@ export async function handleSearchEmails(
 
   log("Searched emails", { query, count: messages.length });
 
-  const responseData: { 
-    messages: typeof messageDetails; 
-    nextPageToken?: string; 
+  const responseData: {
+    messages: typeof messageDetails;
+    nextPageToken?: string;
     resultSizeEstimate?: number;
   } = { messages: messageDetails };
-  
+
   if (response.data.nextPageToken) {
     responseData.nextPageToken = response.data.nextPageToken;
   }
@@ -707,7 +703,7 @@ export async function handleDeleteLabel(
   log("Deleted label", { labelId });
 
   return structuredResponse(`Label ${labelId} deleted successfully.`, {
-    deleted: true,
+    deleted: 1,
     labelId,
   });
 }
@@ -1019,7 +1015,7 @@ export async function handleDeleteFilter(
   log("Deleted filter", { filterId });
 
   return structuredResponse(`Filter ${filterId} deleted successfully.`, {
-    deleted: true,
+    deleted: 1,
     filterId,
   });
 }
