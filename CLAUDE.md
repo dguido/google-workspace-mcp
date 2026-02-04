@@ -134,14 +134,18 @@ function createMockDrive(): drive_v3.Drive {
 
 ### Gotchas
 
-| Gotcha                   | Solution                                                                                                            |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Path vs ID parameters    | All file/folder params accept either. Use `.refine()` to enforce mutual exclusion                                   |
-| Folder auto-creation     | `resolvePath()` creates intermediate folders automatically                                                          |
-| Response type selection  | Use `successResponse(text)` for simple messages, `structuredResponse(text, data)` when machine-readable data needed |
-| TOON format in responses | Use `toToon()` to encode data in text responses; `structuredContent` is auto-suppressed when TOON is enabled        |
-| Batch operation progress | Use `processBatchOperation()` - handles progress reporting and partial failures                                     |
-| Google API errors        | Wrap in try/catch, use `errorResponse()` with context about what operation failed                                   |
+| Gotcha                    | Solution                                                                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Path vs ID parameters     | All file/folder params accept either. Use `.refine()` to enforce mutual exclusion                                                                    |
+| Folder auto-creation      | `resolvePath()` creates intermediate folders automatically                                                                                           |
+| Response type selection   | Use `successResponse(text)` for simple messages, `structuredResponse(text, data)` when machine-readable data needed                                  |
+| TOON format in responses  | Use `toToon()` to encode data in text responses; `structuredContent` is auto-suppressed when TOON is enabled                                         |
+| Batch operation progress  | Use `processBatchOperation()` - handles progress reporting and partial failures                                                                      |
+| Google API errors         | Wrap in try/catch, use `errorResponse()` with context about what operation failed                                                                    |
+| outputSchema requirements | Tools with `outputSchema` MUST use `structuredResponse()`. Response data MUST match schema types. Omit optional fields rather than setting to `null` |
+| Empty result edge cases   | When fixing response issues, check BOTH the "has results" AND "empty results" code paths                                                             |
+| Type consistency          | Similar operations (all deletes, all creates) should return consistent field types. Use `number` for counts (`deleted: 1` not `true`)                |
+| Schema descriptions       | outputSchema descriptions must match actual response semantics, especially for batch operations                                                      |
 
 ### Key utilities
 
