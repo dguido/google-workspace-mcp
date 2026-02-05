@@ -12,6 +12,7 @@ vi.mock("../utils/index.js", async (importOriginal) => {
   return {
     ...actual,
     log: vi.fn(),
+    withTimeout: <T>(promise: Promise<T>) => promise,
   };
 });
 

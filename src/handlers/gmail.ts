@@ -302,7 +302,7 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
   });
 }
 
-export function buildSearchQuery(args: {
+type SearchParams = {
   query?: string;
   from?: string;
   to?: string;
@@ -311,7 +311,9 @@ export function buildSearchQuery(args: {
   before?: string;
   hasAttachment?: boolean;
   label?: string;
-}): string {
+};
+
+export function buildSearchQuery(args: SearchParams): string {
   const parts: string[] = [];
   if (args.from) parts.push(`from:${args.from}`);
   if (args.to) parts.push(`to:${args.to}`);
@@ -324,16 +326,7 @@ export function buildSearchQuery(args: {
   return parts.join(" ");
 }
 
-export function buildSearchHints(args: {
-  query?: string;
-  from?: string;
-  to?: string;
-  subject?: string;
-  after?: string;
-  before?: string;
-  hasAttachment?: boolean;
-  label?: string;
-}): string[] {
+export function buildSearchHints(args: SearchParams): string[] {
   const hints: string[] = [];
 
   if (args.query && /[$#,]/.test(args.query)) {

@@ -157,6 +157,7 @@ export const SearchEmailsSchema = z
   .object({
     query: z
       .string()
+      .max(500)
       .optional()
       .describe(
         "Gmail search query. Operators: from: to: subject: " +
@@ -165,13 +166,13 @@ export const SearchEmailsSchema = z
           "Gmail ignores special characters like $ and " +
           "commas — use plain numbers (5149 not $5,149).",
       ),
-    from: z.string().optional().describe("Sender email or name"),
-    to: z.string().optional().describe("Recipient email or name"),
-    subject: z.string().optional().describe("Subject line text"),
-    after: z.string().optional().describe("After date (YYYY/MM/DD)"),
-    before: z.string().optional().describe("Before date (YYYY/MM/DD)"),
+    from: z.string().max(254).optional().describe("Sender email or name"),
+    to: z.string().max(254).optional().describe("Recipient email or name"),
+    subject: z.string().max(500).optional().describe("Subject line text"),
+    after: z.string().max(10).optional().describe("After date (YYYY/MM/DD)"),
+    before: z.string().max(10).optional().describe("Before date (YYYY/MM/DD)"),
     hasAttachment: z.boolean().optional().describe("Filter for messages with attachments"),
-    label: z.string().optional().describe("Gmail label name"),
+    label: z.string().max(225).optional().describe("Gmail label name"),
     maxResults: z.number().int().min(1).max(500).optional().default(50).describe("Maximum results"),
     pageToken: z.string().optional().describe("Token for pagination"),
     labelIds: z.array(z.string()).optional().describe("Filter by label IDs"),
