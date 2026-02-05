@@ -153,16 +153,36 @@ export const ReadEmailSchema = z.object({
 
 export type ReadEmailInput = z.infer<typeof ReadEmailSchema>;
 
-export const SearchEmailsSchema = z.object({
-  query: z
-    .string()
-    .min(1, "Search query required")
-    .describe("Gmail search query (e.g., 'from:sender@example.com', 'is:unread', 'subject:hello')"),
-  maxResults: z.number().int().min(1).max(500).optional().default(50).describe("Maximum results"),
-  pageToken: z.string().optional().describe("Token for pagination"),
-  labelIds: z.array(z.string()).optional().describe("Filter by label IDs"),
-  includeSpamTrash: z.boolean().optional().default(false).describe("Include spam and trash"),
-});
+export const SearchEmailsSchema = z
+  .object({
+    query: z
+      .string()
+      .max(500)
+      .optional()
+      .describe(
+        "Gmail search query. Operators: from: to: subject: " +
+          "has:attachment is:unread after:YYYY/MM/DD " +
+          "before:YYYY/MM/DD larger: smaller: label:. " +
+          "Gmail ignores special characters like $ and " +
+          "commas — use plain numbers (5149 not $5,149).",
+      ),
+    from: z.string().max(254).optional().describe("Sender email or name"),
+    to: z.string().max(254).optional().describe("Recipient email or name"),
+    subject: z.string().max(500).optional().describe("Subject line text"),
+    after: z.string().max(10).optional().describe("After date (YYYY/MM/DD)"),
+    before: z.string().max(10).optional().describe("Before date (YYYY/MM/DD)"),
+    hasAttachment: z.boolean().optional().describe("Filter for messages with attachments"),
+    label: z.string().max(225).optional().describe("Gmail label name"),
+    maxResults: z.number().int().min(1).max(500).optional().default(50).describe("Maximum results"),
+    pageToken: z.string().optional().describe("Token for pagination"),
+    labelIds: z.array(z.string()).optional().describe("Filter by label IDs"),
+    includeSpamTrash: z.boolean().optional().default(false).describe("Include spam and trash"),
+  })
+  .refine(
+    (d) =>
+      d.query || d.from || d.to || d.subject || d.after || d.before || d.hasAttachment || d.label,
+    { message: "At least one search parameter required" },
+  );
 
 export type SearchEmailsInput = z.infer<typeof SearchEmailsSchema>;
 
