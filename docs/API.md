@@ -1,6 +1,6 @@
 # API Reference
 
-Complete reference for all Google Workspace MCP tools (85 total across 8 services).
+Complete reference for all Google Workspace MCP tools (86 total across 8 services).
 
 ## Discovery
 
@@ -769,15 +769,22 @@ Read email content and metadata.
 
 ### search_emails
 
-Search emails using Gmail query syntax (max 500 per request).
+Search emails using structured parameters or Gmail query syntax (max 500 per request). At least one search parameter required.
 
-| Parameter          | Type    | Required | Description                             |
-| ------------------ | ------- | -------- | --------------------------------------- |
-| `query`            | string  | Yes      | Gmail search query                      |
-| `maxResults`       | number  | No       | Maximum results (default: 50, max: 500) |
-| `pageToken`        | string  | No       | Pagination token                        |
-| `labelIds`         | array   | No       | Filter by label IDs                     |
-| `includeSpamTrash` | boolean | No       | Include spam and trash (default: false) |
+| Parameter          | Type    | Required | Description                                                                                                                                                        |
+| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `query`            | string  | No       | Gmail search query. Operators: from: to: subject: has:attachment is:unread after:YYYY/MM/DD before:YYYY/MM/DD larger: smaller: label:. Gmail ignores $ and commas. |
+| `from`             | string  | No       | Sender email or name                                                                                                                                               |
+| `to`               | string  | No       | Recipient email or name                                                                                                                                            |
+| `subject`          | string  | No       | Subject line text                                                                                                                                                  |
+| `after`            | string  | No       | After date (YYYY/MM/DD)                                                                                                                                            |
+| `before`           | string  | No       | Before date (YYYY/MM/DD)                                                                                                                                           |
+| `hasAttachment`    | boolean | No       | Filter for messages with attachments                                                                                                                               |
+| `label`            | string  | No       | Gmail label name                                                                                                                                                   |
+| `maxResults`       | number  | No       | Maximum results (default: 50, max: 500)                                                                                                                            |
+| `pageToken`        | string  | No       | Pagination token                                                                                                                                                   |
+| `labelIds`         | array   | No       | Filter by label IDs                                                                                                                                                |
+| `includeSpamTrash` | boolean | No       | Include spam and trash (default: false)                                                                                                                            |
 
 ### delete_email
 
@@ -789,13 +796,13 @@ Delete emails permanently (max 1000 IDs per request).
 
 ### modify_email
 
-Add/remove labels (max 1000 IDs per request).
+Add/remove labels on threads (max 1000 IDs per request).
 
-| Parameter        | Type            | Required | Description                           |
-| ---------------- | --------------- | -------- | ------------------------------------- |
-| `messageId`      | string or array | Yes      | Message ID or array of IDs (max 1000) |
-| `addLabelIds`    | array           | No       | Label IDs to add                      |
-| `removeLabelIds` | array           | No       | Label IDs to remove                   |
+| Parameter        | Type            | Required | Description                          |
+| ---------------- | --------------- | -------- | ------------------------------------ |
+| `threadId`       | string or array | Yes      | Thread ID or array of IDs (max 1000) |
+| `addLabelIds`    | array           | No       | Label IDs to add                     |
+| `removeLabelIds` | array           | No       | Label IDs to remove                  |
 
 ### download_attachment
 

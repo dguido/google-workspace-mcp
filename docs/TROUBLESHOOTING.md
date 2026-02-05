@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Complete troubleshooting guide for Google Drive MCP.
+Complete troubleshooting guide for Google Workspace MCP.
 
 ## Authentication Issues
 
@@ -125,16 +125,6 @@ Error: Google Sheets API has not been used in project...
 - Implement exponential backoff
 - Batch operations where possible
 - Check quota usage in Google Cloud Console
-
-## Debug Mode
-
-Enable detailed logging:
-
-```bash
-# Set debug environment variable
-export DEBUG=google-workspace-mcp:*
-npx @dguido/google-workspace-mcp
-```
 
 ## Getting Help
 

@@ -162,6 +162,7 @@ To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
 
 - Omit `GOOGLE_WORKSPACE_SERVICES` entirely to enable all services
 - Unified tools (`create_file`, `update_file`, `get_file_content`) require `drive`, `docs`, `sheets`, and `slides`
+- When you limit services, only the OAuth scopes for those services are requested during authentication. If you change enabled services, re-authenticate to update granted scopes.
 
 See [Advanced Configuration](docs/ADVANCED.md) for named profiles, multi-account setup, and environment variables.
 
@@ -265,22 +266,6 @@ If you have a Google Workspace account:
 ### Monitoring Token Age
 
 Use `get_status` to check token age. Tokens older than 6 days show a warning automatically.
-
-## Scope Filtering
-
-When you limit services via `GOOGLE_WORKSPACE_SERVICES`, only the OAuth scopes for those services are requested during authentication. This provides:
-
-- **Cleaner consent screen** - Users see only the permissions they need
-- **Principle of least privilege** - App only has access to enabled services
-
-For example, setting `GOOGLE_WORKSPACE_SERVICES=drive,calendar` will only request Drive and Calendar scopes, not Gmail or Contacts.
-
-**Note:** If you change enabled services, re-authenticate to update granted scopes:
-
-```bash
-rm ~/.config/google-workspace-mcp/tokens.json
-npx @dguido/google-workspace-mcp auth
-```
 
 ## Development
 
