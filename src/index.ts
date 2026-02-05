@@ -279,10 +279,12 @@ async function ensureAuthenticated() {
 
     try {
       authClient = await authenticationPromise;
+      const hasCredentials = !!authClient?.credentials;
+      const hasAccessToken = !!authClient?.credentials?.access_token;
       log("Authentication complete", {
         authClientType: authClient?.constructor?.name,
-        hasCredentials: !!authClient?.credentials,
-        hasAccessToken: !!authClient?.credentials?.access_token,
+        hasCredentials,
+        hasAccessToken,
       });
       // Ensure drive service is created with auth
       ensureDriveService();
