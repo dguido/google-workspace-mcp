@@ -2962,16 +2962,57 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "search_emails",
-    description: "Search emails using Gmail query syntax (max 500 per request)",
+    description:
+      "Search emails using structured parameters or Gmail query syntax" +
+      " (max 500 per request). At least one search parameter required.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Gmail search query" },
+        query: {
+          type: "string",
+          description:
+            "Gmail search query. Operators: from: to: subject: " +
+            "has:attachment is:unread after:YYYY/MM/DD " +
+            "before:YYYY/MM/DD larger: smaller: label:. " +
+            "Gmail ignores special characters like $ and " +
+            "commas — use plain numbers (5149 not $5,149).",
+        },
+        from: {
+          type: "string",
+          description: "Sender email or name",
+        },
+        to: {
+          type: "string",
+          description: "Recipient email or name",
+        },
+        subject: {
+          type: "string",
+          description: "Subject line text",
+        },
+        after: {
+          type: "string",
+          description: "After date (YYYY/MM/DD)",
+        },
+        before: {
+          type: "string",
+          description: "Before date (YYYY/MM/DD)",
+        },
+        hasAttachment: {
+          type: "boolean",
+          description: "Filter for messages with attachments",
+        },
+        label: {
+          type: "string",
+          description: "Gmail label name",
+        },
         maxResults: {
           type: "number",
           description: "(optional, default: 50) Maximum results (max 500)",
         },
-        pageToken: { type: "string", description: "(optional) Pagination token" },
+        pageToken: {
+          type: "string",
+          description: "(optional) Pagination token",
+        },
         labelIds: {
           type: "array",
           items: { type: "string" },
@@ -2982,7 +3023,6 @@ export const gmailTools: ToolDefinition[] = [
           description: "(optional, default: false) Include spam and trash",
         },
       },
-      required: ["query"],
     },
     outputSchema: {
       type: "object",

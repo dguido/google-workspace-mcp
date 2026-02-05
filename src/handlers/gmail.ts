@@ -302,13 +302,78 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
   });
 }
 
+export function buildSearchQuery(args: {
+  query?: string;
+  from?: string;
+  to?: string;
+  subject?: string;
+  after?: string;
+  before?: string;
+  hasAttachment?: boolean;
+  label?: string;
+}): string {
+  const parts: string[] = [];
+  if (args.from) parts.push(`from:${args.from}`);
+  if (args.to) parts.push(`to:${args.to}`);
+  if (args.subject) parts.push(`subject:${args.subject}`);
+  if (args.after) parts.push(`after:${args.after}`);
+  if (args.before) parts.push(`before:${args.before}`);
+  if (args.hasAttachment) parts.push("has:attachment");
+  if (args.label) parts.push(`label:${args.label}`);
+  if (args.query) parts.push(args.query);
+  return parts.join(" ");
+}
+
+export function buildSearchHints(args: {
+  query?: string;
+  from?: string;
+  to?: string;
+  subject?: string;
+  after?: string;
+  before?: string;
+  hasAttachment?: boolean;
+  label?: string;
+}): string[] {
+  const hints: string[] = [];
+
+  if (args.query && /[$#,]/.test(args.query)) {
+    hints.push(
+      "Gmail ignores special characters like $, #, and commas" +
+        " — use plain numbers (e.g. 5149 not $5,149)",
+    );
+  }
+
+  const dateFormat = /^\d{4}\/\d{2}\/\d{2}$/;
+  if (args.after && !dateFormat.test(args.after)) {
+    hints.push("Date format for 'after' should be YYYY/MM/DD" + ` (got: ${args.after})`);
+  }
+  if (args.before && !dateFormat.test(args.before)) {
+    hints.push("Date format for 'before' should be YYYY/MM/DD" + ` (got: ${args.before})`);
+  }
+
+  if (
+    args.query &&
+    /\d{4}[-/]\d{2}[-/]\d{2}/.test(args.query) &&
+    !/(?:after|before):/.test(args.query)
+  ) {
+    hints.push("Dates in query need operators:" + " use after:YYYY/MM/DD or before:YYYY/MM/DD");
+  }
+
+  if (args.query && args.query.length > 200) {
+    hints.push("Try simplifying — shorter queries often match more");
+  }
+
+  return hints;
+}
+
 export async function handleSearchEmails(
   gmail: gmail_v1.Gmail,
   args: unknown,
 ): Promise<ToolResponse> {
   const validation = validateArgs(SearchEmailsSchema, args);
   if (!validation.success) return validation.response;
-  const { query, maxResults, pageToken, labelIds, includeSpamTrash } = validation.data;
+  const { maxResults, pageToken, labelIds, includeSpamTrash } = validation.data;
+  const query = buildSearchQuery(validation.data);
 
   const response = await gmail.users.messages.list({
     userId: "me",
@@ -322,7 +387,11 @@ export async function handleSearchEmails(
   const messages = response.data.messages || [];
 
   if (messages.length === 0) {
-    return structuredResponse(`No emails found matching: ${query}`, { messages: [] });
+    const hints = buildSearchHints(validation.data);
+    const text =
+      `No emails found matching: ${query}` +
+      (hints.length ? `\n\nHints:\n${hints.map((h) => `- ${h}`).join("\n")}` : "");
+    return structuredResponse(text, { messages: [] });
   }
 
   // Fetch basic metadata for each message

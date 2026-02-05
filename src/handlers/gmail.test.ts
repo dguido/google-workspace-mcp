@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { gmail_v1 } from "googleapis";
-import { handleModifyEmail } from "./gmail.js";
+import {
+  handleModifyEmail,
+  handleSearchEmails,
+  buildSearchQuery,
+  buildSearchHints,
+} from "./gmail.js";
 
 vi.mock("../utils/index.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../utils/index.js")>();
@@ -15,6 +20,10 @@ function createMockGmail(): gmail_v1.Gmail {
     users: {
       threads: {
         modify: vi.fn(),
+      },
+      messages: {
+        list: vi.fn(),
+        get: vi.fn(),
       },
     },
   } as unknown as gmail_v1.Gmail;
@@ -169,6 +178,252 @@ describe("handleModifyEmail", () => {
       threadId: [],
       addLabelIds: ["STARRED"],
     });
+
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("buildSearchQuery", () => {
+  it("builds query from 'from' only", () => {
+    expect(buildSearchQuery({ from: "alice@example.com" })).toBe("from:alice@example.com");
+  });
+
+  it("builds query from multiple params", () => {
+    const result = buildSearchQuery({
+      from: "alice@example.com",
+      subject: "hello",
+      after: "2024/01/01",
+    });
+    expect(result).toBe("from:alice@example.com subject:hello after:2024/01/01");
+  });
+
+  it("adds has:attachment when hasAttachment is true", () => {
+    expect(buildSearchQuery({ hasAttachment: true })).toBe("has:attachment");
+  });
+
+  it("omits has:attachment when hasAttachment is false", () => {
+    expect(buildSearchQuery({ hasAttachment: false })).toBe("");
+  });
+
+  it("passes through raw query as-is", () => {
+    expect(buildSearchQuery({ query: "is:unread larger:5M" })).toBe("is:unread larger:5M");
+  });
+
+  it("merges structured params with raw query", () => {
+    const result = buildSearchQuery({
+      from: "bob@example.com",
+      query: "is:unread",
+    });
+    expect(result).toBe("from:bob@example.com is:unread");
+  });
+
+  it("builds query with all params", () => {
+    const result = buildSearchQuery({
+      from: "alice@example.com",
+      to: "bob@example.com",
+      subject: "meeting",
+      after: "2024/01/01",
+      before: "2024/12/31",
+      hasAttachment: true,
+      label: "work",
+      query: "is:starred",
+    });
+    expect(result).toBe(
+      "from:alice@example.com to:bob@example.com " +
+        "subject:meeting after:2024/01/01 before:2024/12/31 " +
+        "has:attachment label:work is:starred",
+    );
+  });
+
+  it("builds query with label only", () => {
+    expect(buildSearchQuery({ label: "important" })).toBe("label:important");
+  });
+});
+
+describe("buildSearchHints", () => {
+  it("returns hint when query contains special characters", () => {
+    const hints = buildSearchHints({ query: "invoice $5,149" });
+    expect(hints).toEqual(
+      expect.arrayContaining([expect.stringContaining("Gmail ignores special characters")]),
+    );
+  });
+
+  it("returns empty array for clean query", () => {
+    const hints = buildSearchHints({ query: "invoice from john" });
+    expect(hints).toEqual([]);
+  });
+
+  it("returns hint for invalid after date format", () => {
+    const hints = buildSearchHints({ after: "2024-01-01" });
+    expect(hints).toEqual(
+      expect.arrayContaining([expect.stringContaining("Date format for 'after'")]),
+    );
+    expect(hints[0]).toContain("2024-01-01");
+  });
+
+  it("returns hint for invalid before date format", () => {
+    const hints = buildSearchHints({ before: "01/15/2024" });
+    expect(hints).toEqual(
+      expect.arrayContaining([expect.stringContaining("Date format for 'before'")]),
+    );
+    expect(hints[0]).toContain("01/15/2024");
+  });
+
+  it("returns no hint for valid date formats", () => {
+    const hints = buildSearchHints({
+      after: "2024/01/01",
+      before: "2024/12/31",
+    });
+    expect(hints).toEqual([]);
+  });
+
+  it("returns hint for date in raw query without operator", () => {
+    const hints = buildSearchHints({
+      query: "meeting 2024-06-15",
+    });
+    expect(hints).toEqual(
+      expect.arrayContaining([expect.stringContaining("Dates in query need operators")]),
+    );
+  });
+
+  it("returns no hint for date in query with operator", () => {
+    const hints = buildSearchHints({
+      query: "after:2024/06/15 meeting",
+    });
+    expect(hints).toEqual([]);
+  });
+
+  it("returns hint for very long query", () => {
+    const hints = buildSearchHints({ query: "a".repeat(201) });
+    expect(hints).toEqual(expect.arrayContaining([expect.stringContaining("Try simplifying")]));
+  });
+
+  it("returns multiple hints for multiple issues", () => {
+    const hints = buildSearchHints({
+      query: "$" + "a".repeat(201),
+      after: "2024-01-01",
+    });
+    expect(hints.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("handleSearchEmails", () => {
+  let mockGmail: gmail_v1.Gmail;
+
+  beforeEach(() => {
+    mockGmail = createMockGmail();
+  });
+
+  it("searches with query only (backward compat)", async () => {
+    vi.mocked(mockGmail.users.messages.list).mockResolvedValue({
+      data: {
+        messages: [{ id: "msg1", threadId: "t1" }],
+        resultSizeEstimate: 1,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get).mockResolvedValue({
+      data: {
+        id: "msg1",
+        threadId: "t1",
+        snippet: "Hello",
+        payload: {
+          headers: [
+            { name: "From", value: "alice@example.com" },
+            { name: "Subject", value: "Test" },
+            { name: "Date", value: "2024-01-01" },
+          ],
+        },
+      },
+    } as never);
+
+    const result = await handleSearchEmails(mockGmail, {
+      query: "from:alice@example.com",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(mockGmail.users.messages.list).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "from:alice@example.com" }),
+    );
+  });
+
+  it("searches with structured params", async () => {
+    vi.mocked(mockGmail.users.messages.list).mockResolvedValue({
+      data: {
+        messages: [{ id: "msg1", threadId: "t1" }],
+        resultSizeEstimate: 1,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get).mockResolvedValue({
+      data: {
+        id: "msg1",
+        threadId: "t1",
+        snippet: "Hello",
+        payload: {
+          headers: [
+            { name: "From", value: "alice@example.com" },
+            { name: "Subject", value: "Test" },
+            { name: "Date", value: "2024-01-01" },
+          ],
+        },
+      },
+    } as never);
+
+    const result = await handleSearchEmails(mockGmail, {
+      from: "alice@example.com",
+      subject: "Test",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(mockGmail.users.messages.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        q: "from:alice@example.com subject:Test",
+      }),
+    );
+  });
+
+  it("returns empty messages for no results", async () => {
+    vi.mocked(mockGmail.users.messages.list).mockResolvedValue({
+      data: { messages: [], resultSizeEstimate: 0 },
+    } as never);
+
+    const result = await handleSearchEmails(mockGmail, {
+      from: "nobody@example.com",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({ messages: [] });
+  });
+
+  it("includes hints in text when empty result has special chars", async () => {
+    vi.mocked(mockGmail.users.messages.list).mockResolvedValue({
+      data: { messages: [], resultSizeEstimate: 0 },
+    } as never);
+
+    const result = await handleSearchEmails(mockGmail, {
+      query: "invoice $5,149",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({ messages: [] });
+    expect(result.content[0].text).toContain("Hints:");
+    expect(result.content[0].text).toContain("Gmail ignores");
+  });
+
+  it("does not include hints for clean empty result", async () => {
+    vi.mocked(mockGmail.users.messages.list).mockResolvedValue({
+      data: { messages: [], resultSizeEstimate: 0 },
+    } as never);
+
+    const result = await handleSearchEmails(mockGmail, {
+      from: "nobody@example.com",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).not.toContain("Hints:");
+  });
+
+  it("returns validation error when no params provided", async () => {
+    const result = await handleSearchEmails(mockGmail, {});
 
     expect(result.isError).toBe(true);
   });
