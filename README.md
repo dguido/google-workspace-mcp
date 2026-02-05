@@ -278,12 +278,6 @@ npm test         # Run tests
 
 See [Contributing Guide](CONTRIBUTING.md) for project structure and development workflow.
 
-## Links
-
-- [GitHub Repository](https://github.com/dguido/google-workspace-mcp)
-- [Issue Tracker](https://github.com/dguido/google-workspace-mcp/issues)
-- [Model Context Protocol](https://modelcontextprotocol.io)
-
 ## Origin
 
 This project is a substantial rewrite of [piotr-agier/google-drive-mcp](https://github.com/piotr-agier/google-drive-mcp), originally created by Piotr Agier.
