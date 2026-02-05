@@ -84,7 +84,12 @@ const CSRF_ERROR_STYLES = `
 /**
  * Render the success page after OAuth completion.
  */
-export function renderSuccessPage(tokenPath: string, gitignoreWarning: string): string {
+export function renderSuccessPage(
+  tokenPath: string,
+  gitignoreWarning: string,
+  profileName: string | null = null,
+): string {
+  const profileLine = profileName ? `<p>Profile: <code>${escapeHtml(profileName)}</code></p>` : "";
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -96,7 +101,7 @@ export function renderSuccessPage(tokenPath: string, gitignoreWarning: string): 
     </head>
     <body>
       <div class="container">
-        <h1>Authentication Successful!</h1>
+        <h1>Authentication Successful!</h1>${profileLine}
         <p>Your authentication tokens have been saved successfully to:</p>
         <p><code>${escapeHtml(tokenPath)}</code></p>${gitignoreWarning}
         <p style="margin-top: 1em;">You can now close this browser window.</p>

@@ -7,6 +7,8 @@ import {
   getConfigDirectory,
   getLegacyKeysFilePath,
   generateCredentialsErrorMessage,
+  getActiveProfile,
+  getProfileDirectory,
 } from "./utils.js";
 
 describe("auth/utils", () => {
@@ -143,6 +145,153 @@ describe("auth/utils", () => {
     });
   });
 
+  describe("getActiveProfile", () => {
+    it("returns null when env var is not set", () => {
+      delete process.env.GOOGLE_WORKSPACE_MCP_PROFILE;
+      expect(getActiveProfile()).toBeNull();
+    });
+
+    it("returns null when env var is empty string", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "";
+      expect(getActiveProfile()).toBeNull();
+    });
+
+    it("returns profile name when valid", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
+      expect(getActiveProfile()).toBe("work");
+    });
+
+    it("accepts hyphens and underscores", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "my-work_profile";
+      expect(getActiveProfile()).toBe("my-work_profile");
+    });
+
+    it("throws on path traversal attempt", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "../escape";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("throws on slash in name", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "a/b";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("throws on name longer than 64 chars", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "a".repeat(65);
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("accepts name exactly 64 chars", () => {
+      const name = "a".repeat(64);
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = name;
+      expect(getActiveProfile()).toBe(name);
+    });
+
+    it("throws on backslash in name", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "a\\b";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("throws on dot-only names", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "..";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("throws on single dot name", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = ".";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("throws on null byte in name", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "a\x00b";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+
+    it("throws on unicode characters", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "caf\u00e9";
+      expect(() => getActiveProfile()).toThrow("Invalid profile name");
+    });
+  });
+
+  describe("getProfileDirectory", () => {
+    it("returns profiles subdirectory under config dir", () => {
+      delete process.env.XDG_CONFIG_HOME;
+      const result = getProfileDirectory("work");
+      const expected = path.join(
+        os.homedir(),
+        ".config",
+        "google-workspace-mcp",
+        "profiles",
+        "work",
+      );
+      expect(result).toBe(expected);
+    });
+  });
+
+  describe("getSecureTokenPath with profile", () => {
+    it("resolves to profile tokens path", () => {
+      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
+      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
+      delete process.env.XDG_CONFIG_HOME;
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
+
+      const result = getSecureTokenPath();
+      const expected = path.join(
+        os.homedir(),
+        ".config",
+        "google-workspace-mcp",
+        "profiles",
+        "personal",
+        "tokens.json",
+      );
+      expect(result).toBe(expected);
+    });
+
+    it("explicit token path overrides profile", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = "/override/tokens.json";
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
+
+      const result = getSecureTokenPath();
+      expect(result).toBe("/override/tokens.json");
+    });
+
+    it("legacy token path overrides profile", () => {
+      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
+      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = "/legacy/tokens.json";
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
+
+      const result = getSecureTokenPath();
+      expect(result).toBe("/legacy/tokens.json");
+    });
+  });
+
+  describe("getKeysFilePath with profile", () => {
+    it("resolves to profile credentials path", () => {
+      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
+      delete process.env.XDG_CONFIG_HOME;
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
+
+      const result = getKeysFilePath();
+      const expected = path.join(
+        os.homedir(),
+        ".config",
+        "google-workspace-mcp",
+        "profiles",
+        "work",
+        "credentials.json",
+      );
+      expect(result).toBe(expected);
+    });
+
+    it("explicit credentials path overrides profile", () => {
+      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = "/override/creds.json";
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
+
+      const result = getKeysFilePath();
+      expect(result).toBe("/override/creds.json");
+    });
+  });
+
   describe("generateCredentialsErrorMessage", () => {
     it("returns a non-empty string", () => {
       const result = generateCredentialsErrorMessage();
@@ -181,6 +330,14 @@ describe("auth/utils", () => {
       const result = generateCredentialsErrorMessage();
 
       expect(result).toContain("GOOGLE_WORKSPACE_MCP_TOKEN_PATH");
+    });
+
+    it("includes profile info when profile is active", () => {
+      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
+      const result = generateCredentialsErrorMessage();
+
+      expect(result).toContain('Active profile: "work"');
+      expect(result).toContain("profiles");
     });
   });
 });

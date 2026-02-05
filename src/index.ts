@@ -35,7 +35,12 @@ import {
 import { isServiceEnabled, areUnifiedToolsEnabled, getEnabledServices } from "./config/index.js";
 
 // Import auth utilities for startup logging
-import { getSecureTokenPath, getKeysFilePath, getConfigDirectory } from "./auth/utils.js";
+import {
+  getSecureTokenPath,
+  getKeysFilePath,
+  getConfigDirectory,
+  getActiveProfile,
+} from "./auth/utils.js";
 
 // Import all tool definitions
 import { getAllTools } from "./tools/index.js";
@@ -705,32 +710,36 @@ Commands:
   version  Show version information
   help     Show this help message
 
-Auth Options:
-  --token-path <path>        Save tokens to custom path
-  --credentials-path <path>  Use custom OAuth credentials file
+Options:
+  --profile <name>           Use a named profile for credentials and tokens
+  --token-path <path>        Save tokens to custom path (overrides profile)
+  --credentials-path <path>  Use custom OAuth credentials file (overrides profile)
 
 Default Paths:
   Credentials: ${configDir}/credentials.json
   Tokens:      ${configDir}/tokens.json
 
+Profile Paths (when --profile or GOOGLE_WORKSPACE_MCP_PROFILE is set):
+  Credentials: ${configDir}/profiles/<name>/credentials.json
+  Tokens:      ${configDir}/profiles/<name>/tokens.json
+
 Examples:
   npx @dguido/google-workspace-mcp auth
-  npx @dguido/google-workspace-mcp auth --token-path .credentials/tokens.json
-  npx @dguido/google-workspace-mcp auth \\
-    --credentials-path .credentials/credentials.json \\
-    --token-path .credentials/tokens.json
+  npx @dguido/google-workspace-mcp auth --profile personal
+  npx @dguido/google-workspace-mcp auth --profile work
   npx @dguido/google-workspace-mcp start
   npx @dguido/google-workspace-mcp
 
 Environment Variables:
-  GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file (overrides default)
-  GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides default)
+  GOOGLE_WORKSPACE_MCP_PROFILE     Named profile for credential isolation
+  GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file (overrides profile)
+  GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides profile)
 
 Multi-Account Setup:
-  For project-level credential storage (useful with multiple Google accounts):
-  1. Create a .credentials directory in your project
-  2. Use CLI flags or env vars to point to project-level paths
-  3. Add .credentials/ to your .gitignore
+  Use named profiles to isolate credentials per project:
+  1. Auth each profile: npx @dguido/google-workspace-mcp auth --profile personal
+  2. Set profile in your project's MCP config:
+     { "env": { "GOOGLE_WORKSPACE_MCP_PROFILE": "personal" } }
 `);
 }
 
@@ -776,6 +785,7 @@ interface CliArgs {
   command: string | undefined;
   tokenPath?: string;
   credentialsPath?: string;
+  profile?: string;
 }
 
 function parseCliArgs(): CliArgs {
@@ -783,6 +793,7 @@ function parseCliArgs(): CliArgs {
   let command: string | undefined;
   let tokenPath: string | undefined;
   let credentialsPath: string | undefined;
+  let profile: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -799,6 +810,12 @@ function parseCliArgs(): CliArgs {
       continue;
     }
 
+    // Handle --profile flag
+    if (arg === "--profile" && i + 1 < args.length) {
+      profile = args[++i];
+      continue;
+    }
+
     // Handle special version/help flags as commands
     if (arg === "--version" || arg === "-v" || arg === "--help" || arg === "-h") {
       command = arg;
@@ -812,11 +829,16 @@ function parseCliArgs(): CliArgs {
     }
   }
 
-  return { command, tokenPath, credentialsPath };
+  return { command, tokenPath, credentialsPath, profile };
 }
 
 async function main() {
-  const { command, tokenPath, credentialsPath } = parseCliArgs();
+  const { command, tokenPath, credentialsPath, profile } = parseCliArgs();
+
+  // Set profile env var early so all path resolution sees it
+  if (profile) {
+    process.env.GOOGLE_WORKSPACE_MCP_PROFILE = profile;
+  }
 
   switch (command) {
     case "auth":
@@ -836,6 +858,7 @@ async function main() {
         log("Server started", {
           version: VERSION,
           node: process.version,
+          profile: getActiveProfile(),
           services: enabledServices,
           config_dir: configDir,
           token_path: getSecureTokenPath(),

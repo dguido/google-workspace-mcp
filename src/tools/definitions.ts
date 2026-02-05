@@ -3712,22 +3712,11 @@ export const discoveryTools: ToolDefinition[] = [
   {
     name: "get_status",
     description:
-      "Get server status including health, authentication, and enabled services. " +
-      "Use diagnose=true for full diagnostic with actionable recommendations.",
+      "Get server health, authentication status, connected account, " +
+      "and diagnostics with actionable recommendations.",
     inputSchema: {
       type: "object",
-      properties: {
-        diagnose: {
-          type: "boolean",
-          description: "Run full diagnostic with recommendations (default: false)",
-          default: false,
-        },
-        validate_with_api: {
-          type: "boolean",
-          description: "Validate with API call when diagnose=true (default: false)",
-          default: false,
-        },
-      },
+      properties: {},
     },
     outputSchema: {
       type: "object",
@@ -3740,6 +3729,10 @@ export const discoveryTools: ToolDefinition[] = [
         version: { type: "string", description: "Server version" },
         uptime_seconds: { type: "number", description: "Server uptime in seconds" },
         timestamp: { type: "string", description: "ISO 8601 timestamp" },
+        profile: {
+          type: ["string", "null"],
+          description: "Active named profile, or null if using default",
+        },
         auth: {
           type: "object",
           description: "Authentication status",
@@ -3772,7 +3765,7 @@ export const discoveryTools: ToolDefinition[] = [
         },
         config_checks: {
           type: "array",
-          description: "Configuration checks (only when diagnose=true)",
+          description: "Configuration checks with fix steps",
           items: {
             type: "object",
             properties: {
@@ -3789,7 +3782,7 @@ export const discoveryTools: ToolDefinition[] = [
         },
         token_check: {
           type: "object",
-          description: "Detailed token info (only when diagnose=true)",
+          description: "Detailed token info",
           properties: {
             has_access_token: { type: "boolean" },
             has_refresh_token: { type: "boolean" },
@@ -3800,7 +3793,7 @@ export const discoveryTools: ToolDefinition[] = [
         },
         last_error: {
           type: "object",
-          description: "Last auth error (only when diagnose=true)",
+          description: "Last auth error, if any",
           properties: {
             code: { type: "string", description: "Error code" },
             reason: { type: "string", description: "Error reason" },
@@ -3809,7 +3802,7 @@ export const discoveryTools: ToolDefinition[] = [
         },
         api_validation: {
           type: "object",
-          description: "API validation result (only when validate_with_api=true)",
+          description: "API validation result",
           properties: {
             success: { type: "boolean" },
             user_email: { type: "string", description: "Authenticated user email if successful" },
@@ -3818,7 +3811,7 @@ export const discoveryTools: ToolDefinition[] = [
         },
         recommendations: {
           type: "array",
-          description: "Actionable recommendations (only when diagnose=true)",
+          description: "Actionable recommendations",
           items: { type: "string" },
         },
       },

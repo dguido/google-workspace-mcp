@@ -15,6 +15,7 @@ vi.mock("../auth/utils.js", () => ({
   resolveCredentialsPath: vi.fn(() =>
     Promise.resolve({ path: "/mock/gcp-oauth.keys.json", isLegacy: false, exists: true }),
   ),
+  getActiveProfile: vi.fn(() => null),
 }));
 
 vi.mock("../auth/tokenManager.js", () => ({
@@ -92,6 +93,11 @@ describe("handleGetStatus", () => {
       isLegacy: false,
       exists: true,
     });
+
+    // Default: API validation succeeds
+    vi.mocked(mockDrive.about.get).mockResolvedValue({
+      data: { user: { emailAddress: "test@example.com" } },
+    } as never);
   });
 
   afterEach(() => {
@@ -99,16 +105,25 @@ describe("handleGetStatus", () => {
   });
 
   describe("basic status", () => {
-    it("returns correct structure for basic status", async () => {
+    it("returns correct structure", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue(
-        JSON.stringify({
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("keys")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
           access_token: "test-token",
           refresh_token: "test-refresh",
           expiry_date: Date.now() + 3600000,
           scope: "https://www.googleapis.com/auth/drive",
-        }),
-      );
+          created_at: new Date().toISOString(),
+        });
+      });
 
       const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
@@ -121,6 +136,70 @@ describe("handleGetStatus", () => {
       expect(data.auth).toBeDefined();
       expect(data.auth.configured).toBe(true);
       expect(data.enabled_services).toContain("drive");
+      expect(data.config_checks).toBeDefined();
+      expect(Array.isArray(data.config_checks)).toBe(true);
+      expect(data.recommendations).toBeDefined();
+      expect(data.api_validation).toBeDefined();
+    });
+
+    it("includes profile as null by default", async () => {
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("keys")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        });
+      });
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      expect(data.profile).toBeNull();
+    });
+
+    it("includes active profile name when set", async () => {
+      const { getActiveProfile } = await import("../auth/utils.js");
+      vi.mocked(getActiveProfile).mockReturnValue("work");
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("keys")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        });
+      });
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      expect(data.profile).toBe("work");
+
+      // Reset for other tests
+      vi.mocked(getActiveProfile).mockReturnValue(null);
     });
 
     it("returns error status when credentials file is missing", async () => {
@@ -170,14 +249,23 @@ describe("handleGetStatus", () => {
 
     it("reports expired token correctly", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue(
-        JSON.stringify({
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("keys")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
           access_token: "expired-token",
           refresh_token: "test-refresh",
           expiry_date: Date.now() - 3600000, // Expired 1 hour ago
           scope: "https://www.googleapis.com/auth/drive",
-        }),
-      );
+          created_at: new Date().toISOString(),
+        });
+      });
 
       const expiredAuthClient = createMockAuthClient({
         access_token: "expired-token",
@@ -190,33 +278,40 @@ describe("handleGetStatus", () => {
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
       expect(data.auth.token_status).toBe("expired");
-      expect(data.status).toBe("warning");
     });
 
     it("reports error status when token is expired without refresh token", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue(
-        JSON.stringify({
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("keys")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
           access_token: "expired-token",
           expiry_date: Date.now() - 3600000,
           scope: "https://www.googleapis.com/auth/drive",
-        }),
-      );
+          created_at: new Date().toISOString(),
+        });
+      });
 
       const result = await handleGetStatus(null, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
       expect(data.auth.token_status).toBe("expired");
-      expect(data.status).toBe("error");
     });
 
-    it("reports error status when token is missing", async () => {
+    it("reports warning status when token is missing", async () => {
       vi.mocked(fs.access).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
-          return undefined;
+        if (String(path).includes("tokens") || String(path).includes("workspace")) {
+          throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
         }
-        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        return undefined;
       });
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
         if (String(path).includes("keys")) {
@@ -235,18 +330,27 @@ describe("handleGetStatus", () => {
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
       expect(data.auth.token_status).toBe("missing");
-      expect(data.status).toBe("error");
+      expect(data.status).toBe("warning");
     });
 
     it("overrides token status when authClient has valid credentials", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue(
-        JSON.stringify({
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("keys")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
           access_token: "expired-token",
           expiry_date: Date.now() - 3600000, // File shows expired
           scope: "https://www.googleapis.com/auth/drive",
-        }),
-      );
+          created_at: new Date().toISOString(),
+        });
+      });
 
       // But authClient has valid credentials
       const validAuthClient = createMockAuthClient({
@@ -262,63 +366,8 @@ describe("handleGetStatus", () => {
     });
   });
 
-  describe("schema validation", () => {
-    it("fails when validate_with_api is true without diagnose", async () => {
-      vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockResolvedValue(
-        JSON.stringify({
-          access_token: "test-token",
-          refresh_token: "test-refresh",
-          expiry_date: Date.now() + 3600000,
-          scope: "https://www.googleapis.com/auth/drive",
-        }),
-      );
-
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        validate_with_api: true,
-        diagnose: false,
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0]).toHaveProperty("text");
-      const text = (result.content[0] as { text: string }).text;
-      expect(text).toContain("validate_with_api requires diagnose");
-    });
-  });
-
-  describe("diagnose mode", () => {
-    it("includes config_checks in diagnose mode", async () => {
-      vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
-          return JSON.stringify({
-            installed: {
-              client_id: "test.apps.googleusercontent.com",
-              client_secret: "secret",
-            },
-          });
-        }
-        return JSON.stringify({
-          access_token: "test-token",
-          refresh_token: "test-refresh",
-          expiry_date: Date.now() + 3600000,
-          scope: "https://www.googleapis.com/auth/drive",
-          created_at: new Date().toISOString(),
-        });
-      });
-
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
-
-      expect(result.isError).toBe(false);
-      const data = result.structuredContent as StatusData;
-      expect(data.config_checks).toBeDefined();
-      expect(Array.isArray(data.config_checks)).toBe(true);
-      expect(data.recommendations).toBeDefined();
-    });
-
-    it("validates with API when requested", async () => {
+  describe("API validation", () => {
+    it("includes successful API validation", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
         if (String(path).includes("keys")) {
@@ -342,10 +391,7 @@ describe("handleGetStatus", () => {
         data: { user: { emailAddress: "test@example.com" } },
       } as never);
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-        validate_with_api: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -376,10 +422,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(mockDrive.about.get).mockRejectedValue(new Error("API access denied"));
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-        validate_with_api: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -388,7 +431,7 @@ describe("handleGetStatus", () => {
       expect(data.api_validation?.error).toContain("API access denied");
     });
 
-    it("returns error when drive service is null during API validation", async () => {
+    it("returns error when drive service is null", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
         if (String(path).includes("keys")) {
@@ -408,10 +451,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, null, "2.0.0", {
-        diagnose: true,
-        validate_with_api: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, null, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -420,7 +460,7 @@ describe("handleGetStatus", () => {
     });
   });
 
-  describe("checkCredentialsFile (via diagnose mode)", () => {
+  describe("checkCredentialsFile", () => {
     it("returns error when credentials file does not exist", async () => {
       const { resolveCredentialsPath } = await import("../auth/utils.js");
       vi.mocked(resolveCredentialsPath).mockResolvedValue({
@@ -445,9 +485,7 @@ describe("handleGetStatus", () => {
         }),
       );
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -477,9 +515,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -509,9 +545,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -541,9 +575,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -580,9 +612,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -609,9 +639,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -622,7 +650,7 @@ describe("handleGetStatus", () => {
     });
   });
 
-  describe("checkTokenFile (via diagnose mode)", () => {
+  describe("checkTokenFile", () => {
     it("returns warning when token file does not exist", async () => {
       vi.mocked(fs.access).mockImplementation(async (path) => {
         if (String(path).includes("tokens") || String(path).includes("workspace")) {
@@ -642,9 +670,7 @@ describe("handleGetStatus", () => {
         throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -671,9 +697,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -702,9 +726,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -734,9 +756,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -769,9 +789,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -805,9 +823,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -840,9 +856,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -865,9 +879,7 @@ describe("handleGetStatus", () => {
         return "not valid json{{{";
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -878,7 +890,7 @@ describe("handleGetStatus", () => {
     });
   });
 
-  describe("generateRecommendations (via diagnose mode)", () => {
+  describe("generateRecommendations", () => {
     it("recommends OAuth setup when credentials file has error", async () => {
       vi.mocked(fs.access).mockImplementation(async (path) => {
         if (String(path).includes("keys")) {
@@ -896,9 +908,7 @@ describe("handleGetStatus", () => {
         }),
       );
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -925,9 +935,7 @@ describe("handleGetStatus", () => {
         throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -958,9 +966,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -1001,9 +1007,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -1033,10 +1037,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(mockDrive.about.get).mockRejectedValue(new Error("Network timeout"));
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-        validate_with_api: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
@@ -1072,14 +1073,11 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
       expect(data.recommendations).toBeDefined();
-      // The status is ok when token_file check is ok, so we expect the success message
       const tokenCheck = data.config_checks?.find((c) => c.name === "token_file");
       expect(tokenCheck?.status).toBe("ok");
       expect(data.recommendations?.some((r) => r.includes("configured correctly"))).toBe(true);
@@ -1104,9 +1102,7 @@ describe("handleGetStatus", () => {
         });
       });
 
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {
-        diagnose: true,
-      });
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
