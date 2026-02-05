@@ -114,6 +114,7 @@ Both credentials and tokens are stored in `~/.config/google-workspace-mcp/` by d
 | --------------------------------- | --------------------------------------------------- |
 | `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Custom path to credentials file (overrides default) |
 | `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                       |
+| `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation              |
 | `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable          |
 
 ### Token-Efficient Output (TOON)
@@ -162,7 +163,7 @@ To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
 - Omit `GOOGLE_WORKSPACE_SERVICES` entirely to enable all services
 - Unified tools (`create_file`, `update_file`, `get_file_content`) require `drive`, `docs`, `sheets`, and `slides`
 
-See [Advanced Configuration](docs/ADVANCED.md) for multi-account setup and environment variables.
+See [Advanced Configuration](docs/ADVANCED.md) for named profiles, multi-account setup, and environment variables.
 
 ## Available Tools
 
@@ -263,12 +264,7 @@ If you have a Google Workspace account:
 
 ### Monitoring Token Age
 
-Use `get_status` with `diagnose: true` to check token age:
-
-```
-# Tokens older than 6 days will show a warning
-# Token created_at timestamp is tracked automatically
-```
+Use `get_status` to check token age. Tokens older than 6 days show a warning automatically.
 
 ## Scope Filtering
 

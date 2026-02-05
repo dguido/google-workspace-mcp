@@ -97,11 +97,12 @@ These tools are used less frequently and can be loaded on-demand:
 
 **Optional** (for customization):
 
-| Variable                          | Description                      | Default                                      | Example                    |
-| --------------------------------- | -------------------------------- | -------------------------------------------- | -------------------------- |
-| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Override token storage location  | `~/.config/google-workspace-mcp/tokens.json` | `/custom/path/tokens.json` |
-| `GOOGLE_WORKSPACE_TOON_FORMAT`    | Enable TOON format for responses | `false`                                      | `true`                     |
-| `DEBUG`                           | Enable debug logging             | (disabled)                                   | `google-workspace-mcp:*`   |
+| Variable                          | Description                            | Default                                      | Example                    |
+| --------------------------------- | -------------------------------------- | -------------------------------------------- | -------------------------- |
+| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Override token storage location        | `~/.config/google-workspace-mcp/tokens.json` | `/custom/path/tokens.json` |
+| `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation | (none)                                       | `work`                     |
+| `GOOGLE_WORKSPACE_TOON_FORMAT`    | Enable TOON format for responses       | `false`                                      | `true`                     |
+| `DEBUG`                           | Enable debug logging                   | (disabled)                                   | `google-workspace-mcp:*`   |
 
 ### System Variables
 
@@ -121,41 +122,55 @@ These are standard system environment variables that the application reads but y
 
 ## Multi-Account Setup
 
-If you use multiple Google accounts (e.g., work, personal), store credentials per-project:
+### Option 1: Named Profiles (Recommended)
 
-### Option 1: CLI Flags (Simplest)
+Named profiles isolate credentials and tokens per Google account under `~/.config/google-workspace-mcp/profiles/<name>/`.
 
-```bash
-# Create project credentials directory
-mkdir -p .credentials
-
-# Authenticate with project-level storage
-npx @dguido/google-workspace-mcp auth \
-  --credentials-path .credentials/gcp-oauth.keys.json \
-  --token-path .credentials/tokens.json
-
-# Add to .gitignore
-echo ".credentials/" >> .gitignore
-```
-
-### Option 2: Environment Variables
+1. Copy credentials into the profile directory:
 
 ```bash
-export GOOGLE_DRIVE_OAUTH_CREDENTIALS=".credentials/gcp-oauth.keys.json"
-export GOOGLE_WORKSPACE_MCP_TOKEN_PATH=".credentials/tokens.json"
-npx @dguido/google-workspace-mcp auth
+mkdir -p ~/.config/google-workspace-mcp/profiles/work
+cp credentials.json ~/.config/google-workspace-mcp/profiles/work/
 ```
 
-### Claude Code MCP Config (Project-Level)
+2. Authenticate the profile:
+
+```bash
+npx @dguido/google-workspace-mcp auth --profile work
+```
+
+3. Configure your MCP client:
 
 ```json
 {
   "mcpServers": {
-    "google-drive": {
+    "google-workspace": {
       "command": "npx",
-      "args": ["-y", "@dguido/google-workspace-mcp"],
+      "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": ".credentials/gcp-oauth.keys.json",
+        "GOOGLE_WORKSPACE_MCP_PROFILE": "work"
+      }
+    }
+  }
+}
+```
+
+Repeat for each account (e.g., `personal`, `work`). Each profile stores its own `credentials.json` and `tokens.json`.
+
+Profile names must be 1-64 characters: letters, digits, hyphens, underscores.
+
+### Option 2: Environment Variable Overrides
+
+For full control over file locations, set explicit paths:
+
+```json
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "npx",
+      "args": ["@dguido/google-workspace-mcp"],
+      "env": {
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": ".credentials/credentials.json",
         "GOOGLE_WORKSPACE_MCP_TOKEN_PATH": ".credentials/tokens.json"
       }
     }
@@ -163,24 +178,26 @@ npx @dguido/google-workspace-mcp auth
 }
 ```
 
-Relative paths resolve from the working directory where Claude Code is launched.
+Explicit path env vars always override profile paths.
 
-### When to Use Each Approach
+### When to Use Each
 
-| Approach                        | Best For                                         |
-| ------------------------------- | ------------------------------------------------ |
-| User-level (`~/.config/`)       | Single Google account, convenience               |
-| Project-level (`.credentials/`) | Multiple accounts, account isolation per project |
+| Approach                       | Best For                             |
+| ------------------------------ | ------------------------------------ |
+| Default (`~/.config/`)         | Single Google account                |
+| Named profiles                 | Multiple accounts, clean isolation   |
+| Environment variable overrides | Custom paths, CI/CD, advanced setups |
 
 ## Token Storage
 
 Authentication tokens are stored securely following the XDG Base Directory specification:
 
-| Priority | Location    | Configuration                                              |
-| -------- | ----------- | ---------------------------------------------------------- |
-| 1        | Custom path | Set `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` environment variable |
-| 2        | XDG Config  | `$XDG_CONFIG_HOME/google-workspace-mcp/tokens.json`        |
-| 3        | Default     | `~/.config/google-workspace-mcp/tokens.json`               |
+| Priority | Location      | Configuration                                              |
+| -------- | ------------- | ---------------------------------------------------------- |
+| 1        | Custom path   | Set `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` environment variable |
+| 2        | Named profile | Set `GOOGLE_WORKSPACE_MCP_PROFILE` env var or `--profile`  |
+| 3        | XDG Config    | `$XDG_CONFIG_HOME/google-workspace-mcp/tokens.json`        |
+| 4        | Default       | `~/.config/google-workspace-mcp/tokens.json`               |
 
 **Security Notes:**
 
