@@ -6,7 +6,12 @@ import * as fs from "fs/promises";
 import { structuredResponse, type ToolResponse } from "../utils/responses.js";
 import { validateArgs, isNodeError } from "../utils/index.js";
 import { getEnabledServices, SERVICE_NAMES, type ServiceName } from "../config/services.js";
-import { getSecureTokenPath, getKeysFilePath, resolveCredentialsPath } from "../auth/utils.js";
+import {
+  getSecureTokenPath,
+  getKeysFilePath,
+  resolveCredentialsPath,
+  getActiveProfile,
+} from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
 import { GetStatusSchema } from "../schemas/status.js";
@@ -61,6 +66,7 @@ export interface StatusData extends Record<string, unknown> {
   version: string;
   uptime_seconds: number;
   timestamp: string;
+  profile: string | null;
   auth: {
     configured: boolean;
     token_status: TokenStatus;
@@ -69,20 +75,19 @@ export interface StatusData extends Record<string, unknown> {
     scopes: string[];
   };
   enabled_services: string[];
-  // Only present when diagnose: true
-  config_checks?: ConfigCheck[];
-  token_check?: TokenCheck | null;
-  last_error?: {
+  config_checks: ConfigCheck[];
+  token_check: TokenCheck | null;
+  last_error: {
     code: AuthErrorCode;
     reason: string;
     fix: string[];
   } | null;
-  api_validation?: {
+  api_validation: {
     success: boolean;
     user_email?: string;
     error?: string;
   } | null;
-  recommendations?: string[];
+  recommendations: string[];
 }
 
 /**
@@ -468,7 +473,7 @@ function generateRecommendations(
 }
 
 /**
- * Get server status including health, authentication, and optionally full diagnostics.
+ * Get server status including health, authentication, and full diagnostics.
  *
  * @param authClient - OAuth2 client (may be null if not initialized)
  * @param drive - Drive service (may be null if not initialized)
@@ -486,9 +491,7 @@ export async function handleGetStatus(
     return validation.response;
   }
 
-  const { diagnose, validate_with_api } = validation.data;
-
-  // Basic status info (always returned)
+  // Basic status info
   const configured = await credentialsFileExists();
   const tokenInfo = await getTokenInfo();
   const timestamp = new Date().toISOString();
@@ -516,23 +519,65 @@ export async function handleGetStatus(
   const enabledServicesSet = getEnabledServices();
   const enabledServices = SERVICE_NAMES.filter((s) => enabledServicesSet.has(s as ServiceName));
 
-  // Determine overall status
-  let overallStatus: OverallStatus = "ok";
-  if (!configured) {
-    overallStatus = "error";
-  } else if (tokenStatus === "missing" || tokenStatus === "invalid") {
-    overallStatus = "error";
-  } else if (tokenStatus === "expired" && !tokenInfo.has_refresh) {
-    overallStatus = "error";
-  } else if (tokenStatus === "expired") {
-    overallStatus = "warning";
+  // Run diagnostic checks
+  const configChecks: ConfigCheck[] = [];
+
+  configChecks.push(await checkCredentialsFile());
+
+  const configValidation = await validateOAuthConfig();
+  if (!configValidation.valid) {
+    for (const err of configValidation.errors) {
+      configChecks.push({
+        name: "config_validation",
+        status: "error",
+        message: err.reason,
+        fix: err.fix,
+      });
+    }
   }
+  for (const warning of configValidation.warnings) {
+    configChecks.push({
+      name: "config_validation",
+      status: "warning",
+      message: warning,
+    });
+  }
+
+  const { check: tokenFileCheck, tokenInfo: tokenCheckData } = await checkTokenFile();
+  configChecks.push(tokenFileCheck);
+
+  const lastError = getLastTokenAuthError();
+
+  // Validate with API
+  const apiValidation = await validateWithApi(drive);
+  configChecks.push({
+    name: "api_validation",
+    status: apiValidation.success ? "ok" : "error",
+    message: apiValidation.success
+      ? `API access confirmed for: ${apiValidation.user_email}`
+      : `API validation failed: ${apiValidation.error}`,
+  });
+
+  // Determine overall status from config checks
+  const hasError = configChecks.some((c) => c.status === "error");
+  const hasWarning = configChecks.some((c) => c.status === "warning");
+  const overallStatus: OverallStatus = hasError ? "error" : hasWarning ? "warning" : "ok";
+
+  const recommendations = generateRecommendations(
+    configChecks,
+    tokenCheckData,
+    lastError,
+    apiValidation,
+  );
+
+  const activeProfile = getActiveProfile();
 
   const data: StatusData = {
     status: overallStatus,
     version,
     uptime_seconds,
     timestamp,
+    profile: activeProfile,
     auth: {
       configured,
       token_status: tokenStatus,
@@ -541,97 +586,30 @@ export async function handleGetStatus(
       scopes: tokenInfo.scopes,
     },
     enabled_services: enabledServices,
-  };
-
-  // If diagnose mode, add detailed checks
-  if (diagnose) {
-    const configChecks: ConfigCheck[] = [];
-
-    // Check credentials file
-    configChecks.push(await checkCredentialsFile());
-
-    // Check config validation
-    const configValidation = await validateOAuthConfig();
-    if (!configValidation.valid) {
-      for (const err of configValidation.errors) {
-        configChecks.push({
-          name: "config_validation",
-          status: "error",
-          message: err.reason,
-          fix: err.fix,
-        });
-      }
-    }
-    for (const warning of configValidation.warnings) {
-      configChecks.push({
-        name: "config_validation",
-        status: "warning",
-        message: warning,
-      });
-    }
-
-    // Check token file
-    const { check: tokenFileCheck, tokenInfo: tokenCheckData } = await checkTokenFile();
-    configChecks.push(tokenFileCheck);
-
-    // Get last auth error if any
-    const lastError = getLastTokenAuthError();
-
-    // Optionally validate with API
-    let apiValidation: { success: boolean; user_email?: string; error?: string } | null = null;
-    if (validate_with_api) {
-      apiValidation = await validateWithApi(drive);
-      configChecks.push({
-        name: "api_validation",
-        status: apiValidation.success ? "ok" : "error",
-        message: apiValidation.success
-          ? `API access confirmed for: ${apiValidation.user_email}`
-          : `API validation failed: ${apiValidation.error}`,
-      });
-    }
-
-    // Recalculate overall status based on config checks
-    const hasError = configChecks.some((c) => c.status === "error");
-    const hasWarning = configChecks.some((c) => c.status === "warning");
-    data.status = hasError ? "error" : hasWarning ? "warning" : "ok";
-
-    // Generate recommendations
-    const recommendations = generateRecommendations(
-      configChecks,
-      tokenCheckData,
-      lastError,
-      apiValidation,
-    );
-
-    // Add diagnostic data
-    data.config_checks = configChecks;
-    data.token_check = tokenCheckData;
-    data.last_error = lastError
+    config_checks: configChecks,
+    token_check: tokenCheckData,
+    last_error: lastError
       ? {
           code: lastError.code,
           reason: lastError.reason,
           fix: lastError.fix,
         }
-      : null;
-    data.api_validation = apiValidation;
-    data.recommendations = recommendations;
-  }
+      : null,
+    api_validation: apiValidation,
+    recommendations,
+  };
 
   // Build summary
-  const statusEmoji = data.status === "ok" ? "OK" : data.status === "warning" ? "WARN" : "ERROR";
-  let summary: string;
-
-  if (diagnose) {
-    const issues = data.config_checks?.filter((c) => c.status !== "ok") || [];
-    const issuesSummary =
-      issues.length > 0 ? `Issues: ${issues.map((i) => i.name).join(", ")}` : "No issues detected";
-    summary = `[${statusEmoji}] v${version}, uptime ${uptime_seconds}s. ${issuesSummary}. ${data.recommendations?.[0] || ""}`;
-  } else {
-    summary =
-      data.status === "ok"
-        ? `[${statusEmoji}] v${version}, uptime ${uptime_seconds}s, ${enabledServices.length} services enabled`
-        : `[${statusEmoji}] v${version}, auth: ${tokenStatus}`;
-  }
+  const statusEmoji =
+    overallStatus === "ok" ? "OK" : overallStatus === "warning" ? "WARN" : "ERROR";
+  const profileInfo = activeProfile ? ` [${activeProfile}]` : "";
+  const issues = configChecks.filter((c) => c.status !== "ok");
+  const issuesSummary =
+    issues.length > 0 ? `Issues: ${issues.map((i) => i.name).join(", ")}` : "No issues detected";
+  const rec = recommendations[0] || "";
+  const summary =
+    `[${statusEmoji}] v${version}${profileInfo}, ` +
+    `uptime ${uptime_seconds}s. ${issuesSummary}. ${rec}`;
 
   return structuredResponse(summary, data);
 }

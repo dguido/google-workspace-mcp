@@ -10,6 +10,7 @@ import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
 import { mapGoogleError } from "../errors/index.js";
 import { getScopesForEnabledServices } from "../config/scopes.js";
+import { getActiveProfile } from "./utils.js";
 import {
   renderSuccessPage,
   renderErrorPage,
@@ -116,8 +117,9 @@ export class AuthServer {
       const credentialsDir = path.basename(path.dirname(tokenPath));
       const gitignoreWarning = isProjectLevel ? buildGitignoreWarning(credentialsDir) : "";
 
+      const activeProfile = getActiveProfile();
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(renderSuccessPage(tokenPath, gitignoreWarning));
+      res.end(renderSuccessPage(tokenPath, gitignoreWarning, activeProfile));
     } catch (error: unknown) {
       this.authCompletedSuccessfully = false;
       this.clearPkceState();

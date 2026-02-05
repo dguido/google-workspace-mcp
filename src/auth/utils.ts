@@ -23,6 +23,34 @@ export function getLegacyKeysFilePath(): string {
   return path.join(process.cwd(), "gcp-oauth.keys.json");
 }
 
+const PROFILE_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** Get active profile name from env var, or null. */
+export function getActiveProfile(): string | null {
+  const profile = process.env.GOOGLE_WORKSPACE_MCP_PROFILE;
+  if (!profile) return null;
+  if (!PROFILE_NAME_PATTERN.test(profile)) {
+    throw new Error(
+      `Invalid profile name "${profile}". ` +
+        "Must be 1-64 chars: letters, digits, " +
+        "hyphens, underscores.",
+    );
+  }
+  return profile;
+}
+
+/** Get directory for a named profile. */
+export function getProfileDirectory(name: string): string {
+  if (!PROFILE_NAME_PATTERN.test(name)) {
+    throw new Error(
+      `Invalid profile name "${name}". ` +
+        "Must be 1-64 chars: letters, digits, " +
+        "hyphens, underscores.",
+    );
+  }
+  return path.join(getConfigDirectory(), "profiles", name);
+}
+
 // Returns the absolute path for the saved token file.
 // Uses XDG Base Directory spec with fallback to home directory
 export function getSecureTokenPath(): string {
@@ -38,11 +66,14 @@ export function getSecureTokenPath(): string {
     return path.resolve(legacyTokenPath);
   }
 
-  // Use XDG Base Directory spec or fallback to ~/.config
-  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  // Named profile
+  const profile = getActiveProfile();
+  if (profile) {
+    return path.join(getProfileDirectory(profile), "tokens.json");
+  }
 
-  const tokenDir = path.join(configHome, "google-workspace-mcp");
-  return path.join(tokenDir, "tokens.json");
+  // Default: XDG config directory
+  return path.join(getConfigDirectory(), "tokens.json");
 }
 
 /**
@@ -59,7 +90,13 @@ export function getKeysFilePath(): string {
     return path.resolve(envCredentialsPath);
   }
 
-  // Priority 2: New default in config directory
+  // Priority 2: Named profile
+  const profile = getActiveProfile();
+  if (profile) {
+    return path.join(getProfileDirectory(profile), "credentials.json");
+  }
+
+  // Priority 3: Default in config directory
   return path.join(getConfigDirectory(), "credentials.json");
 }
 
@@ -119,13 +156,19 @@ export function extractCredentials(keys: CredentialsFileInput): OAuthCredentials
 export function generateCredentialsErrorMessage(): string {
   const configDir = getConfigDirectory();
   const defaultPath = path.join(configDir, "credentials.json");
+  const profile = getActiveProfile();
+  const profileNote = profile
+    ? `\nActive profile: "${profile}"\n` +
+      `Profile directory: ` +
+      `${getProfileDirectory(profile)}\n`
+    : "";
 
   return `
 OAuth credentials not found. Please provide credentials using one of these methods:
 
 1. Default location (recommended):
    Save your credentials file to: ${defaultPath}
-
+${profileNote}
 2. Environment variable (for custom paths):
    Set GOOGLE_DRIVE_OAUTH_CREDENTIALS to the path of your credentials file:
    export GOOGLE_DRIVE_OAUTH_CREDENTIALS="/path/to/credentials.json"
