@@ -58,6 +58,7 @@ import {
   validateTextFileExtension,
   resolveFolderId,
   resolveOptionalFolderPath,
+  resolveFileIdFromPath,
   checkFileExists,
   processBatchOperation,
 } from "./helpers.js";
@@ -258,8 +259,8 @@ export async function handleListFolder(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  // Default to root if no folder specified
-  const targetFolderId = data.folderId || "root";
+  // Resolve folder from ID, path, or default to root
+  const targetFolderId = await resolveOptionalFolderPath(drive, data.folderId, data.folderPath);
 
   try {
     const res = await drive.files.list({
@@ -399,6 +400,8 @@ export async function handleMoveItem(drive: drive_v3.Drive, args: unknown): Prom
   if (!validation.success) return validation.response;
   const data = validation.data;
 
+  const itemId = await resolveFileIdFromPath(drive, data.itemId, data.itemPath);
+
   const destinationFolderId = await resolveOptionalFolderPath(
     drive,
     data.destinationFolderId,
@@ -406,19 +409,19 @@ export async function handleMoveItem(drive: drive_v3.Drive, args: unknown): Prom
   );
 
   // Check we aren't moving a folder into itself
-  if (destinationFolderId === data.itemId) {
+  if (destinationFolderId === itemId) {
     return errorResponse("Cannot move a folder into itself.");
   }
 
   const item = await drive.files.get({
-    fileId: data.itemId,
+    fileId: itemId,
     fields: "name, parents",
     supportsAllDrives: true,
   });
 
   // Perform move
   await drive.files.update({
-    fileId: data.itemId,
+    fileId: itemId,
     addParents: destinationFolderId,
     removeParents: item.data.parents?.join(",") || "",
     fields: "id, name, parents",
@@ -1431,6 +1434,11 @@ export async function handleBatchMove(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
+  // Resolve file IDs from paths if provided
+  const fileIds =
+    data.fileIds ??
+    (await Promise.all(data.filePaths!.map((p) => resolveFileIdFromPath(drive, undefined, p))));
+
   // Resolve destination folder (supports both ID and path)
   const destinationFolderId = await resolveOptionalFolderPath(
     drive,
@@ -1461,7 +1469,7 @@ export async function handleBatchMove(
   }
 
   const { success: moved, failed } = await processBatchOperation(
-    data.fileIds,
+    fileIds,
     async (fileId) => {
       const file = await drive.files.get({
         fileId,

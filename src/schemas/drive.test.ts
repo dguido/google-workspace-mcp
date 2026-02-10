@@ -8,6 +8,7 @@ import {
   DeleteItemSchema,
   RenameItemSchema,
   MoveItemSchema,
+  BatchMoveSchema,
 } from "./drive.js";
 
 describe("SearchSchema", () => {
@@ -128,13 +129,28 @@ describe("ListFolderSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts all optional fields", () => {
+  it("accepts folderId", () => {
     const result = ListFolderSchema.safeParse({
       folderId: "folder123",
       pageSize: 50,
       pageToken: "token",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("accepts folderPath", () => {
+    const result = ListFolderSchema.safeParse({
+      folderPath: "/Documents/Projects",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects both folderId and folderPath", () => {
+    const result = ListFolderSchema.safeParse({
+      folderId: "folder123",
+      folderPath: "/Documents",
+    });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -177,8 +193,15 @@ describe("RenameItemSchema", () => {
 });
 
 describe("MoveItemSchema", () => {
-  it("accepts valid input", () => {
+  it("accepts itemId", () => {
     const result = MoveItemSchema.safeParse({ itemId: "item123" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts itemPath", () => {
+    const result = MoveItemSchema.safeParse({
+      itemPath: "/Documents/report.txt",
+    });
     expect(result.success).toBe(true);
   });
 
@@ -190,8 +213,57 @@ describe("MoveItemSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects empty itemId", () => {
-    const result = MoveItemSchema.safeParse({ itemId: "" });
+  it("rejects neither itemId nor itemPath", () => {
+    const result = MoveItemSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects both itemId and itemPath", () => {
+    const result = MoveItemSchema.safeParse({
+      itemId: "item123",
+      itemPath: "/Documents/report.txt",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("BatchMoveSchema", () => {
+  it("accepts fileIds with destinationFolderId", () => {
+    const result = BatchMoveSchema.safeParse({
+      fileIds: ["id1", "id2"],
+      destinationFolderId: "dest123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts filePaths with destinationPath", () => {
+    const result = BatchMoveSchema.safeParse({
+      filePaths: ["/Documents/a.txt", "/Documents/b.txt"],
+      destinationPath: "/Archive",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects neither fileIds nor filePaths", () => {
+    const result = BatchMoveSchema.safeParse({
+      destinationFolderId: "dest123",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects both fileIds and filePaths", () => {
+    const result = BatchMoveSchema.safeParse({
+      fileIds: ["id1"],
+      filePaths: ["/Documents/a.txt"],
+      destinationFolderId: "dest123",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing destination", () => {
+    const result = BatchMoveSchema.safeParse({
+      fileIds: ["id1"],
+    });
     expect(result.success).toBe(false);
   });
 });

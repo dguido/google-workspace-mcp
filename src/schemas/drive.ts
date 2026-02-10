@@ -53,11 +53,16 @@ export const CreateFolderSchema = z
     message: "Provide either parent (folderId) or parentPath, not both",
   });
 
-export const ListFolderSchema = z.object({
-  folderId: z.string().optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
-  pageToken: z.string().optional(),
-});
+export const ListFolderSchema = z
+  .object({
+    folderId: z.string().optional(),
+    folderPath: z.string().optional(),
+    pageSize: z.number().int().min(1).max(100).optional(),
+    pageToken: z.string().optional(),
+  })
+  .refine((data) => !(data.folderId && data.folderPath), {
+    message: "Provide either folderId or folderPath, not both",
+  });
 
 export const DeleteItemSchema = z.object({
   itemId: z.string().min(1, "Item ID is required"),
@@ -70,9 +75,16 @@ export const RenameItemSchema = z.object({
 
 export const MoveItemSchema = z
   .object({
-    itemId: z.string().min(1, "Item ID is required"),
+    itemId: z.string().optional(),
+    itemPath: z.string().optional(),
     destinationFolderId: z.string().optional(),
     destinationPath: z.string().optional(),
+  })
+  .refine((data) => data.itemId || data.itemPath, {
+    message: "Either itemId or itemPath is required",
+  })
+  .refine((data) => !(data.itemId && data.itemPath), {
+    message: "Provide either itemId or itemPath, not both",
   })
   .refine((data) => !(data.destinationFolderId && data.destinationPath), {
     message: "Provide either destinationFolderId or destinationPath, not both",
@@ -170,12 +182,16 @@ export const BatchRestoreSchema = z.object({
 
 export const BatchMoveSchema = z
   .object({
-    fileIds: z
-      .array(z.string())
-      .min(1, "At least one file ID required")
-      .max(100, "Maximum 100 files per batch"),
+    fileIds: z.array(z.string()).max(100, "Maximum 100 files per batch").optional(),
+    filePaths: z.array(z.string()).max(100, "Maximum 100 files per batch").optional(),
     destinationFolderId: z.string().optional(),
     destinationPath: z.string().optional(),
+  })
+  .refine((data) => data.fileIds?.length || data.filePaths?.length, {
+    message: "Either fileIds or filePaths is required",
+  })
+  .refine((data) => !(data.fileIds?.length && data.filePaths?.length), {
+    message: "Provide either fileIds or filePaths, not both",
   })
   .refine((data) => data.destinationFolderId || data.destinationPath, {
     message: "Either destinationFolderId or destinationPath is required",
