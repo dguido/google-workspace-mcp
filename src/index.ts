@@ -193,7 +193,6 @@ function ensureDriveService() {
     authClientType: authClient?.constructor?.name,
     hasCredentials: !!authClient.credentials,
     hasAccessToken: !!authClient.credentials?.access_token,
-    expiryDate: authClient.credentials?.expiry_date,
     isExpired: authClient.credentials?.expiry_date
       ? Date.now() > authClient.credentials.expiry_date
       : "no expiry",
@@ -220,7 +219,11 @@ async function verifyAuthHealth(): Promise<boolean> {
 
   try {
     const response = await drive.about.get({ fields: "user" });
-    log("Auth verification successful, user:", response.data.user?.emailAddress);
+    const email = response.data.user?.emailAddress;
+    const atIdx = email ? email.lastIndexOf("@") : -1;
+    const redactedUser =
+      email && atIdx > 0 ? `${email[0]}***@${email.slice(atIdx + 1)}` : "unknown";
+    log("Auth verification successful", { user: redactedUser });
     lastAuthError = null;
     return true;
   } catch (error: unknown) {
