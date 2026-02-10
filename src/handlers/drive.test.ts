@@ -24,6 +24,7 @@ import {
   handleRestoreFromTrash,
   handleResolveFilePath,
   handleGetFolderTree,
+  handleBatchMove,
 } from "./drive.js";
 
 vi.mock("../utils/index.js", async (importOriginal) => {
@@ -1303,5 +1304,144 @@ describe("handleGetFolderTree", () => {
     expect(text).toContain("(ID: root)");
     expect(text).toContain("readme.txt (ID: child1)");
     expect(text).toContain("Branding (ID: subfolder1)");
+  });
+});
+
+describe("handleListFolder with folderPath", () => {
+  let mockDrive: drive_v3.Drive;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+  });
+
+  it("resolves folderPath to folder ID", async () => {
+    // First call: resolve path segment "Documents"
+    // Second call: list folder contents
+    vi.mocked(mockDrive.files.list)
+      .mockResolvedValueOnce({
+        data: { files: [{ id: "docs-folder-id", name: "Documents" }] },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          files: [{ id: "1", name: "report.txt", mimeType: "text/plain" }],
+        },
+      } as never);
+
+    const result = await handleListFolder(mockDrive, {
+      folderPath: "/Documents",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("report.txt");
+  });
+
+  it("rejects both folderId and folderPath", async () => {
+    const result = await handleListFolder(mockDrive, {
+      folderId: "folder123",
+      folderPath: "/Documents",
+    });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleMoveItem with itemPath", () => {
+  let mockDrive: drive_v3.Drive;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+  });
+
+  it("resolves itemPath to file ID and moves", async () => {
+    vi.mocked(mockDrive.files.list)
+      // resolveFileIdFromPath: find file in root
+      .mockResolvedValueOnce({
+        data: { files: [{ id: "resolved-file-id", name: "report.txt" }] },
+      } as never);
+    vi.mocked(mockDrive.files.get)
+      // get item metadata (name, parents)
+      .mockResolvedValueOnce({
+        data: { name: "report.txt", parents: ["root"] },
+      } as never)
+      // get destination folder name
+      .mockResolvedValueOnce({
+        data: { name: "Archive" },
+      } as never);
+    vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
+
+    const result = await handleMoveItem(mockDrive, {
+      itemPath: "/report.txt",
+      destinationFolderId: "archive-id",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("moved");
+    expect(result.content[0].text).toContain("report.txt");
+  });
+
+  it("returns error when itemPath cannot be resolved", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValueOnce({
+      data: { files: [] },
+    } as never);
+
+    const result = await handleMoveItem(mockDrive, {
+      itemPath: "/nonexistent.txt",
+      destinationFolderId: "archive-id",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Failed to resolve item");
+  });
+});
+
+describe("handleBatchMove with filePaths", () => {
+  let mockDrive: drive_v3.Drive;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+  });
+
+  it("resolves filePaths to IDs and moves", async () => {
+    vi.mocked(mockDrive.files.list)
+      // resolveFileIdFromPath for first file
+      .mockResolvedValueOnce({
+        data: { files: [{ id: "file-a-id", name: "a.txt" }] },
+      } as never)
+      // resolveFileIdFromPath for second file
+      .mockResolvedValueOnce({
+        data: { files: [{ id: "file-b-id", name: "b.txt" }] },
+      } as never);
+
+    vi.mocked(mockDrive.files.get)
+      // destination folder name lookup
+      .mockResolvedValueOnce({
+        data: { name: "Archive" },
+      } as never)
+      // batch op: get file a metadata
+      .mockResolvedValueOnce({
+        data: { name: "a.txt", parents: ["root"] },
+      } as never)
+      // batch op: get file b metadata
+      .mockResolvedValueOnce({
+        data: { name: "b.txt", parents: ["root"] },
+      } as never);
+
+    vi.mocked(mockDrive.files.update).mockResolvedValue({} as never);
+
+    const result = await handleBatchMove(mockDrive, {
+      filePaths: ["/a.txt", "/b.txt"],
+      destinationFolderId: "archive-id",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("2 succeeded");
+  });
+
+  it("returns error when a filePath cannot be resolved", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValueOnce({
+      data: { files: [] },
+    } as never);
+
+    const result = await handleBatchMove(mockDrive, {
+      filePaths: ["/nonexistent.txt"],
+      destinationFolderId: "archive-id",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Failed to resolve file paths");
   });
 });

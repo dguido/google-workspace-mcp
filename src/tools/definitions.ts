@@ -171,7 +171,16 @@ export const driveTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        folderId: { type: "string", description: "(optional) Folder ID (defaults to root)" },
+        folderId: {
+          type: "string",
+          description:
+            "(optional) Folder ID (defaults to root, mutually exclusive with folderPath)",
+        },
+        folderPath: {
+          type: "string",
+          description:
+            "(optional) Folder path like '/Documents/Projects' (mutually exclusive with folderId)",
+        },
         pageSize: {
           type: "number",
           description: "(optional, default: 50) Items to return (max 100)",
@@ -253,7 +262,15 @@ export const driveTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        itemId: { type: "string", description: "ID of the item to move" },
+        itemId: {
+          type: "string",
+          description: "ID of the item to move (mutually exclusive with itemPath)",
+        },
+        itemPath: {
+          type: "string",
+          description:
+            "Path of the item to move like '/Documents/report.txt' (mutually exclusive with itemId)",
+        },
         destinationFolderId: {
           type: "string",
           description: "Destination folder ID (mutually exclusive with destinationPath)",
@@ -264,7 +281,6 @@ export const driveTools: ToolDefinition[] = [
             "Destination folder path like '/Archive/2024' (creates folders if needed, mutually exclusive with destinationFolderId)",
         },
       },
-      required: ["itemId"],
     },
     outputSchema: {
       type: "object",
@@ -827,7 +843,12 @@ export const driveTools: ToolDefinition[] = [
       properties: {
         fileIds: {
           type: "array",
-          description: "Array of file IDs to move (max 100)",
+          description: "Array of file IDs to move (max 100, mutually exclusive with filePaths)",
+          items: { type: "string" },
+        },
+        filePaths: {
+          type: "array",
+          description: "Array of file paths to move (max 100, mutually exclusive with fileIds)",
           items: { type: "string" },
         },
         destinationFolderId: {
@@ -840,7 +861,6 @@ export const driveTools: ToolDefinition[] = [
             "Destination folder path like '/Archive/2024' (creates folders if needed, mutually exclusive with destinationFolderId)",
         },
       },
-      required: ["fileIds"],
     },
     outputSchema: {
       type: "object",
