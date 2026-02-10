@@ -1204,16 +1204,23 @@ interface ResolvedFileInfo {
   modifiedTime: string | null | undefined;
 }
 
-function buildResolvedResponse(
-  file: ResolvedFileInfo,
-  originalPath: string,
-  resolvedPath: string[],
-): ToolResponse {
+function buildResolvedResponse(file: ResolvedFileInfo, resolvedPath: string[]): ToolResponse {
   const typeLabel = file.mimeType === FOLDER_MIME_TYPE ? "folder" : "file";
-  return structuredResponse(`Resolved "${originalPath}" to ${typeLabel} "${file.name}"`, {
+  const path = "/" + resolvedPath.join("/");
+  const textLines = [
+    `Name: ${file.name}`,
+    `ID: ${file.id}`,
+    `Path: ${path}`,
+    `Type: ${typeLabel}`,
+    file.mimeType ? `MIME type: ${file.mimeType}` : null,
+    file.modifiedTime ? `Modified: ${file.modifiedTime}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return structuredResponse(textLines, {
     id: file.id,
     name: file.name,
-    path: "/" + resolvedPath.join("/"),
+    path,
     mimeType: file.mimeType,
     modifiedTime: file.modifiedTime,
   });
@@ -1275,7 +1282,14 @@ export async function handleResolveFilePath(
   const data = validation.data;
 
   if (!data.path || data.path === "/") {
-    return structuredResponse("Resolved to root folder", {
+    const textLines = [
+      "Name: My Drive",
+      "ID: root",
+      "Path: /",
+      "Type: folder",
+      `MIME type: ${FOLDER_MIME_TYPE}`,
+    ].join("\n");
+    return structuredResponse(textLines, {
       id: "root",
       name: "My Drive",
       path: "/",
@@ -1329,7 +1343,6 @@ export async function handleResolveFilePath(
               mimeType: result.selectedFile.mimeType,
               modifiedTime: result.selectedFile.modifiedTime,
             },
-            data.path,
             resolvedPath,
           );
         }
@@ -1350,7 +1363,6 @@ export async function handleResolveFilePath(
           mimeType: file.mimeType,
           modifiedTime: file.modifiedTime,
         },
-        data.path,
         resolvedPath,
       );
     }
@@ -1965,17 +1977,19 @@ function formatTreeAsText(
   node: FolderTreeNode,
   indent: string = "",
   isLast: boolean = true,
+  includeIds: boolean = false,
 ): string {
   const prefix = indent + (isLast ? "└── " : "├── ");
   const icon = node.type === "folder" ? "📁" : "📄";
+  const idSuffix = includeIds ? ` (ID: ${node.id})` : "";
   const truncatedIndicator = node.truncated ? " (100+ items, truncated)" : "";
-  let result = prefix + icon + " " + node.name + truncatedIndicator + "\n";
+  let result = prefix + icon + " " + node.name + idSuffix + truncatedIndicator + "\n";
 
   if (node.children) {
     const childIndent = indent + (isLast ? "    " : "│   ");
     node.children.forEach((child, index) => {
       const isLastChild = index === node.children!.length - 1;
-      result += formatTreeAsText(child, childIndent, isLastChild);
+      result += formatTreeAsText(child, childIndent, isLastChild, includeIds);
     });
   }
 
@@ -2011,15 +2025,20 @@ export async function handleGetFolderTree(
   const tree = await buildFolderTree(drive, folderId, folderName, 0, data.depth || 2);
 
   // Format as text
+  const includeIds = data.includeIds;
   const truncatedIndicator = tree.truncated ? " (100+ items, truncated)" : "";
+  const rootIdSuffix = includeIds ? ` (ID: ${folderId})` : "";
   const treeText =
     "📁 " +
     folderName +
+    rootIdSuffix +
     truncatedIndicator +
     "\n" +
     (tree.children
       ? tree.children
-          .map((child, index) => formatTreeAsText(child, "", index === tree.children!.length - 1))
+          .map((child, index) =>
+            formatTreeAsText(child, "", index === tree.children!.length - 1, includeIds),
+          )
           .join("")
       : "(empty)");
 

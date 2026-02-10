@@ -1073,6 +1073,10 @@ export const driveTools: ToolDefinition[] = [
           description:
             "(optional, default: 2) Maximum depth to traverse (1-5). Higher values make more API calls.",
         },
+        includeIds: {
+          type: "boolean",
+          description: "Include item IDs in tree output (default: false)",
+        },
       },
       required: [],
     },
