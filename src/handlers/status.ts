@@ -186,13 +186,13 @@ async function getTokenInfo(): Promise<{
  * Check if credentials are available and valid (for diagnostic mode).
  * Checks env vars first, then the credentials file.
  */
-async function checkCredentialsFile(): Promise<ConfigCheck> {
+async function checkCredentials(): Promise<ConfigCheck> {
   // Check env var credentials first
   const envCreds = getEnvVarCredentials();
   if (envCreds) {
     if (!isValidClientIdFormat(envCreds.client_id)) {
       return {
-        name: "credentials_file",
+        name: "credentials",
         status: "error",
         message: "Invalid GOOGLE_CLIENT_ID format",
         fix: [
@@ -202,7 +202,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
       };
     }
     return {
-      name: "credentials_file",
+      name: "credentials",
       status: "ok",
       message: "Using credentials from GOOGLE_CLIENT_ID env var",
     };
@@ -213,7 +213,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
 
   if (!exists) {
     return {
-      name: "credentials_file",
+      name: "credentials",
       status: "error",
       message: `Credentials not found at: ${keysPath}`,
       fix: [
@@ -231,7 +231,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
 
     if (!clientId) {
       return {
-        name: "credentials_file",
+        name: "credentials",
         status: "error",
         message: "Credentials file missing client_id",
         fix: ["Download fresh credentials from Google Cloud Console"],
@@ -240,7 +240,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
 
     if (!isValidClientIdFormat(clientId)) {
       return {
-        name: "credentials_file",
+        name: "credentials",
         status: "error",
         message: "Invalid client_id format",
         fix: [
@@ -251,13 +251,13 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
     }
 
     return {
-      name: "credentials_file",
+      name: "credentials",
       status: "ok",
       message: `Valid credentials file at: ${keysPath}`,
     };
   } catch (parseError) {
     return {
-      name: "credentials_file",
+      name: "credentials",
       status: "error",
       message: `Failed to parse credentials file: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
       fix: ["Ensure the file is valid JSON", "Download fresh credentials"],
@@ -427,7 +427,7 @@ function generateRecommendations(
   const recommendations: string[] = [];
 
   // Check for credential issues
-  const credCheck = configChecks.find((c) => c.name === "credentials_file");
+  const credCheck = configChecks.find((c) => c.name === "credentials");
   if (credCheck?.status === "error") {
     recommendations.push("Set up OAuth credentials first - this is required for authentication");
   }
@@ -531,7 +531,7 @@ export async function handleGetStatus(
   // Run diagnostic checks
   const configChecks: ConfigCheck[] = [];
 
-  configChecks.push(await checkCredentialsFile());
+  configChecks.push(await checkCredentials());
 
   const configValidation = await validateOAuthConfig();
   if (!configValidation.valid) {

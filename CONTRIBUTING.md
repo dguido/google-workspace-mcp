@@ -15,8 +15,8 @@ Contributions are welcome! Please follow the guidelines below.
 2. Set up credentials:
 
    ```bash
-   cp gcp-oauth.keys.example.json gcp-oauth.keys.json
-   # Edit gcp-oauth.keys.json with your OAuth client ID
+   export GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+   export GOOGLE_CLIENT_SECRET="your-client-secret"
    ```
 
 3. Authenticate:
@@ -43,8 +43,6 @@ google-workspace-mcp/
 ├── dist/                  # Compiled JavaScript (generated)
 ├── docs/                  # Documentation
 ├── scripts/               # Build scripts
-├── gcp-oauth.keys.json    # OAuth credentials (create from example)
-├── gcp-oauth.keys.example.json # Example credentials file
 ├── package.json           # NPM package configuration
 ├── tsconfig.json          # TypeScript configuration
 └── README.md

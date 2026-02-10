@@ -455,7 +455,7 @@ describe("handleGetStatus", () => {
     });
   });
 
-  describe("checkCredentialsFile", () => {
+  describe("checkCredentials", () => {
     it("returns error when credentials file does not exist", async () => {
       const { credentialsFileExists } = await import("../auth/utils.js");
       vi.mocked(credentialsFileExists).mockResolvedValue(false);
@@ -480,7 +480,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("not found");
@@ -510,7 +510,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("missing client_id");
@@ -540,7 +540,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("Invalid client_id format");
@@ -570,7 +570,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("ok");
       expect(credCheck?.message).toContain("Valid credentials file");
@@ -595,14 +595,14 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("Failed to parse");
     });
   });
 
-  describe("checkCredentialsFile with env var credentials", () => {
+  describe("checkCredentials with env var credentials", () => {
     it("returns ok status for valid env var credentials", async () => {
       const { getEnvVarCredentials } = await import("../auth/utils.js");
       vi.mocked(getEnvVarCredentials).mockReturnValue({
@@ -626,7 +626,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("ok");
       expect(credCheck?.message).toContain("env var");
@@ -658,7 +658,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("Invalid");

@@ -16,7 +16,6 @@ yarn-error.log*
 
 # OAuth credentials - NEVER commit these
 gcp-oauth.keys.json
-!gcp-oauth.keys.example.json
 client_secret.json
 client_secret_*
 

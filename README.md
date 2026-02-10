@@ -87,7 +87,7 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 - Go to "APIs & Services" > "Credentials"
 - Click "+ CREATE CREDENTIALS" > "OAuth client ID"
 - Application type: **Desktop app**
-- Download the JSON file and rename to `gcp-oauth.keys.json`
+- Copy the **Client ID** and **Client Secret** (or download the JSON file)
 
 ## Configuration
 
@@ -106,7 +106,6 @@ Both credentials and tokens are stored in `~/.config/google-workspace-mcp/` by d
 | --------------------------------- | ------------------------------------------------------------- |
 | `GOOGLE_CLIENT_ID`                | OAuth Client ID (simplest setup — no credentials file needed) |
 | `GOOGLE_CLIENT_SECRET`            | OAuth Client Secret (used with `GOOGLE_CLIENT_ID`)            |
-| `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Custom path to credentials file (overrides default)           |
 | `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                                 |
 | `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation                        |
 | `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable                    |
