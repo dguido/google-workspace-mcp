@@ -6,6 +6,7 @@ import {
   areUnifiedToolsEnabled,
   resetServiceConfig,
   isToonEnabled,
+  isReadOnlyMode,
 } from "./services.js";
 
 describe("Service Configuration", () => {
@@ -262,5 +263,42 @@ describe("isToonEnabled", () => {
   it("returns false when env var is 'yes'", () => {
     process.env.GOOGLE_WORKSPACE_TOON_FORMAT = "yes";
     expect(isToonEnabled()).toBe(false);
+  });
+});
+
+describe("isReadOnlyMode", () => {
+  const originalEnv = process.env.GOOGLE_WORKSPACE_READ_ONLY;
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.GOOGLE_WORKSPACE_READ_ONLY;
+    } else {
+      process.env.GOOGLE_WORKSPACE_READ_ONLY = originalEnv;
+    }
+  });
+
+  it("returns false by default when env var is not set", () => {
+    delete process.env.GOOGLE_WORKSPACE_READ_ONLY;
+    expect(isReadOnlyMode()).toBe(false);
+  });
+
+  it("returns true when env var is 'true'", () => {
+    process.env.GOOGLE_WORKSPACE_READ_ONLY = "true";
+    expect(isReadOnlyMode()).toBe(true);
+  });
+
+  it("returns false when env var is 'false'", () => {
+    process.env.GOOGLE_WORKSPACE_READ_ONLY = "false";
+    expect(isReadOnlyMode()).toBe(false);
+  });
+
+  it("returns false when env var is '1'", () => {
+    process.env.GOOGLE_WORKSPACE_READ_ONLY = "1";
+    expect(isReadOnlyMode()).toBe(false);
+  });
+
+  it("returns false when env var is 'TRUE' (case sensitive)", () => {
+    process.env.GOOGLE_WORKSPACE_READ_ONLY = "TRUE";
+    expect(isReadOnlyMode()).toBe(false);
   });
 });

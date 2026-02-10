@@ -12,6 +12,8 @@ interface JsonSchemaConditional {
 export interface ToolDefinition {
   name: string;
   description: string;
+  /** When true, this tool is safe for read-only mode (no mutations). */
+  readOnly?: boolean;
   inputSchema: {
     type: "object";
     properties: Record<string, unknown>;
@@ -31,6 +33,7 @@ export interface ToolDefinition {
 export const driveTools: ToolDefinition[] = [
   {
     name: "search",
+    readOnly: true,
     description: "Search files and folders in Drive (max 100 results per page)",
     inputSchema: {
       type: "object",
@@ -163,6 +166,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "list_folder",
+    readOnly: true,
     description: "List folder contents (max 100 items per page)",
     inputSchema: {
       type: "object",
@@ -305,6 +309,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "get_file_metadata",
+    readOnly: true,
     description: "Get file or folder metadata",
     inputSchema: {
       type: "object",
@@ -359,6 +364,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "export_file",
+    readOnly: true,
     description: "Export Workspace files to other formats",
     inputSchema: {
       type: "object",
@@ -445,6 +451,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "get_sharing",
+    readOnly: true,
     description: "Get sharing settings and permissions for a file",
     inputSchema: {
       type: "object",
@@ -499,6 +506,7 @@ export const driveTools: ToolDefinition[] = [
   // Revision tools
   {
     name: "list_revisions",
+    readOnly: true,
     description: "List file version history",
     inputSchema: {
       type: "object",
@@ -573,6 +581,7 @@ export const driveTools: ToolDefinition[] = [
   // Binary file tools
   {
     name: "download_file",
+    readOnly: true,
     description: "Download a file as base64 or to disk",
     inputSchema: {
       type: "object",
@@ -645,6 +654,7 @@ export const driveTools: ToolDefinition[] = [
   // Metadata tools
   {
     name: "get_storage_quota",
+    readOnly: true,
     description: "Get Google Drive storage quota and usage",
     inputSchema: {
       type: "object",
@@ -710,6 +720,7 @@ export const driveTools: ToolDefinition[] = [
   // File path resolution
   {
     name: "resolve_file_path",
+    readOnly: true,
     description: "Resolve file path to ID",
     inputSchema: {
       type: "object",
@@ -936,6 +947,7 @@ export const driveTools: ToolDefinition[] = [
   // Trash management
   {
     name: "list_trash",
+    readOnly: true,
     description: "List files in trash",
     inputSchema: {
       type: "object",
@@ -1041,6 +1053,7 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "get_folder_tree",
+    readOnly: true,
     description: "Get folder tree structure (max depth 5, truncates at 100 items per folder)",
     inputSchema: {
       type: "object",
@@ -1157,6 +1170,7 @@ export const docsTools: ToolDefinition[] = [
   },
   {
     name: "get_google_doc_content",
+    readOnly: true,
     description: "Read content from a Google Doc",
     inputSchema: {
       type: "object",
@@ -1461,6 +1475,7 @@ export const sheetsTools: ToolDefinition[] = [
   },
   {
     name: "get_google_sheet_content",
+    readOnly: true,
     description: "Read content from a Google Sheet",
     inputSchema: {
       type: "object",
@@ -1851,6 +1866,7 @@ export const slidesTools: ToolDefinition[] = [
   },
   {
     name: "get_google_slides_content",
+    readOnly: true,
     description: "Read content from Google Slides",
     inputSchema: {
       type: "object",
@@ -2147,6 +2163,7 @@ export const slidesTools: ToolDefinition[] = [
   },
   {
     name: "list_slide_pages",
+    readOnly: true,
     description: "List slides in a presentation",
     inputSchema: {
       type: "object",
@@ -2305,6 +2322,7 @@ export const unifiedTools: ToolDefinition[] = [
   },
   {
     name: "get_file_content",
+    readOnly: true,
     description: "Get file content (auto-detects type)",
     inputSchema: {
       type: "object",
@@ -2359,6 +2377,7 @@ export const unifiedTools: ToolDefinition[] = [
 export const calendarTools: ToolDefinition[] = [
   {
     name: "list_calendars",
+    readOnly: true,
     description: "List all calendars accessible to the user",
     inputSchema: {
       type: "object",
@@ -2399,6 +2418,7 @@ export const calendarTools: ToolDefinition[] = [
   },
   {
     name: "list_events",
+    readOnly: true,
     description: "List calendar events (max 2500 per request)",
     inputSchema: {
       type: "object",
@@ -2485,6 +2505,7 @@ export const calendarTools: ToolDefinition[] = [
   },
   {
     name: "get_event",
+    readOnly: true,
     description: "Get details of a calendar event",
     inputSchema: {
       type: "object",
@@ -2769,6 +2790,7 @@ export const calendarTools: ToolDefinition[] = [
   },
   {
     name: "find_free_time",
+    readOnly: true,
     description: "Find free time slots across calendars (max 50 calendars)",
     inputSchema: {
       type: "object",
@@ -2912,6 +2934,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "read_email",
+    readOnly: true,
     description: "Read email content and metadata",
     inputSchema: {
       type: "object",
@@ -2962,6 +2985,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "search_emails",
+    readOnly: true,
     description:
       "Search emails using structured parameters or Gmail query syntax" +
       " (max 500 per request). At least one search parameter required.",
@@ -3109,6 +3133,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "download_attachment",
+    readOnly: true,
     description: "Download an email attachment to disk",
     inputSchema: {
       type: "object",
@@ -3181,6 +3206,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "list_labels",
+    readOnly: true,
     description: "List all Gmail labels (system and user-created)",
     inputSchema: {
       type: "object",
@@ -3297,6 +3323,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "list_filters",
+    readOnly: true,
     description: "List filters or get specific filter details",
     inputSchema: {
       type: "object",
@@ -3345,6 +3372,7 @@ export const gmailTools: ToolDefinition[] = [
 export const contactsTools: ToolDefinition[] = [
   {
     name: "list_contacts",
+    readOnly: true,
     description: "List contacts from Google Contacts (max 1000 per page)",
     inputSchema: {
       type: "object",
@@ -3394,6 +3422,7 @@ export const contactsTools: ToolDefinition[] = [
   },
   {
     name: "get_contact",
+    readOnly: true,
     description: "Get a single contact by resource name",
     inputSchema: {
       type: "object",
@@ -3420,6 +3449,7 @@ export const contactsTools: ToolDefinition[] = [
   },
   {
     name: "search_contacts",
+    readOnly: true,
     description: "Search contacts by name, email, or phone number",
     inputSchema: {
       type: "object",
@@ -3681,7 +3711,12 @@ export const contactsTools: ToolDefinition[] = [
   },
 ];
 
-import { isServiceEnabled, areUnifiedToolsEnabled, type ServiceName } from "../config/index.js";
+import {
+  isServiceEnabled,
+  areUnifiedToolsEnabled,
+  isReadOnlyMode,
+  type ServiceName,
+} from "../config/index.js";
 
 /** Map of service names to their tool definitions */
 export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
@@ -3698,6 +3733,7 @@ export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
 export const discoveryTools: ToolDefinition[] = [
   {
     name: "list_tools",
+    readOnly: true,
     description: "List available tools, optionally filtered by service or keyword",
     inputSchema: {
       type: "object",
@@ -3751,6 +3787,7 @@ export const discoveryTools: ToolDefinition[] = [
   },
   {
     name: "get_status",
+    readOnly: true,
     description:
       "Get server health, authentication status, connected account, " +
       "and diagnostics with actionable recommendations.",
@@ -3807,6 +3844,10 @@ export const discoveryTools: ToolDefinition[] = [
           type: "array",
           items: { type: "string" },
           description: "List of enabled Google Workspace services",
+        },
+        read_only_mode: {
+          type: "boolean",
+          description: "Whether read-only mode is active",
         },
         config_checks: {
           type: "array",
@@ -3884,6 +3925,10 @@ export function getAllTools(): ToolDefinition[] {
   // Unified tools require drive+docs+sheets+slides to all be enabled
   if (areUnifiedToolsEnabled()) {
     tools.push(...unifiedTools);
+  }
+
+  if (isReadOnlyMode()) {
+    return tools.filter((t) => t.readOnly === true);
   }
 
   return tools;

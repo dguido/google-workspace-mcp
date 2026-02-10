@@ -1440,7 +1440,10 @@ export async function handleBatchMove(
         { operationName: "getDestinationFolder" },
       );
       destName = destFolder.data.name || destinationFolderId;
-    } catch {
+    } catch (error) {
+      // Re-throw auth errors so the top-level handler can add diagnostics
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) throw error;
       return errorResponse(`Destination folder not found: ${destinationFolderId}`);
     }
   }
