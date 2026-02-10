@@ -220,9 +220,10 @@ async function verifyAuthHealth(): Promise<boolean> {
   try {
     const response = await drive.about.get({ fields: "user" });
     const email = response.data.user?.emailAddress;
-    log("Auth verification successful", {
-      user: email ? `${email.split("@")[0].slice(0, 2)}***@${email.split("@")[1]}` : "unknown",
-    });
+    const atIdx = email ? email.lastIndexOf("@") : -1;
+    const redactedUser =
+      email && atIdx > 0 ? `${email[0]}***@${email.slice(atIdx + 1)}` : "unknown";
+    log("Auth verification successful", { user: redactedUser });
     lastAuthError = null;
     return true;
   } catch (error: unknown) {

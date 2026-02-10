@@ -7,7 +7,8 @@ const SENSITIVE_KEYS = new Set([
   "refresh_token",
   "client_secret",
   "id_token",
-  "token",
+  "private_key",
+  "private_key_id",
 ]);
 
 function redactSensitive(_key: string, value: unknown): unknown {
@@ -24,8 +25,14 @@ function redactSensitive(_key: string, value: unknown): unknown {
  */
 export function log(message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(data, redactSensitive);
+  } catch {
+    serialized = String(data);
+  }
   const logMessage = data
-    ? `[${timestamp}] ${message}: ${JSON.stringify(data, redactSensitive)}`
+    ? `[${timestamp}] ${message}: ${serialized}`
     : `[${timestamp}] ${message}`;
   console.error(logMessage);
 }

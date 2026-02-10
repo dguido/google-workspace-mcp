@@ -40,6 +40,20 @@ describe("log", () => {
     expect(output).not.toContain("GOCSPX-secret");
   });
 
+  it("redacts id_token", () => {
+    log("tokens", { id_token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.secret" });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts private_key", () => {
+    log("service account", { private_key: "-----BEGIN RSA PRIVATE KEY-----\nMIIE..." });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("BEGIN RSA PRIVATE KEY");
+    expect(output).toContain("[REDACTED]");
+  });
+
   it("redacts nested sensitive fields", () => {
     log("nested", { credentials: { access_token: "secret", type: "authorized_user" } });
     const output = errorSpy.mock.calls[0][0];
@@ -53,5 +67,19 @@ describe("log", () => {
     expect(output).toContain('"status":200');
     expect(output).toContain('"message":"ok"');
     expect(output).toContain('"hasToken":true');
+  });
+
+  it("handles circular references without throwing", () => {
+    const obj: Record<string, unknown> = { name: "test" };
+    obj.self = obj;
+    log("circular", obj);
+    expect(errorSpy).toHaveBeenCalledOnce();
+    expect(errorSpy.mock.calls[0][0]).toContain("[object Object]");
+  });
+
+  it("handles string data parameter", () => {
+    log("info", "plain string value");
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).toContain('"plain string value"');
   });
 });
