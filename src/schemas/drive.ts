@@ -5,6 +5,7 @@ export const GetFolderTreeSchema = z
     folderId: z.string().optional(),
     folderPath: z.string().optional(),
     depth: z.number().min(1).max(5).optional().default(2),
+    includeIds: z.boolean().optional().default(false),
   })
   .refine((data) => !(data.folderId && data.folderPath), {
     message: "Provide either folderId or folderPath, not both",

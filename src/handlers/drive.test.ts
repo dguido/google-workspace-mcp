@@ -22,6 +22,8 @@ import {
   handleStarFile,
   handleBatchRestore,
   handleRestoreFromTrash,
+  handleResolveFilePath,
+  handleGetFolderTree,
 } from "./drive.js";
 
 vi.mock("../utils/index.js", async (importOriginal) => {
@@ -1106,5 +1108,200 @@ describe("handleListFolder error handling", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Folder not found");
     expect(result.content[0].text).toContain("nonexistent123");
+  });
+});
+
+describe("handleResolveFilePath", () => {
+  let mockDrive: drive_v3.Drive;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+  });
+
+  it("includes ID, name, path, and mimeType in text", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: {
+        files: [
+          {
+            id: "folder123",
+            name: "Marketing",
+            mimeType: "application/vnd.google-apps.folder",
+            modifiedTime: "2026-01-15T10:30:00.000Z",
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleResolveFilePath(mockDrive, {
+      path: "/Marketing",
+    });
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).toContain("Name: Marketing");
+    expect(text).toContain("ID: folder123");
+    expect(text).toContain("Path: /Marketing");
+    expect(text).toContain("MIME type: application/vnd.google-apps.folder");
+
+    const structured = result.structuredContent as {
+      id: string;
+      name: string;
+      path: string;
+    };
+    expect(structured.id).toBe("folder123");
+    expect(structured.name).toBe("Marketing");
+    expect(structured.path).toBe("/Marketing");
+  });
+
+  it("root path includes ID root in text", async () => {
+    const result = await handleResolveFilePath(mockDrive, {
+      path: "/",
+    });
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).toContain("Name: My Drive");
+    expect(text).toContain("ID: root");
+    expect(text).toContain("Path: /");
+    expect(text).toContain("Type: folder");
+  });
+
+  it("resolves a file with Type: file and includes Modified", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: {
+        files: [
+          {
+            id: "file456",
+            name: "report.pdf",
+            mimeType: "application/pdf",
+            modifiedTime: "2026-02-01T08:00:00.000Z",
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleResolveFilePath(mockDrive, {
+      path: "/report.pdf",
+    });
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).toContain("Type: file");
+    expect(text).toContain("MIME type: application/pdf");
+    expect(text).toContain("Modified: 2026-02-01T08:00:00.000Z");
+  });
+
+  it("omits MIME type and Modified when null", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: {
+        files: [
+          {
+            id: "file789",
+            name: "mystery",
+            mimeType: null,
+            modifiedTime: null,
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleResolveFilePath(mockDrive, {
+      path: "/mystery",
+    });
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).not.toContain("MIME type:");
+    expect(text).not.toContain("Modified:");
+    expect(text).toContain("Name: mystery");
+    expect(text).toContain("ID: file789");
+  });
+
+  it("builds correct path for multi-segment paths", async () => {
+    vi.mocked(mockDrive.files.list)
+      .mockResolvedValueOnce({
+        data: {
+          files: [
+            {
+              id: "folderA",
+              name: "Marketing",
+              mimeType: "application/vnd.google-apps.folder",
+            },
+          ],
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          files: [
+            {
+              id: "fileB",
+              name: "budget.xlsx",
+              mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              modifiedTime: "2026-01-20T12:00:00.000Z",
+            },
+          ],
+        },
+      } as never);
+
+    const result = await handleResolveFilePath(mockDrive, {
+      path: "/Marketing/budget.xlsx",
+    });
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).toContain("Path: /Marketing/budget.xlsx");
+    expect(text).toContain("ID: fileB");
+    expect(text).toContain("Name: budget.xlsx");
+  });
+});
+
+describe("handleGetFolderTree", () => {
+  let mockDrive: drive_v3.Drive;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+  });
+
+  it("does not include IDs in text by default", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: {
+        files: [
+          {
+            id: "child1",
+            name: "readme.txt",
+            mimeType: "text/plain",
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleGetFolderTree(mockDrive, {});
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).toContain("readme.txt");
+    expect(text).not.toContain("(ID:");
+  });
+
+  it("includes IDs in text when includeIds is true", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: {
+        files: [
+          {
+            id: "child1",
+            name: "readme.txt",
+            mimeType: "text/plain",
+          },
+          {
+            id: "subfolder1",
+            name: "Branding",
+            mimeType: "application/vnd.google-apps.folder",
+          },
+        ],
+      },
+    } as never);
+
+    const result = await handleGetFolderTree(mockDrive, {
+      includeIds: true,
+    });
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text as string;
+    expect(text).toContain("(ID: root)");
+    expect(text).toContain("readme.txt (ID: child1)");
+    expect(text).toContain("Branding (ID: subfolder1)");
   });
 });
