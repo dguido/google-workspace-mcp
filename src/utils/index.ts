@@ -6,6 +6,8 @@ export {
   errorResponse,
   authErrorResponse,
   truncateResponse,
+  isConfigurationError,
+  DIAGNOSTIC_HINT,
 } from "./responses.js";
 export type { ToolResponse, ErrorCode, ErrorOptions, TruncationResult } from "./responses.js";
 export { validateArgs } from "./validation.js";

@@ -327,18 +327,18 @@ describe("handleFormatGoogleSheetCells", () => {
     expect(result.content[0].text).toContain("No formatting options");
   });
 
-  it("returns error when sheet not found", async () => {
+  it("throws error when sheet not found", async () => {
     vi.mocked(mockSheets.spreadsheets.get).mockResolvedValue({
       data: { sheets: [] },
     } as never);
 
-    const result = await handleFormatGoogleSheetCells(mockSheets, {
-      spreadsheetId: "sheet123",
-      range: "NonExistent!A1",
-      backgroundColor: { red: 1 },
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("not found");
+    await expect(
+      handleFormatGoogleSheetCells(mockSheets, {
+        spreadsheetId: "sheet123",
+        range: "NonExistent!A1",
+        backgroundColor: { red: 1 },
+      }),
+    ).rejects.toThrow("not found");
   });
 });
 

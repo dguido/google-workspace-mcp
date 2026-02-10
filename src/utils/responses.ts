@@ -2,6 +2,15 @@ import { isToonEnabled } from "../config/services.js";
 import { log } from "./logging.js";
 import type { GoogleAuthError } from "../errors/google-auth-error.js";
 
+export const DIAGNOSTIC_HINT = "\n\nCall get_status for full diagnostics.";
+
+const CONFIG_ERROR_PATTERN =
+  /credentials|authenticat|Invalid token|token.*expired|token.*refresh|scope|API.*not.*enabled|Client ID missing/i;
+
+export function isConfigurationError(message: string): boolean {
+  return CONFIG_ERROR_PATTERN.test(message);
+}
+
 /**
  * Maximum character limit for response content.
  * Large responses can overwhelm agent context windows.
@@ -127,8 +136,17 @@ export function authErrorResponse(error: GoogleAuthError): ToolResponse {
   log("Auth error", error.toToolResponse());
 
   return {
-    content: [{ type: "text", text: error.toDisplayString() }],
+    content: [
+      {
+        type: "text",
+        text: error.toDisplayString() + DIAGNOSTIC_HINT,
+      },
+    ],
     isError: true,
-    structuredContent: error.toToolResponse(),
+    structuredContent: {
+      ...error.toToolResponse(),
+      // Overrides any `diagnostic_tool` from toToolResponse()
+      diagnostic_tool: "get_status",
+    },
   };
 }

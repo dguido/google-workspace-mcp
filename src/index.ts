@@ -23,6 +23,8 @@ import {
   log,
   errorResponse,
   authErrorResponse,
+  isConfigurationError,
+  DIAGNOSTIC_HINT,
   getDocsService,
   getSheetsService,
   getSlidesService,
@@ -249,6 +251,8 @@ const server = new Server(
     version: VERSION,
   },
   {
+    instructions:
+      "On any tool error, call get_status for diagnostics " + "before asking the user to debug.",
     capabilities: {
       resources: {},
       tools: {
@@ -652,11 +656,21 @@ const toolRegistry = createToolRegistry();
 // -----------------------------------------------------------------------------
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const toolName = request.params.name;
+  const args = request.params.arguments;
+
+  // Status/discovery tools work without auth
+  if (toolName === "get_status") {
+    return handleGetStatus(authClient, drive, VERSION, args);
+  }
+  if (toolName === "list_tools") {
+    return handleListTools(args);
+  }
+
   await ensureAuthenticated();
-  log("Handling tool request", { tool: request.params.name });
+  log("Handling tool request", { tool: toolName });
 
   try {
-    const args = request.params.arguments;
     const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
 
     const services: ToolServices = {
@@ -670,9 +684,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       context: { server, progressToken: meta?.progressToken },
     };
 
-    const handler = toolRegistry[request.params.name];
+    const handler = toolRegistry[toolName];
     if (!handler) {
-      return errorResponse(`Unknown tool: ${request.params.name}`);
+      return errorResponse(`Unknown tool: ${toolName}`);
     }
 
     return handler(services, args);
@@ -691,7 +705,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Generic error handling
     const message = error instanceof Error ? error.message : String(error);
     log("Tool error", { error: message });
-    return errorResponse(message);
+
+    const hint = isConfigurationError(message) ? DIAGNOSTIC_HINT : "";
+    return errorResponse(message + hint);
   }
 });
 
