@@ -579,12 +579,19 @@ export async function handleGetStatus(
 
   // Validate with API
   const apiValidation = await validateWithApi(drive);
+  let apiMessage: string;
+  if (apiValidation.success) {
+    const email = apiValidation.user_email;
+    const atIdx = email ? email.lastIndexOf("@") : -1;
+    const redacted = email && atIdx > 0 ? `${email[0]}***@${email.slice(atIdx + 1)}` : undefined;
+    apiMessage = redacted ? `API access confirmed for: ${redacted}` : "API access confirmed";
+  } else {
+    apiMessage = `API validation failed: ${apiValidation.error}`;
+  }
   configChecks.push({
     name: "api_validation",
     status: apiValidation.success ? "ok" : "error",
-    message: apiValidation.success
-      ? `API access confirmed for: ${apiValidation.user_email}`
-      : `API validation failed: ${apiValidation.error}`,
+    message: apiMessage,
   });
 
   // Determine overall status from config checks

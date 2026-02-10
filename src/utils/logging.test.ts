@@ -54,6 +54,20 @@ describe("log", () => {
     expect(output).toContain("[REDACTED]");
   });
 
+  it("redacts private_key_id", () => {
+    log("service account", { private_key_id: "key-id-abc123" });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("key-id-abc123");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts client_email", () => {
+    log("service account", { client_email: "sa@project.iam.gserviceaccount.com" });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("sa@project.iam.gserviceaccount.com");
+    expect(output).toContain("[REDACTED]");
+  });
+
   it("redacts nested sensitive fields", () => {
     log("nested", { credentials: { access_token: "secret", type: "authorized_user" } });
     const output = errorSpy.mock.calls[0][0];

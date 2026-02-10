@@ -6,13 +6,14 @@ const SENSITIVE_KEYS = new Set([
   "access_token",
   "refresh_token",
   "client_secret",
+  "client_email",
   "id_token",
   "private_key",
   "private_key_id",
 ]);
 
-function redactSensitive(_key: string, value: unknown): unknown {
-  if (typeof _key === "string" && SENSITIVE_KEYS.has(_key)) {
+function redactSensitive(key: string, value: unknown): unknown {
+  if (SENSITIVE_KEYS.has(key)) {
     return "[REDACTED]";
   }
   return value;
