@@ -208,6 +208,61 @@ describe("handleSearchContacts", () => {
     mockPeople = createMockPeople();
   });
 
+  it("warms up search cache before first search", async () => {
+    vi.mocked(mockPeople.people.searchContacts).mockResolvedValue({
+      data: { results: [] },
+    } as never);
+
+    await handleSearchContacts(mockPeople, { query: "test" });
+
+    // First call is warmup (empty query), second is the real search
+    expect(mockPeople.people.searchContacts).toHaveBeenCalledTimes(2);
+    expect(mockPeople.people.searchContacts).toHaveBeenNthCalledWith(1, {
+      query: "",
+      readMask: "names",
+      pageSize: 1,
+    });
+    expect(mockPeople.people.searchContacts).toHaveBeenNthCalledWith(2, {
+      query: "test",
+      pageSize: expect.any(Number),
+      readMask: expect.any(String),
+    });
+  });
+
+  it("only warms up once across multiple searches", async () => {
+    vi.mocked(mockPeople.people.searchContacts).mockResolvedValue({
+      data: { results: [] },
+    } as never);
+
+    await handleSearchContacts(mockPeople, { query: "first" });
+    await handleSearchContacts(mockPeople, { query: "second" });
+
+    // 1 warmup + 2 real searches = 3 total
+    expect(mockPeople.people.searchContacts).toHaveBeenCalledTimes(3);
+  });
+
+  it("proceeds with search if warmup fails", async () => {
+    vi.mocked(mockPeople.people.searchContacts)
+      .mockRejectedValueOnce(new Error("Warmup failed"))
+      .mockResolvedValueOnce({
+        data: {
+          results: [
+            {
+              person: {
+                resourceName: "people/c1234",
+                names: [{ displayName: "John Doe" }],
+              },
+            },
+          ],
+        },
+      } as never);
+
+    const result = await handleSearchContacts(mockPeople, { query: "John" });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("John Doe");
+  });
+
   it("searches contacts successfully", async () => {
     vi.mocked(mockPeople.people.searchContacts).mockResolvedValue({
       data: {
