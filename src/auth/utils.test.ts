@@ -5,7 +5,6 @@ import {
   getSecureTokenPath,
   getKeysFilePath,
   getConfigDirectory,
-  getLegacyKeysFilePath,
   generateCredentialsErrorMessage,
   getActiveProfile,
   getProfileDirectory,
@@ -26,9 +25,9 @@ describe("auth/utils", () => {
   });
 
   describe("getSecureTokenPath", () => {
-    it("returns custom path when GOOGLE_DRIVE_MCP_TOKEN_PATH is set", () => {
+    it("returns custom path when GOOGLE_WORKSPACE_MCP_TOKEN_PATH is set", () => {
       const customPath = "/custom/path/to/tokens.json";
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = customPath;
+      process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = customPath;
 
       const result = getSecureTokenPath();
 
@@ -36,7 +35,7 @@ describe("auth/utils", () => {
     });
 
     it("uses XDG_CONFIG_HOME when set", () => {
-      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
+      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
       const xdgConfigHome = "/custom/config";
       process.env.XDG_CONFIG_HOME = xdgConfigHome;
 
@@ -46,7 +45,7 @@ describe("auth/utils", () => {
     });
 
     it("falls back to ~/.config when XDG_CONFIG_HOME is not set", () => {
-      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
+      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
       delete process.env.XDG_CONFIG_HOME;
 
       const result = getSecureTokenPath();
@@ -61,7 +60,7 @@ describe("auth/utils", () => {
     });
 
     it("resolves relative custom paths to absolute", () => {
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = "./relative/tokens.json";
+      process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = "./relative/tokens.json";
 
       const result = getSecureTokenPath();
 
@@ -88,32 +87,8 @@ describe("auth/utils", () => {
     });
   });
 
-  describe("getLegacyKeysFilePath", () => {
-    it("returns cwd-based path", () => {
-      const result = getLegacyKeysFilePath();
-
-      expect(result).toBe(path.join(process.cwd(), "gcp-oauth.keys.json"));
-    });
-
-    it("returns absolute path", () => {
-      const result = getLegacyKeysFilePath();
-
-      expect(path.isAbsolute(result)).toBe(true);
-    });
-  });
-
   describe("getKeysFilePath", () => {
-    it("returns custom path when GOOGLE_DRIVE_OAUTH_CREDENTIALS is set", () => {
-      const customPath = "/custom/credentials.json";
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = customPath;
-
-      const result = getKeysFilePath();
-
-      expect(result).toBe(path.resolve(customPath));
-    });
-
-    it("returns new default path in config directory when env var not set", () => {
-      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
+    it("returns default path in config directory", () => {
       delete process.env.XDG_CONFIG_HOME;
 
       const result = getKeysFilePath();
@@ -127,22 +102,13 @@ describe("auth/utils", () => {
       expect(result).toBe(expectedPath);
     });
 
-    it("respects XDG_CONFIG_HOME for new default path", () => {
-      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
+    it("respects XDG_CONFIG_HOME for default path", () => {
       const xdgConfigHome = "/custom/config";
       process.env.XDG_CONFIG_HOME = xdgConfigHome;
 
       const result = getKeysFilePath();
 
       expect(result).toBe(path.join(xdgConfigHome, "google-workspace-mcp", "credentials.json"));
-    });
-
-    it("resolves relative custom paths to absolute", () => {
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = "./relative/credentials.json";
-
-      const result = getKeysFilePath();
-
-      expect(path.isAbsolute(result)).toBe(true);
     });
   });
 
@@ -232,7 +198,6 @@ describe("auth/utils", () => {
   describe("getSecureTokenPath with profile", () => {
     it("resolves to profile tokens path", () => {
       delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
-      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
       delete process.env.XDG_CONFIG_HOME;
       process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
 
@@ -255,20 +220,10 @@ describe("auth/utils", () => {
       const result = getSecureTokenPath();
       expect(result).toBe("/override/tokens.json");
     });
-
-    it("legacy token path overrides profile", () => {
-      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = "/legacy/tokens.json";
-      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
-
-      const result = getSecureTokenPath();
-      expect(result).toBe("/legacy/tokens.json");
-    });
   });
 
   describe("getKeysFilePath with profile", () => {
     it("resolves to profile credentials path", () => {
-      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
       delete process.env.XDG_CONFIG_HOME;
       process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
 
@@ -282,14 +237,6 @@ describe("auth/utils", () => {
         "credentials.json",
       );
       expect(result).toBe(expected);
-    });
-
-    it("explicit credentials path overrides profile", () => {
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = "/override/creds.json";
-      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
-
-      const result = getKeysFilePath();
-      expect(result).toBe("/override/creds.json");
     });
   });
 
@@ -306,12 +253,6 @@ describe("auth/utils", () => {
 
       expect(result).toContain("GOOGLE_CLIENT_ID");
       expect(result).toContain("GOOGLE_CLIENT_SECRET");
-    });
-
-    it("includes file-based instructions", () => {
-      const result = generateCredentialsErrorMessage();
-
-      expect(result).toContain("GOOGLE_DRIVE_OAUTH_CREDENTIALS");
     });
 
     it("includes default file path information", () => {

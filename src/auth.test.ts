@@ -11,7 +11,7 @@ vi.mock("./auth/utils.js", async () => {
   return {
     ...actual,
     getSecureTokenPath: vi.fn(() => "/mock/path/.config/google-workspace-mcp/tokens.json"),
-    getKeysFilePath: vi.fn(() => "/mock/path/gcp-oauth.keys.json"),
+    getKeysFilePath: vi.fn(() => "/mock/path/credentials.json"),
     generateCredentialsErrorMessage: vi.fn(() => "Mock error message"),
   };
 });
@@ -128,7 +128,7 @@ describe("auth", () => {
 
         // Setup to return valid credentials but no tokens
         vi.mocked(fs.readFile).mockImplementation((path: unknown) => {
-          if (typeof path === "string" && path.includes("gcp-oauth")) {
+          if (typeof path === "string" && path.includes("credentials")) {
             return Promise.resolve(JSON.stringify(validCredentials));
           }
           return Promise.reject(fileError);

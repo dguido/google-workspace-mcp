@@ -11,13 +11,7 @@ vi.mock("../auth/utils.js", async () => {
     ...actual,
     getKeysFilePath: vi.fn(() => "/mock/credentials.json"),
     getSecureTokenPath: vi.fn(() => "/mock/config/tokens.json"),
-    resolveCredentialsPath: vi.fn(() =>
-      Promise.resolve({
-        path: "/mock/credentials.json",
-        isLegacy: false,
-        exists: false,
-      }),
-    ),
+    credentialsFileExists: vi.fn(() => Promise.resolve(false)),
   };
 });
 

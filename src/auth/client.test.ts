@@ -10,7 +10,7 @@ vi.mock("./utils.js", async () => {
   const actual = await vi.importActual("./utils.js");
   return {
     ...actual,
-    getKeysFilePath: vi.fn(() => "/mock/path/gcp-oauth.keys.json"),
+    getKeysFilePath: vi.fn(() => "/mock/path/credentials.json"),
     generateCredentialsErrorMessage: vi.fn(() => "Mock error message"),
   };
 });
@@ -154,32 +154,6 @@ describe("auth/client", () => {
         vi.mocked(fs.readFile).mockResolvedValue("not valid json");
 
         await expect(loadCredentials()).rejects.toThrow();
-      });
-    });
-
-    describe("legacy fallback", () => {
-      it("tries legacy client_secret.json when main file fails", async () => {
-        // First call fails, second call (legacy) succeeds
-        const legacyCreds = {
-          installed: {
-            client_id: "legacy-client-id",
-            client_secret: "legacy-client-secret",
-          },
-        };
-
-        vi.mocked(fs.readFile)
-          .mockRejectedValueOnce(new Error("File not found"))
-          .mockResolvedValueOnce(JSON.stringify(legacyCreds));
-
-        const result = await loadCredentials();
-
-        expect(result.client_id).toBe("legacy-client-id");
-      });
-
-      it("throws with helpful message when both main and legacy fail", async () => {
-        vi.mocked(fs.readFile).mockRejectedValue(new Error("File not found"));
-
-        await expect(loadCredentials()).rejects.toThrow("Error loading credentials");
       });
     });
   });

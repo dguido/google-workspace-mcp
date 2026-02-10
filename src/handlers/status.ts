@@ -9,9 +9,10 @@ import { getEnabledServices, SERVICE_NAMES, type ServiceName } from "../config/s
 import {
   getSecureTokenPath,
   getKeysFilePath,
-  resolveCredentialsPath,
+  credentialsFileExists,
   getActiveProfile,
   getEnvVarCredentials,
+  isValidClientIdFormat,
 } from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
@@ -70,6 +71,7 @@ export interface StatusData extends Record<string, unknown> {
   profile: string | null;
   auth: {
     configured: boolean;
+    credential_source: "env_var" | "file" | "none";
     token_status: TokenStatus;
     token_expires_at: string | null;
     has_refresh_token: boolean;
@@ -94,10 +96,9 @@ export interface StatusData extends Record<string, unknown> {
 /**
  * Check if OAuth credentials are available (env vars or file).
  */
-async function credentialsFileExists(): Promise<boolean> {
+async function credentialsAvailable(): Promise<boolean> {
   if (getEnvVarCredentials()) return true;
-  const resolved = await resolveCredentialsPath();
-  return resolved.exists;
+  return credentialsFileExists();
 }
 
 /**
@@ -183,13 +184,13 @@ async function getTokenInfo(): Promise<{
 
 /**
  * Check if credentials are available and valid (for diagnostic mode).
- * Checks env vars first, then file locations.
+ * Checks env vars first, then the credentials file.
  */
 async function checkCredentialsFile(): Promise<ConfigCheck> {
   // Check env var credentials first
   const envCreds = getEnvVarCredentials();
   if (envCreds) {
-    if (!envCreds.client_id.endsWith(".apps.googleusercontent.com")) {
+    if (!isValidClientIdFormat(envCreds.client_id)) {
       return {
         name: "credentials_file",
         status: "error",
@@ -208,9 +209,9 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
   }
 
   const keysPath = getKeysFilePath();
-  const resolved = await resolveCredentialsPath();
+  const exists = await credentialsFileExists();
 
-  if (!resolved.exists) {
+  if (!exists) {
     return {
       name: "credentials_file",
       status: "error",
@@ -224,7 +225,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
   }
 
   try {
-    const content = await fs.readFile(resolved.path, "utf-8");
+    const content = await fs.readFile(keysPath, "utf-8");
     const parsed = JSON.parse(content) as CredentialsFile;
     const clientId = parsed.installed?.client_id || parsed.web?.client_id || parsed.client_id;
 
@@ -237,7 +238,7 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
       };
     }
 
-    if (!clientId.endsWith(".apps.googleusercontent.com")) {
+    if (!isValidClientIdFormat(clientId)) {
       return {
         name: "credentials_file",
         status: "error",
@@ -249,22 +250,10 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
       };
     }
 
-    if (resolved.isLegacy) {
-      return {
-        name: "credentials_file",
-        status: "warning",
-        message: `Using legacy credentials location: ` + resolved.path,
-        fix: [
-          `Move credentials to: ${keysPath}`,
-          "This silences this warning and follows " + "the new default",
-        ],
-      };
-    }
-
     return {
       name: "credentials_file",
       status: "ok",
-      message: `Valid credentials file at: ${resolved.path}`,
+      message: `Valid credentials file at: ${keysPath}`,
     };
   } catch (parseError) {
     return {
@@ -512,7 +501,7 @@ export async function handleGetStatus(
   }
 
   // Basic status info
-  const configured = await credentialsFileExists();
+  const configured = await credentialsAvailable();
   const tokenInfo = await getTokenInfo();
   const timestamp = new Date().toISOString();
   const uptime_seconds = getUptimeSeconds();
@@ -600,6 +589,7 @@ export async function handleGetStatus(
     profile: activeProfile,
     auth: {
       configured,
+      credential_source: getEnvVarCredentials() ? "env_var" : configured ? "file" : "none",
       token_status: tokenStatus,
       token_expires_at: expiresAt,
       has_refresh_token: tokenInfo.has_refresh,

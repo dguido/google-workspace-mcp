@@ -9,8 +9,9 @@ import {
   getKeysFilePath,
   getSecureTokenPath,
   extractCredentials,
-  resolveCredentialsPath,
+  credentialsFileExists,
   getEnvVarCredentials,
+  isValidClientIdFormat,
 } from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
 import type { CredentialsFile } from "../types/credentials.js";
@@ -22,8 +23,6 @@ export interface ValidationResult {
   valid: boolean;
   errors: GoogleAuthError[];
   warnings: string[];
-  /** The path where credentials were actually found (may differ from getKeysFilePath() if using legacy) */
-  resolvedCredentialsPath?: string;
 }
 
 /** Ensure token directory exists and is writable. */
@@ -48,7 +47,7 @@ function validateCredentialValues(
   errors: GoogleAuthError[],
   warnings: string[],
 ): void {
-  if (!clientId.endsWith(".apps.googleusercontent.com")) {
+  if (!isValidClientIdFormat(clientId)) {
     errors.push(
       new GoogleAuthError({
         code: "INVALID_CLIENT",
@@ -69,6 +68,8 @@ function validateCredentialValues(
     );
   }
 
+  // Whitespace checks: only relevant for file-based credentials
+  // since getEnvVarCredentials() pre-trims values.
   if (clientId !== clientId.trim()) {
     warnings.push("client_id contains leading or trailing whitespace");
   }
@@ -101,11 +102,10 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
 
   const keysPath = getKeysFilePath();
 
-  // Check if credentials file exists (try new then legacy)
-  const resolved = await resolveCredentialsPath();
-  const resolvedCredentialsPath = resolved.path;
+  // Check if credentials file exists
+  const exists = await credentialsFileExists();
 
-  if (!resolved.exists) {
+  if (!exists) {
     errors.push(
       new GoogleAuthError({
         code: "OAUTH_NOT_CONFIGURED",
@@ -130,16 +130,10 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
     return { valid: false, errors, warnings };
   }
 
-  if (resolved.isLegacy) {
-    warnings.push(
-      `Using legacy credentials location: ${resolved.path}. ` + `Please move to: ${keysPath}`,
-    );
-  }
-
   // Read and parse credentials file
   let credentials: CredentialsFile;
   try {
-    const content = await fs.readFile(resolvedCredentialsPath, "utf-8");
+    const content = await fs.readFile(keysPath, "utf-8");
     credentials = JSON.parse(content) as CredentialsFile;
   } catch (parseError) {
     errors.push(
@@ -159,7 +153,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
         ],
       }),
     );
-    return { valid: false, errors, warnings, resolvedCredentialsPath };
+    return { valid: false, errors, warnings };
   }
 
   // Extract credentials using shared helper
@@ -194,7 +188,6 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
     valid: errors.length === 0,
     errors,
     warnings,
-    resolvedCredentialsPath,
   };
 }
 
@@ -203,8 +196,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
  */
 export async function isOAuthConfigured(): Promise<boolean> {
   if (getEnvVarCredentials()) return true;
-  const resolved = await resolveCredentialsPath();
-  return resolved.exists;
+  return credentialsFileExists();
 }
 
 /**
