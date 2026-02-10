@@ -113,6 +113,12 @@ Fetches up-to-date docs and examples for any library. Use when working with:
 - One logical change per commit
 - Never amend/rebase commits already pushed to shared branches
 
+### Releases
+
+1. Run `npm run check` and `npm test`
+2. Bump `version` in `package.json`, rebuild, commit, tag, push
+3. Always create a GitHub release: `gh release create v<version>` with notes summarizing merged PRs
+
 ## Testing
 
 **Framework:** Vitest with colocated `*.test.ts` files.
