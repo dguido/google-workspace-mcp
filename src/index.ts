@@ -807,7 +807,7 @@ async function runAuthServer(tokenPath?: string): Promise<void> {
       }
     }, 1000);
   } catch (error) {
-    console.error("Authentication failed:", error);
+    log("Authentication failed", error);
     process.exit(1);
   }
 }
@@ -919,7 +919,7 @@ async function main() {
           process.exit(0);
         });
       } catch (error) {
-        console.error("Failed to start server:", error);
+        log("Failed to start server", error);
         process.exit(1);
       }
       break;
@@ -945,6 +945,6 @@ export { main, server };
 
 // Run the CLI
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  log("Fatal error", error);
   process.exit(1);
 });
