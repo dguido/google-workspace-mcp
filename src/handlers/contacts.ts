@@ -20,6 +20,29 @@ import {
 // Common field mask for reading contact data
 const PERSON_FIELDS = "names,emailAddresses,phoneNumbers,organizations,addresses,metadata";
 
+// People API search index warmup (once per service instance)
+const warmedInstances = new WeakSet<people_v1.People>();
+
+async function warmupSearchCache(people: people_v1.People): Promise<void> {
+  if (warmedInstances.has(people)) return;
+  warmedInstances.add(people);
+  try {
+    await withTimeout(
+      people.people.searchContacts({
+        query: "",
+        readMask: "names",
+        pageSize: 1,
+      }),
+      10000,
+      "Search cache warmup",
+    );
+  } catch (error) {
+    log("Search cache warmup failed (non-fatal)", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // Helper to format contact for display
 function formatContactSummary(person: people_v1.Schema$Person): string {
   const name = person.names?.[0];
@@ -186,6 +209,8 @@ export async function handleSearchContacts(
   const validation = validateArgs(SearchContactsSchema, args);
   if (!validation.success) return validation.response;
   const { query, pageSize } = validation.data;
+
+  await warmupSearchCache(people);
 
   const response = await withTimeout(
     people.people.searchContacts({
