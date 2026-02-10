@@ -375,12 +375,7 @@ export async function handleFormatGoogleSheetCells(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  let sheetInfo;
-  try {
-    sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
-  } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : String(err));
-  }
+  const sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
   const requests: sheets_v4.Schema$Request[] = [];
@@ -430,12 +425,7 @@ export async function handleMergeGoogleSheetCells(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  let sheetInfo;
-  try {
-    sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
-  } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : String(err));
-  }
+  const sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
 
@@ -467,12 +457,7 @@ export async function handleAddGoogleSheetConditionalFormat(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  let sheetInfo;
-  try {
-    sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
-  } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : String(err));
-  }
+  const sheetInfo = await getSheetInfo(sheets, data.spreadsheetId, data.range);
 
   const gridRange = convertA1ToGridRange(sheetInfo.a1Range, sheetInfo.sheetId);
 
