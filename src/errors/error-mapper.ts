@@ -162,7 +162,7 @@ function createDeletedClientError(
       "The OAuth client in your credentials file no longer exists in Google Cloud",
       "Go to Google Cloud Console > APIs & Services > Credentials",
       "Create a new OAuth 2.0 Client ID (Desktop app type)",
-      "Download and save as gcp-oauth.keys.json",
+      "Download and save as credentials.json",
       "Delete existing tokens and re-authenticate",
     ],
     links: [{ label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` }],

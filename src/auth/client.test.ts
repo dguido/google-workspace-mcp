@@ -10,7 +10,7 @@ vi.mock("./utils.js", async () => {
   const actual = await vi.importActual("./utils.js");
   return {
     ...actual,
-    getKeysFilePath: vi.fn(() => "/mock/path/gcp-oauth.keys.json"),
+    getKeysFilePath: vi.fn(() => "/mock/path/credentials.json"),
     generateCredentialsErrorMessage: vi.fn(() => "Mock error message"),
   };
 });
@@ -26,11 +26,14 @@ vi.mock("../errors/index.js", () => ({
 }));
 
 describe("auth/client", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
+    process.env = { ...originalEnv };
     vi.restoreAllMocks();
   });
 
@@ -153,31 +156,65 @@ describe("auth/client", () => {
         await expect(loadCredentials()).rejects.toThrow();
       });
     });
+  });
 
-    describe("legacy fallback", () => {
-      it("tries legacy client_secret.json when main file fails", async () => {
-        // First call fails, second call (legacy) succeeds
-        const legacyCreds = {
+  describe("env var credentials", () => {
+    it("loadCredentials returns env var creds when GOOGLE_CLIENT_ID set", async () => {
+      process.env.GOOGLE_CLIENT_ID = "env-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "env-secret";
+
+      const result = await loadCredentials();
+
+      expect(result.client_id).toBe("env-id.apps.googleusercontent.com");
+      expect(result.client_secret).toBe("env-secret");
+      expect(fs.readFile).not.toHaveBeenCalled();
+    });
+
+    it("env vars take priority over file credentials", async () => {
+      process.env.GOOGLE_CLIENT_ID = "env-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "env-secret";
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
           installed: {
-            client_id: "legacy-client-id",
-            client_secret: "legacy-client-secret",
+            client_id: "file-id",
+            client_secret: "file-secret",
           },
-        };
+        }),
+      );
 
-        vi.mocked(fs.readFile)
-          .mockRejectedValueOnce(new Error("File not found"))
-          .mockResolvedValueOnce(JSON.stringify(legacyCreds));
+      const result = await loadCredentials();
 
-        const result = await loadCredentials();
+      expect(result.client_id).toBe("env-id.apps.googleusercontent.com");
+      expect(result.client_secret).toBe("env-secret");
+    });
 
-        expect(result.client_id).toBe("legacy-client-id");
-      });
+    it("initializeOAuth2Client works with env var credentials", async () => {
+      process.env.GOOGLE_CLIENT_ID = "env-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "env-secret";
 
-      it("throws with helpful message when both main and legacy fail", async () => {
-        vi.mocked(fs.readFile).mockRejectedValue(new Error("File not found"));
+      const client = await initializeOAuth2Client();
 
-        await expect(loadCredentials()).rejects.toThrow("Error loading credentials");
-      });
+      expect(client).toBeDefined();
+      expect(client._clientId).toBe("env-id.apps.googleusercontent.com");
+    });
+
+    it("falls back to file when GOOGLE_CLIENT_ID not set", async () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          installed: {
+            client_id: "file-id",
+            client_secret: "file-secret",
+          },
+        }),
+      );
+
+      const result = await loadCredentials();
+
+      expect(result.client_id).toBe("file-id");
     });
   });
 

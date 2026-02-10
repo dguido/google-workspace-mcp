@@ -15,14 +15,6 @@ export function getConfigDirectory(): string {
   return path.join(configHome, "google-workspace-mcp");
 }
 
-/**
- * Get the legacy keys file path (cwd-based, pre-3.x behavior).
- * Used for migration fallback to maintain backwards compatibility.
- */
-export function getLegacyKeysFilePath(): string {
-  return path.join(process.cwd(), "gcp-oauth.keys.json");
-}
-
 const PROFILE_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /** Get active profile name from env var, or null. */
@@ -54,16 +46,10 @@ export function getProfileDirectory(name: string): string {
 // Returns the absolute path for the saved token file.
 // Uses XDG Base Directory spec with fallback to home directory
 export function getSecureTokenPath(): string {
-  // Check for custom token path environment variable first (new name)
+  // Check for custom token path environment variable
   const customTokenPath = process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
   if (customTokenPath) {
     return path.resolve(customTokenPath);
-  }
-
-  // Legacy environment variable support
-  const legacyTokenPath = process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
-  if (legacyTokenPath) {
-    return path.resolve(legacyTokenPath);
   }
 
   // Named profile
@@ -77,26 +63,17 @@ export function getSecureTokenPath(): string {
 }
 
 /**
- * Returns the absolute path for the GCP OAuth keys file with priority:
- * 1. Environment variable GOOGLE_DRIVE_OAUTH_CREDENTIALS (highest priority, for power users)
- * 2. New default in config directory: ~/.config/google-workspace-mcp/credentials.json
- *
- * Legacy fallback to ./gcp-oauth.keys.json is handled in loadCredentialsWithFallback().
+ * Returns the absolute path for the OAuth credentials file.
+ * Priority: named profile → XDG config directory default.
  */
 export function getKeysFilePath(): string {
-  // Priority 1: Environment variable (power users)
-  const envCredentialsPath = process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
-  if (envCredentialsPath) {
-    return path.resolve(envCredentialsPath);
-  }
-
-  // Priority 2: Named profile
+  // Named profile
   const profile = getActiveProfile();
   if (profile) {
     return path.join(getProfileDirectory(profile), "credentials.json");
   }
 
-  // Priority 3: Default in config directory
+  // Default in config directory
   return path.join(getConfigDirectory(), "credentials.json");
 }
 
@@ -105,6 +82,26 @@ export interface OAuthCredentials {
   client_id: string;
   client_secret?: string;
   redirect_uris?: string[];
+}
+
+const CLIENT_ID_SUFFIX = ".apps.googleusercontent.com";
+
+export function isValidClientIdFormat(clientId: string): boolean {
+  return clientId.endsWith(CLIENT_ID_SUFFIX);
+}
+
+/**
+ * Get OAuth credentials from environment variables.
+ * Returns null if GOOGLE_CLIENT_ID is not set or empty.
+ */
+export function getEnvVarCredentials(): OAuthCredentials | null {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (!clientId) return null;
+  return {
+    client_id: clientId,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET?.trim() || undefined,
+    redirect_uris: ["http://127.0.0.1/oauth2callback"],
+  };
 }
 
 // Credentials file format (supports installed, web, and flat formats)
@@ -162,17 +159,23 @@ export function generateCredentialsErrorMessage(): string {
       `Profile directory: ` +
       `${getProfileDirectory(profile)}\n`
     : "";
+  const batchApiUrl =
+    "https://console.cloud.google.com/flows/enableapi" +
+    "?apiid=drive.googleapis.com,docs.googleapis.com," +
+    "sheets.googleapis.com,slides.googleapis.com," +
+    "calendar-json.googleapis.com,gmail.googleapis.com," +
+    "people.googleapis.com";
 
   return `
 OAuth credentials not found. Please provide credentials using one of these methods:
 
-1. Default location (recommended):
+1. Environment variables (simplest):
+   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your MCP config:
+   { "env": { "GOOGLE_CLIENT_ID": "YOUR_ID", "GOOGLE_CLIENT_SECRET": "YOUR_SECRET" } }
+
+2. Credentials file (default location):
    Save your credentials file to: ${defaultPath}
 ${profileNote}
-2. Environment variable (for custom paths):
-   Set GOOGLE_DRIVE_OAUTH_CREDENTIALS to the path of your credentials file:
-   export GOOGLE_DRIVE_OAUTH_CREDENTIALS="/path/to/credentials.json"
-
 Token storage:
 - Tokens are saved to: ${getSecureTokenPath()}
 - To use a custom token location, set GOOGLE_WORKSPACE_MCP_TOKEN_PATH environment variable
@@ -180,35 +183,20 @@ Token storage:
 To get OAuth credentials:
 1. Go to the Google Cloud Console (https://console.cloud.google.com/)
 2. Create or select a project
-3. Enable the Google Drive, Docs, Sheets, and Slides APIs
+3. Enable APIs: ${batchApiUrl}
 4. Create OAuth 2.0 credentials (Desktop app type)
-5. Download the credentials file and save to: ${defaultPath}
+5. Copy the Client ID and Client Secret into your MCP config env vars
 `.trim();
 }
 
-export interface ResolvedCredentialsPath {
-  path: string;
-  isLegacy: boolean;
-  exists: boolean;
-}
-
 /**
- * Resolve the actual credentials path, checking new default then legacy locations.
- * Returns the path that exists (preferring new location), whether it's legacy, and if it exists.
+ * Check if the credentials file exists at getKeysFilePath().
  */
-export async function resolveCredentialsPath(): Promise<ResolvedCredentialsPath> {
-  const keysPath = getKeysFilePath();
-  const legacyPath = getLegacyKeysFilePath();
-
+export async function credentialsFileExists(): Promise<boolean> {
   try {
-    await fs.access(keysPath);
-    return { path: keysPath, isLegacy: false, exists: true };
+    await fs.access(getKeysFilePath());
+    return true;
   } catch {
-    try {
-      await fs.access(legacyPath);
-      return { path: legacyPath, isLegacy: true, exists: true };
-    } catch {
-      return { path: keysPath, isLegacy: false, exists: false };
-    }
+    return false;
   }
 }

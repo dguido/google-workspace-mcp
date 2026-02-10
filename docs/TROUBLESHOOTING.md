@@ -6,18 +6,10 @@ Complete troubleshooting guide for Google Workspace MCP.
 
 ### "OAuth credentials not found"
 
-```
-OAuth credentials not found. Please provide credentials using one of these methods:
-1. Environment variable:
-   export GOOGLE_DRIVE_OAUTH_CREDENTIALS="/path/to/gcp-oauth.keys.json"
-2. Default file path:
-   Place your gcp-oauth.keys.json file in the package root directory.
-```
-
 **Solution:**
 
-- Download credentials from Google Cloud Console
-- Either set the environment variable or place the file in the project root
+- **Primary:** Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` env vars in your MCP config
+- **Secondary:** Download credentials from Google Cloud Console and save to `~/.config/google-workspace-mcp/credentials.json`
 - Ensure the file has proper read permissions
 
 ### "Authentication failed" or Browser doesn't open

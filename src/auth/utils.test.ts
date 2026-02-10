@@ -5,10 +5,10 @@ import {
   getSecureTokenPath,
   getKeysFilePath,
   getConfigDirectory,
-  getLegacyKeysFilePath,
   generateCredentialsErrorMessage,
   getActiveProfile,
   getProfileDirectory,
+  getEnvVarCredentials,
 } from "./utils.js";
 
 describe("auth/utils", () => {
@@ -25,9 +25,9 @@ describe("auth/utils", () => {
   });
 
   describe("getSecureTokenPath", () => {
-    it("returns custom path when GOOGLE_DRIVE_MCP_TOKEN_PATH is set", () => {
+    it("returns custom path when GOOGLE_WORKSPACE_MCP_TOKEN_PATH is set", () => {
       const customPath = "/custom/path/to/tokens.json";
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = customPath;
+      process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = customPath;
 
       const result = getSecureTokenPath();
 
@@ -35,7 +35,7 @@ describe("auth/utils", () => {
     });
 
     it("uses XDG_CONFIG_HOME when set", () => {
-      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
+      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
       const xdgConfigHome = "/custom/config";
       process.env.XDG_CONFIG_HOME = xdgConfigHome;
 
@@ -45,7 +45,7 @@ describe("auth/utils", () => {
     });
 
     it("falls back to ~/.config when XDG_CONFIG_HOME is not set", () => {
-      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
+      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
       delete process.env.XDG_CONFIG_HOME;
 
       const result = getSecureTokenPath();
@@ -60,7 +60,7 @@ describe("auth/utils", () => {
     });
 
     it("resolves relative custom paths to absolute", () => {
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = "./relative/tokens.json";
+      process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = "./relative/tokens.json";
 
       const result = getSecureTokenPath();
 
@@ -87,32 +87,8 @@ describe("auth/utils", () => {
     });
   });
 
-  describe("getLegacyKeysFilePath", () => {
-    it("returns cwd-based path", () => {
-      const result = getLegacyKeysFilePath();
-
-      expect(result).toBe(path.join(process.cwd(), "gcp-oauth.keys.json"));
-    });
-
-    it("returns absolute path", () => {
-      const result = getLegacyKeysFilePath();
-
-      expect(path.isAbsolute(result)).toBe(true);
-    });
-  });
-
   describe("getKeysFilePath", () => {
-    it("returns custom path when GOOGLE_DRIVE_OAUTH_CREDENTIALS is set", () => {
-      const customPath = "/custom/credentials.json";
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = customPath;
-
-      const result = getKeysFilePath();
-
-      expect(result).toBe(path.resolve(customPath));
-    });
-
-    it("returns new default path in config directory when env var not set", () => {
-      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
+    it("returns default path in config directory", () => {
       delete process.env.XDG_CONFIG_HOME;
 
       const result = getKeysFilePath();
@@ -126,22 +102,13 @@ describe("auth/utils", () => {
       expect(result).toBe(expectedPath);
     });
 
-    it("respects XDG_CONFIG_HOME for new default path", () => {
-      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
+    it("respects XDG_CONFIG_HOME for default path", () => {
       const xdgConfigHome = "/custom/config";
       process.env.XDG_CONFIG_HOME = xdgConfigHome;
 
       const result = getKeysFilePath();
 
       expect(result).toBe(path.join(xdgConfigHome, "google-workspace-mcp", "credentials.json"));
-    });
-
-    it("resolves relative custom paths to absolute", () => {
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = "./relative/credentials.json";
-
-      const result = getKeysFilePath();
-
-      expect(path.isAbsolute(result)).toBe(true);
     });
   });
 
@@ -231,7 +198,6 @@ describe("auth/utils", () => {
   describe("getSecureTokenPath with profile", () => {
     it("resolves to profile tokens path", () => {
       delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
-      delete process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH;
       delete process.env.XDG_CONFIG_HOME;
       process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
 
@@ -254,20 +220,10 @@ describe("auth/utils", () => {
       const result = getSecureTokenPath();
       expect(result).toBe("/override/tokens.json");
     });
-
-    it("legacy token path overrides profile", () => {
-      delete process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH;
-      process.env.GOOGLE_DRIVE_MCP_TOKEN_PATH = "/legacy/tokens.json";
-      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "personal";
-
-      const result = getSecureTokenPath();
-      expect(result).toBe("/legacy/tokens.json");
-    });
   });
 
   describe("getKeysFilePath with profile", () => {
     it("resolves to profile credentials path", () => {
-      delete process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS;
       delete process.env.XDG_CONFIG_HOME;
       process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
 
@@ -282,14 +238,6 @@ describe("auth/utils", () => {
       );
       expect(result).toBe(expected);
     });
-
-    it("explicit credentials path overrides profile", () => {
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = "/override/creds.json";
-      process.env.GOOGLE_WORKSPACE_MCP_PROFILE = "work";
-
-      const result = getKeysFilePath();
-      expect(result).toBe("/override/creds.json");
-    });
   });
 
   describe("generateCredentialsErrorMessage", () => {
@@ -300,10 +248,11 @@ describe("auth/utils", () => {
       expect(typeof result).toBe("string");
     });
 
-    it("includes environment variable instructions", () => {
+    it("includes env var instructions", () => {
       const result = generateCredentialsErrorMessage();
 
-      expect(result).toContain("GOOGLE_DRIVE_OAUTH_CREDENTIALS");
+      expect(result).toContain("GOOGLE_CLIENT_ID");
+      expect(result).toContain("GOOGLE_CLIENT_SECRET");
     });
 
     it("includes default file path information", () => {
@@ -326,6 +275,12 @@ describe("auth/utils", () => {
       expect(result).toContain("console.cloud.google.com");
     });
 
+    it("includes batch API enablement URL", () => {
+      const result = generateCredentialsErrorMessage();
+
+      expect(result).toContain("flows/enableapi");
+    });
+
     it("includes custom token path instructions", () => {
       const result = generateCredentialsErrorMessage();
 
@@ -338,6 +293,77 @@ describe("auth/utils", () => {
 
       expect(result).toContain('Active profile: "work"');
       expect(result).toContain("profiles");
+    });
+  });
+
+  describe("getEnvVarCredentials", () => {
+    it("returns null when GOOGLE_CLIENT_ID not set", () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      expect(getEnvVarCredentials()).toBeNull();
+    });
+
+    it("returns null when GOOGLE_CLIENT_ID is empty", () => {
+      process.env.GOOGLE_CLIENT_ID = "";
+
+      expect(getEnvVarCredentials()).toBeNull();
+    });
+
+    it("returns null when GOOGLE_CLIENT_ID is whitespace", () => {
+      process.env.GOOGLE_CLIENT_ID = "   ";
+
+      expect(getEnvVarCredentials()).toBeNull();
+    });
+
+    it("returns credentials when GOOGLE_CLIENT_ID is set", () => {
+      process.env.GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_id).toBe("test.apps.googleusercontent.com");
+      expect(result!.client_secret).toBeUndefined();
+      expect(result!.redirect_uris).toEqual(["http://127.0.0.1/oauth2callback"]);
+    });
+
+    it("includes client_secret when GOOGLE_CLIENT_SECRET is set", () => {
+      process.env.GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "my-secret";
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_secret).toBe("my-secret");
+    });
+
+    it("trims whitespace from both values", () => {
+      process.env.GOOGLE_CLIENT_ID = "  test.apps.googleusercontent.com  ";
+      process.env.GOOGLE_CLIENT_SECRET = "  my-secret  ";
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_id).toBe("test.apps.googleusercontent.com");
+      expect(result!.client_secret).toBe("my-secret");
+    });
+
+    it("returns undefined client_secret when GOOGLE_CLIENT_SECRET is empty", () => {
+      process.env.GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "";
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_secret).toBeUndefined();
+    });
+
+    it("ignores GOOGLE_CLIENT_SECRET when GOOGLE_CLIENT_ID not set", () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      process.env.GOOGLE_CLIENT_SECRET = "orphan-secret";
+
+      expect(getEnvVarCredentials()).toBeNull();
     });
   });
 });

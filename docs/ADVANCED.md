@@ -4,12 +4,13 @@
 
 ### User-Configured Variables
 
-**Credentials** (required - use one of these methods):
+**Credentials** (required — use one of these methods):
 
-| Variable                         | Description                                             | Example                         |
-| -------------------------------- | ------------------------------------------------------- | ------------------------------- |
-| `GOOGLE_DRIVE_OAUTH_CREDENTIALS` | Path to your OAuth credentials JSON file                | `/home/user/secrets/oauth.json` |
-| _(or place file at)_             | Default location: `gcp-oauth.keys.json` in project root | `./gcp-oauth.keys.json`         |
+| Variable               | Description                                                         | Example                            |
+| ---------------------- | ------------------------------------------------------------------- | ---------------------------------- |
+| `GOOGLE_CLIENT_ID`     | OAuth Client ID — simplest setup, no file needed                    | `12345.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | OAuth Client Secret (used with `GOOGLE_CLIENT_ID`)                  | `GOCSPX-...`                       |
+| _(or place file at)_   | Default location: `~/.config/google-workspace-mcp/credentials.json` |                                    |
 
 **Optional** (for customization):
 
@@ -28,13 +29,6 @@ These are standard system environment variables that the application reads but y
 | ----------------- | ------------------------------------ | ------------------------------------------ |
 | `XDG_CONFIG_HOME` | Linux/Unix config directory standard | Determining default token storage location |
 | `NODE_ENV`        | Node.js environment mode             | May affect error handling and logging      |
-
-### Deprecated Variables (do not use)
-
-| Variable                    | Description                                                            |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `GOOGLE_TOKEN_PATH`         | Legacy token path - use `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` instead      |
-| `GOOGLE_CLIENT_SECRET_PATH` | Legacy credentials path - use `GOOGLE_DRIVE_OAUTH_CREDENTIALS` instead |
 
 ## Multi-Account Setup
 
@@ -77,7 +71,7 @@ Profile names must be 1-64 characters: letters, digits, hyphens, underscores.
 
 ### Option 2: Environment Variable Overrides
 
-For full control over file locations, set explicit paths:
+For full control, use env vars to specify credentials and tokens:
 
 ```json
 {
@@ -86,7 +80,8 @@ For full control over file locations, set explicit paths:
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": ".credentials/credentials.json",
+        "GOOGLE_CLIENT_ID": "12345.apps.googleusercontent.com",
+        "GOOGLE_CLIENT_SECRET": "GOCSPX-...",
         "GOOGLE_WORKSPACE_MCP_TOKEN_PATH": ".credentials/tokens.json"
       }
     }
@@ -94,7 +89,7 @@ For full control over file locations, set explicit paths:
 }
 ```
 
-Explicit path env vars always override profile paths.
+Explicit env vars always override profile paths.
 
 ### When to Use Each
 

@@ -40,6 +40,7 @@ import {
   getKeysFilePath,
   getConfigDirectory,
   getActiveProfile,
+  getEnvVarCredentials,
 } from "./auth/utils.js";
 
 // Import all tool definitions
@@ -715,7 +716,6 @@ Commands:
 Options:
   --profile <name>           Use a named profile for credentials and tokens
   --token-path <path>        Save tokens to custom path (overrides profile)
-  --credentials-path <path>  Use custom OAuth credentials file (overrides profile)
 
 Default Paths:
   Credentials: ${configDir}/credentials.json
@@ -733,8 +733,9 @@ Examples:
   npx @dguido/google-workspace-mcp
 
 Environment Variables:
+  GOOGLE_CLIENT_ID                 OAuth Client ID (simplest setup)
+  GOOGLE_CLIENT_SECRET             OAuth Client Secret (used with GOOGLE_CLIENT_ID)
   GOOGLE_WORKSPACE_MCP_PROFILE     Named profile for credential isolation
-  GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file (overrides profile)
   GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides profile)
 
 Multi-Account Setup:
@@ -749,14 +750,11 @@ function showVersion(): void {
   console.log(`Google Workspace MCP Server v${VERSION}`);
 }
 
-async function runAuthServer(tokenPath?: string, credentialsPath?: string): Promise<void> {
+async function runAuthServer(tokenPath?: string): Promise<void> {
   try {
     // Set env vars from CLI flags (CLI takes precedence over existing env vars)
     if (tokenPath) {
       process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = tokenPath;
-    }
-    if (credentialsPath) {
-      process.env.GOOGLE_DRIVE_OAUTH_CREDENTIALS = credentialsPath;
     }
 
     // Initialize OAuth client
@@ -786,7 +784,6 @@ async function runAuthServer(tokenPath?: string, credentialsPath?: string): Prom
 interface CliArgs {
   command: string | undefined;
   tokenPath?: string;
-  credentialsPath?: string;
   profile?: string;
 }
 
@@ -794,7 +791,6 @@ function parseCliArgs(): CliArgs {
   const args = process.argv.slice(2);
   let command: string | undefined;
   let tokenPath: string | undefined;
-  let credentialsPath: string | undefined;
   let profile: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -803,12 +799,6 @@ function parseCliArgs(): CliArgs {
     // Handle --token-path flag
     if (arg === "--token-path" && i + 1 < args.length) {
       tokenPath = args[++i];
-      continue;
-    }
-
-    // Handle --credentials-path flag
-    if (arg === "--credentials-path" && i + 1 < args.length) {
-      credentialsPath = args[++i];
       continue;
     }
 
@@ -831,11 +821,11 @@ function parseCliArgs(): CliArgs {
     }
   }
 
-  return { command, tokenPath, credentialsPath, profile };
+  return { command, tokenPath, profile };
 }
 
 async function main() {
-  const { command, tokenPath, credentialsPath, profile } = parseCliArgs();
+  const { command, tokenPath, profile } = parseCliArgs();
 
   // Set profile env var early so all path resolution sees it
   if (profile) {
@@ -844,7 +834,7 @@ async function main() {
 
   switch (command) {
     case "auth":
-      await runAuthServer(tokenPath, credentialsPath);
+      await runAuthServer(tokenPath);
       break;
     case "start":
     case undefined:
@@ -867,14 +857,20 @@ async function main() {
         });
 
         // Log OAuth config status (warning if missing)
-        const credentialsPath = getKeysFilePath();
-        try {
-          await import("fs").then((fs) => fs.promises.access(credentialsPath));
-        } catch {
-          log("Warning: OAuth credentials not configured", {
-            hint: `Save credentials to ${credentialsPath}`,
-            credentials_path: credentialsPath,
-          });
+        if (getEnvVarCredentials()) {
+          log("Using credentials from GOOGLE_CLIENT_ID env var");
+        } else {
+          const credPath = getKeysFilePath();
+          try {
+            await import("fs").then((m) => m.promises.access(credPath));
+          } catch {
+            log("Warning: OAuth credentials not configured", {
+              hint:
+                "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars " +
+                `or save credentials to ${credPath}`,
+              credentials_path: credPath,
+            });
+          }
         }
 
         // Set up graceful shutdown

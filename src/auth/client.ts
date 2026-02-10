@@ -2,58 +2,38 @@ import { OAuth2Client } from "google-auth-library";
 import * as fs from "fs/promises";
 import {
   getKeysFilePath,
-  getLegacyKeysFilePath,
   generateCredentialsErrorMessage,
   extractCredentials,
+  getEnvVarCredentials,
   type OAuthCredentials,
 } from "./utils.js";
 import { validateOAuthConfig, GoogleAuthError } from "../errors/index.js";
 import { log } from "../utils/logging.js";
 import { parseCredentialsFile } from "../types/credentials.js";
 
-interface CredentialsSource {
-  path: string;
-  isLegacy: boolean;
-  name: string;
-}
-
 async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
-  const sources: CredentialsSource[] = [
-    { path: getKeysFilePath(), isLegacy: false, name: "default" },
-    { path: getLegacyKeysFilePath(), isLegacy: true, name: "gcp-oauth.keys.json" },
-    {
-      path: process.env.GOOGLE_CLIENT_SECRET_PATH || "client_secret.json",
-      isLegacy: true,
-      name: "client_secret.json",
-    },
-  ];
-
-  let lastError: Error | null = null;
-
-  for (const source of sources) {
-    try {
-      const content = await fs.readFile(source.path, "utf-8");
-      const keys = parseCredentialsFile(content);
-
-      if (source.isLegacy) {
-        log(`MIGRATION NOTICE: Found credentials at legacy location (${source.name})`);
-        log(`  Current: ${source.path}`);
-        log(`  Recommended: ${getKeysFilePath()}`);
-        log("  Move credentials to the recommended location to silence this warning.");
-      }
-
-      const credentials = extractCredentials(keys);
-      if (!credentials) {
-        throw new Error(`Invalid credentials format in ${source.name}`);
-      }
-      return credentials;
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-    }
+  // Highest priority: env var credentials (GOOGLE_CLIENT_ID)
+  const envCredentials = getEnvVarCredentials();
+  if (envCredentials) {
+    log("Using credentials from GOOGLE_CLIENT_ID env var");
+    return envCredentials;
   }
 
-  const errorMessage = generateCredentialsErrorMessage();
-  throw new Error(`${errorMessage}\n\nOriginal error: ${lastError?.message || "Unknown"}`);
+  // File-based credentials at the default/profile path
+  const keysPath = getKeysFilePath();
+  try {
+    const content = await fs.readFile(keysPath, "utf-8");
+    const keys = parseCredentialsFile(content);
+    const credentials = extractCredentials(keys);
+    if (!credentials) {
+      throw new Error(`Invalid credentials format in ${keysPath}`);
+    }
+    return credentials;
+  } catch (e) {
+    const originalError = e instanceof Error ? e.message : String(e);
+    const errorMessage = generateCredentialsErrorMessage();
+    throw new Error(`${errorMessage}\n\nOriginal error: ${originalError}`);
+  }
 }
 
 export async function initializeOAuth2Client(): Promise<OAuth2Client> {

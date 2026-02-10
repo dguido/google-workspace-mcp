@@ -9,14 +9,17 @@ vi.mock("fs/promises", () => ({
   mkdir: vi.fn(),
 }));
 
-vi.mock("../auth/utils.js", () => ({
-  getSecureTokenPath: vi.fn(() => "/mock/.tokens/google-workspace-mcp.json"),
-  getKeysFilePath: vi.fn(() => "/mock/gcp-oauth.keys.json"),
-  resolveCredentialsPath: vi.fn(() =>
-    Promise.resolve({ path: "/mock/gcp-oauth.keys.json", isLegacy: false, exists: true }),
-  ),
-  getActiveProfile: vi.fn(() => null),
-}));
+vi.mock("../auth/utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../auth/utils.js")>();
+  return {
+    ...actual,
+    getSecureTokenPath: vi.fn(() => "/mock/.tokens/google-workspace-mcp.json"),
+    getKeysFilePath: vi.fn(() => "/mock/credentials.json"),
+    credentialsFileExists: vi.fn(() => Promise.resolve(true)),
+    getActiveProfile: vi.fn(() => null),
+    getEnvVarCredentials: vi.fn(() => null),
+  };
+});
 
 vi.mock("../auth/tokenManager.js", () => ({
   getLastTokenAuthError: vi.fn(() => null),
@@ -86,13 +89,9 @@ describe("handleGetStatus", () => {
     });
     fs = await import("fs/promises");
 
-    // Reset resolveCredentialsPath mock to default (credentials exist at default path)
-    const { resolveCredentialsPath } = await import("../auth/utils.js");
-    vi.mocked(resolveCredentialsPath).mockResolvedValue({
-      path: "/mock/gcp-oauth.keys.json",
-      isLegacy: false,
-      exists: true,
-    });
+    // Reset credentialsFileExists mock to default (credentials exist)
+    const { credentialsFileExists } = await import("../auth/utils.js");
+    vi.mocked(credentialsFileExists).mockResolvedValue(true);
 
     // Default: API validation succeeds
     vi.mocked(mockDrive.about.get).mockResolvedValue({
@@ -108,7 +107,7 @@ describe("handleGetStatus", () => {
     it("returns correct structure", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -145,7 +144,7 @@ describe("handleGetStatus", () => {
     it("includes profile as null by default", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -175,7 +174,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -203,12 +202,8 @@ describe("handleGetStatus", () => {
     });
 
     it("returns error status when credentials file is missing", async () => {
-      const { resolveCredentialsPath } = await import("../auth/utils.js");
-      vi.mocked(resolveCredentialsPath).mockResolvedValue({
-        path: "/mock/gcp-oauth.keys.json",
-        isLegacy: false,
-        exists: false,
-      });
+      const { credentialsFileExists } = await import("../auth/utils.js");
+      vi.mocked(credentialsFileExists).mockResolvedValue(false);
 
       vi.mocked(fs.access).mockRejectedValue(
         Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
@@ -228,7 +223,7 @@ describe("handleGetStatus", () => {
     it("handles malformed token file gracefully", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -250,7 +245,7 @@ describe("handleGetStatus", () => {
     it("reports expired token correctly", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -283,7 +278,7 @@ describe("handleGetStatus", () => {
     it("reports error status when token is expired without refresh token", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -314,7 +309,7 @@ describe("handleGetStatus", () => {
         return undefined;
       });
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -336,7 +331,7 @@ describe("handleGetStatus", () => {
     it("overrides token status when authClient has valid credentials", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -370,7 +365,7 @@ describe("handleGetStatus", () => {
     it("includes successful API validation", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -403,7 +398,7 @@ describe("handleGetStatus", () => {
     it("handles API validation failure", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -434,7 +429,7 @@ describe("handleGetStatus", () => {
     it("returns error when drive service is null", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -460,17 +455,13 @@ describe("handleGetStatus", () => {
     });
   });
 
-  describe("checkCredentialsFile", () => {
+  describe("checkCredentials", () => {
     it("returns error when credentials file does not exist", async () => {
-      const { resolveCredentialsPath } = await import("../auth/utils.js");
-      vi.mocked(resolveCredentialsPath).mockResolvedValue({
-        path: "/mock/gcp-oauth.keys.json",
-        isLegacy: false,
-        exists: false,
-      });
+      const { credentialsFileExists } = await import("../auth/utils.js");
+      vi.mocked(credentialsFileExists).mockResolvedValue(false);
 
       vi.mocked(fs.access).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
         }
         return undefined;
@@ -489,7 +480,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("not found");
@@ -499,7 +490,7 @@ describe("handleGetStatus", () => {
     it("returns error when credentials file is missing client_id", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_secret: "secret",
@@ -519,7 +510,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("missing client_id");
@@ -528,7 +519,7 @@ describe("handleGetStatus", () => {
     it("returns error when client_id has invalid format", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "invalid-client-id",
@@ -549,7 +540,7 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("Invalid client_id format");
@@ -558,7 +549,7 @@ describe("handleGetStatus", () => {
     it("returns ok status for valid credentials file", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -579,55 +570,16 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("ok");
       expect(credCheck?.message).toContain("Valid credentials file");
     });
 
-    it("returns warning status when credentials found at legacy location", async () => {
-      const { resolveCredentialsPath } = await import("../auth/utils.js");
-      vi.mocked(resolveCredentialsPath).mockResolvedValue({
-        path: "/mock/legacy-gcp-oauth.keys.json",
-        isLegacy: true,
-        exists: true,
-      });
-
-      vi.mocked(fs.access).mockResolvedValue(undefined);
-      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
-        if (String(filePath).includes("legacy")) {
-          return JSON.stringify({
-            installed: {
-              client_id: "test.apps.googleusercontent.com",
-              client_secret: "secret",
-            },
-          });
-        }
-        return JSON.stringify({
-          access_token: "test-token",
-          refresh_token: "test-refresh",
-          expiry_date: Date.now() + 3600000,
-          scope: "https://www.googleapis.com/auth/drive",
-          created_at: new Date().toISOString(),
-        });
-      });
-
-      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
-
-      expect(result.isError).toBe(false);
-      const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
-      expect(credCheck).toBeDefined();
-      expect(credCheck?.status).toBe("warning");
-      expect(credCheck?.message).toContain("legacy");
-      expect(credCheck?.fix).toBeDefined();
-      expect(credCheck?.fix?.some((f) => f.includes("Move credentials"))).toBe(true);
-    });
-
     it("returns error when credentials file has parse error", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return "not valid json{{{";
         }
         return JSON.stringify({
@@ -643,10 +595,75 @@ describe("handleGetStatus", () => {
 
       expect(result.isError).toBe(false);
       const data = result.structuredContent as StatusData;
-      const credCheck = data.config_checks?.find((c) => c.name === "credentials_file");
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
       expect(credCheck).toBeDefined();
       expect(credCheck?.status).toBe("error");
       expect(credCheck?.message).toContain("Failed to parse");
+    });
+  });
+
+  describe("checkCredentials with env var credentials", () => {
+    it("returns ok status for valid env var credentials", async () => {
+      const { getEnvVarCredentials } = await import("../auth/utils.js");
+      vi.mocked(getEnvVarCredentials).mockReturnValue({
+        client_id: "test.apps.googleusercontent.com",
+        client_secret: "secret",
+        redirect_uris: ["http://127.0.0.1/oauth2callback"],
+      });
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        }),
+      );
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
+      expect(credCheck).toBeDefined();
+      expect(credCheck?.status).toBe("ok");
+      expect(credCheck?.message).toContain("env var");
+      expect(data.auth.credential_source).toBe("env_var");
+
+      vi.mocked(getEnvVarCredentials).mockReturnValue(null);
+    });
+
+    it("returns error status for invalid format env var credentials", async () => {
+      const { getEnvVarCredentials } = await import("../auth/utils.js");
+      vi.mocked(getEnvVarCredentials).mockReturnValue({
+        client_id: "invalid-id",
+        client_secret: "secret",
+        redirect_uris: ["http://127.0.0.1/oauth2callback"],
+      });
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        }),
+      );
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      const credCheck = data.config_checks?.find((c) => c.name === "credentials");
+      expect(credCheck).toBeDefined();
+      expect(credCheck?.status).toBe("error");
+      expect(credCheck?.message).toContain("Invalid");
+
+      vi.mocked(getEnvVarCredentials).mockReturnValue(null);
     });
   });
 
@@ -659,7 +676,7 @@ describe("handleGetStatus", () => {
         return undefined;
       });
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -683,7 +700,7 @@ describe("handleGetStatus", () => {
     it("returns error when token has no access_token AND no refresh_token", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -710,7 +727,7 @@ describe("handleGetStatus", () => {
     it("returns error when token is expired with no refresh_token", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -739,7 +756,7 @@ describe("handleGetStatus", () => {
     it("returns warning when token is expired but has refresh_token", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -772,7 +789,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -806,7 +823,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -839,7 +856,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -868,7 +885,7 @@ describe("handleGetStatus", () => {
     it("returns error when token file has parse error", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -893,7 +910,7 @@ describe("handleGetStatus", () => {
   describe("generateRecommendations", () => {
     it("recommends OAuth setup when credentials file has error", async () => {
       vi.mocked(fs.access).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
         }
         return undefined;
@@ -924,7 +941,7 @@ describe("handleGetStatus", () => {
         return undefined;
       });
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -949,7 +966,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -990,7 +1007,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -1018,7 +1035,7 @@ describe("handleGetStatus", () => {
     it("includes failure reason when API validation fails", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -1056,7 +1073,7 @@ describe("handleGetStatus", () => {
 
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",
@@ -1086,7 +1103,7 @@ describe("handleGetStatus", () => {
     it("recommends re-auth when no scopes found", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(fs.readFile).mockImplementation(async (path) => {
-        if (String(path).includes("keys")) {
+        if (String(path).includes("credentials")) {
           return JSON.stringify({
             installed: {
               client_id: "test.apps.googleusercontent.com",

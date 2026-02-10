@@ -9,8 +9,10 @@ import { getEnabledServices, SERVICE_NAMES, type ServiceName } from "../config/s
 import {
   getSecureTokenPath,
   getKeysFilePath,
-  resolveCredentialsPath,
+  credentialsFileExists,
   getActiveProfile,
+  getEnvVarCredentials,
+  isValidClientIdFormat,
 } from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
@@ -69,6 +71,7 @@ export interface StatusData extends Record<string, unknown> {
   profile: string | null;
   auth: {
     configured: boolean;
+    credential_source: "env_var" | "file" | "none";
     token_status: TokenStatus;
     token_expires_at: string | null;
     has_refresh_token: boolean;
@@ -91,12 +94,11 @@ export interface StatusData extends Record<string, unknown> {
 }
 
 /**
- * Check if OAuth credentials file exists.
- * Checks both new default location and legacy location.
+ * Check if OAuth credentials are available (env vars or file).
  */
-async function credentialsFileExists(): Promise<boolean> {
-  const resolved = await resolveCredentialsPath();
-  return resolved.exists;
+async function credentialsAvailable(): Promise<boolean> {
+  if (getEnvVarCredentials()) return true;
+  return credentialsFileExists();
 }
 
 /**
@@ -181,74 +183,81 @@ async function getTokenInfo(): Promise<{
 }
 
 /**
- * Check if credentials file exists and is valid (for diagnostic mode).
- * Checks both new default location and legacy location.
+ * Check if credentials are available and valid (for diagnostic mode).
+ * Checks env vars first, then the credentials file.
  */
-async function checkCredentialsFile(): Promise<ConfigCheck> {
-  const keysPath = getKeysFilePath();
-  const resolved = await resolveCredentialsPath();
-
-  if (!resolved.exists) {
+async function checkCredentials(): Promise<ConfigCheck> {
+  // Check env var credentials first
+  const envCreds = getEnvVarCredentials();
+  if (envCreds) {
+    if (!isValidClientIdFormat(envCreds.client_id)) {
+      return {
+        name: "credentials",
+        status: "error",
+        message: "Invalid GOOGLE_CLIENT_ID format",
+        fix: [
+          "client_id should end with " + ".apps.googleusercontent.com",
+          "Verify you copied the OAuth 2.0 Client ID " + "(not API Key)",
+        ],
+      };
+    }
     return {
-      name: "credentials_file",
+      name: "credentials",
+      status: "ok",
+      message: "Using credentials from GOOGLE_CLIENT_ID env var",
+    };
+  }
+
+  const keysPath = getKeysFilePath();
+  const exists = await credentialsFileExists();
+
+  if (!exists) {
+    return {
+      name: "credentials",
       status: "error",
-      message: `Credentials file not found at: ${keysPath}`,
+      message: `Credentials not found at: ${keysPath}`,
       fix: [
-        "Go to Google Cloud Console > APIs & Services > Credentials",
-        'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
-        `Download and save as: ${keysPath}`,
-        "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var",
+        "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET " + "env vars (simplest)",
+        "Or download credentials from Google Cloud Console",
+        `Save as: ${keysPath}`,
       ],
     };
   }
 
   try {
-    const content = await fs.readFile(resolved.path, "utf-8");
+    const content = await fs.readFile(keysPath, "utf-8");
     const parsed = JSON.parse(content) as CredentialsFile;
     const clientId = parsed.installed?.client_id || parsed.web?.client_id || parsed.client_id;
 
     if (!clientId) {
       return {
-        name: "credentials_file",
+        name: "credentials",
         status: "error",
         message: "Credentials file missing client_id",
         fix: ["Download fresh credentials from Google Cloud Console"],
       };
     }
 
-    if (!clientId.endsWith(".apps.googleusercontent.com")) {
+    if (!isValidClientIdFormat(clientId)) {
       return {
-        name: "credentials_file",
+        name: "credentials",
         status: "error",
         message: "Invalid client_id format",
         fix: [
           "Ensure you downloaded OAuth 2.0 Client credentials",
-          "client_id should end with .apps.googleusercontent.com",
-        ],
-      };
-    }
-
-    // Valid credentials found
-    if (resolved.isLegacy) {
-      return {
-        name: "credentials_file",
-        status: "warning",
-        message: `Using legacy credentials location: ${resolved.path}`,
-        fix: [
-          `Move credentials to: ${keysPath}`,
-          "This silences this warning and follows the new default",
+          "client_id should end with " + ".apps.googleusercontent.com",
         ],
       };
     }
 
     return {
-      name: "credentials_file",
+      name: "credentials",
       status: "ok",
-      message: `Valid credentials file at: ${resolved.path}`,
+      message: `Valid credentials file at: ${keysPath}`,
     };
   } catch (parseError) {
     return {
-      name: "credentials_file",
+      name: "credentials",
       status: "error",
       message: `Failed to parse credentials file: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
       fix: ["Ensure the file is valid JSON", "Download fresh credentials"],
@@ -418,7 +427,7 @@ function generateRecommendations(
   const recommendations: string[] = [];
 
   // Check for credential issues
-  const credCheck = configChecks.find((c) => c.name === "credentials_file");
+  const credCheck = configChecks.find((c) => c.name === "credentials");
   if (credCheck?.status === "error") {
     recommendations.push("Set up OAuth credentials first - this is required for authentication");
   }
@@ -492,7 +501,7 @@ export async function handleGetStatus(
   }
 
   // Basic status info
-  const configured = await credentialsFileExists();
+  const configured = await credentialsAvailable();
   const tokenInfo = await getTokenInfo();
   const timestamp = new Date().toISOString();
   const uptime_seconds = getUptimeSeconds();
@@ -522,7 +531,7 @@ export async function handleGetStatus(
   // Run diagnostic checks
   const configChecks: ConfigCheck[] = [];
 
-  configChecks.push(await checkCredentialsFile());
+  configChecks.push(await checkCredentials());
 
   const configValidation = await validateOAuthConfig();
   if (!configValidation.valid) {
@@ -580,6 +589,7 @@ export async function handleGetStatus(
     profile: activeProfile,
     auth: {
       configured,
+      credential_source: getEnvVarCredentials() ? "env_var" : configured ? "file" : "none",
       token_status: tokenStatus,
       token_expires_at: expiresAt,
       has_refresh_token: tokenInfo.has_refresh,

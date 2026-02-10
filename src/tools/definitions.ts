@@ -3781,6 +3781,11 @@ export const discoveryTools: ToolDefinition[] = [
               type: "boolean",
               description: "Whether OAuth credentials are configured",
             },
+            credential_source: {
+              type: "string",
+              enum: ["env_var", "file", "none"],
+              description: "How credentials were provided",
+            },
             token_status: {
               type: "string",
               enum: ["valid", "expired", "missing", "invalid"],
