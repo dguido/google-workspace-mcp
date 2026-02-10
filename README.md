@@ -4,37 +4,14 @@ MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calend
 
 ## Quick Start
 
-### Prerequisites
-
-- **Node.js** 22+ (LTS recommended)
-- **Google Cloud Project** with Drive, Docs, Sheets, Slides, Calendar, Gmail, and People APIs enabled
-- **OAuth 2.0 Credentials** (Desktop application type)
-
 ### 1. Set Up Google Cloud
 
-See [Google Cloud Setup](#google-cloud-setup) below for detailed instructions.
+1. Go to the [Google Cloud Console](https://console.cloud.google.com) and create or select a project
+2. [Enable all required APIs](https://console.cloud.google.com/flows/enableapi?apiid=drive.googleapis.com,docs.googleapis.com,sheets.googleapis.com,slides.googleapis.com,calendar-json.googleapis.com,gmail.googleapis.com,people.googleapis.com) (one-click link)
+3. Go to [APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials) and create an OAuth 2.0 Client ID (Desktop app type)
+4. Copy the **Client ID** and **Client Secret**
 
-### 2. Save Credentials
-
-Download your OAuth credentials from Google Cloud Console and save to the default location:
-
-```bash
-# Create config directory
-mkdir -p ~/.config/google-workspace-mcp
-
-# Save your downloaded credentials file as:
-# ~/.config/google-workspace-mcp/credentials.json
-```
-
-### 3. Authenticate
-
-```bash
-npx @dguido/google-workspace-mcp auth
-```
-
-This opens your browser for Google OAuth consent. Tokens are saved to `~/.config/google-workspace-mcp/tokens.json`.
-
-### 4. Configure Claude Desktop
+### 2. Configure Claude Desktop
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -46,6 +23,8 @@ This opens your browser for Google OAuth consent. Tokens are saved to `~/.config
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
+        "GOOGLE_CLIENT_ID": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+        "GOOGLE_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
         "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar"
       }
     }
@@ -53,7 +32,20 @@ This opens your browser for Google OAuth consent. Tokens are saved to `~/.config
 }
 ```
 
-No credential path needed when using the default location (`~/.config/google-workspace-mcp/credentials.json`).
+That's it. On first tool call, a browser window opens for Google OAuth consent. Tokens are saved automatically.
+
+<details>
+<summary>Alternative: file-based credentials</summary>
+
+Download the credentials JSON from Google Cloud Console and save to `~/.config/google-workspace-mcp/credentials.json`, then authenticate manually:
+
+```bash
+npx @dguido/google-workspace-mcp auth
+```
+
+See [Advanced Configuration](docs/ADVANCED.md) for file-based setup, named profiles, and multi-account setup.
+
+</details>
 
 ## What You Can Do
 
@@ -79,8 +71,8 @@ Create a presentation called "Product Roadmap" with slides for Q1 milestones.
 
 ### 2. Enable Required APIs
 
-- Go to "APIs & Services" > "Library"
-- Enable: **Google Drive API**, **Google Docs API**, **Google Sheets API**, **Google Slides API**, **Google Calendar API**, **Gmail API**, **People API**
+- [Enable all APIs at once](https://console.cloud.google.com/flows/enableapi?apiid=drive.googleapis.com,docs.googleapis.com,sheets.googleapis.com,slides.googleapis.com,calendar-json.googleapis.com,gmail.googleapis.com,people.googleapis.com) (one-click link)
+- Or manually: Go to "APIs & Services" > "Library" and enable: **Google Drive API**, **Google Docs API**, **Google Sheets API**, **Google Slides API**, **Google Calendar API**, **Gmail API**, **People API**
 
 ### 3. Configure OAuth Consent Screen
 
@@ -110,12 +102,14 @@ Both credentials and tokens are stored in `~/.config/google-workspace-mcp/` by d
 
 ### Environment Variables
 
-| Variable                          | Description                                         |
-| --------------------------------- | --------------------------------------------------- |
-| `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Custom path to credentials file (overrides default) |
-| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                       |
-| `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation              |
-| `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable          |
+| Variable                          | Description                                                   |
+| --------------------------------- | ------------------------------------------------------------- |
+| `GOOGLE_CLIENT_ID`                | OAuth Client ID (simplest setup — no credentials file needed) |
+| `GOOGLE_CLIENT_SECRET`            | OAuth Client Secret (used with `GOOGLE_CLIENT_ID`)            |
+| `GOOGLE_DRIVE_OAUTH_CREDENTIALS`  | Custom path to credentials file (overrides default)           |
+| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Custom token storage location                                 |
+| `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation                        |
+| `GOOGLE_WORKSPACE_SERVICES`       | Comma-separated list of services to enable                    |
 
 ### Token-Efficient Output (TOON)
 
@@ -206,7 +200,7 @@ See [Advanced Configuration](docs/ADVANCED.md) for named profiles, multi-account
 
 ### "OAuth credentials not found"
 
-Save your credentials file to `~/.config/google-workspace-mcp/credentials.json`, or set `GOOGLE_DRIVE_OAUTH_CREDENTIALS` environment variable to a custom path.
+Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` env vars in your MCP config, or save your credentials file to `~/.config/google-workspace-mcp/credentials.json`.
 
 ### "Authentication failed" or browser doesn't open
 

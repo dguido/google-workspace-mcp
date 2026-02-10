@@ -9,6 +9,7 @@ import {
   generateCredentialsErrorMessage,
   getActiveProfile,
   getProfileDirectory,
+  getEnvVarCredentials,
 } from "./utils.js";
 
 describe("auth/utils", () => {
@@ -300,7 +301,14 @@ describe("auth/utils", () => {
       expect(typeof result).toBe("string");
     });
 
-    it("includes environment variable instructions", () => {
+    it("includes env var instructions", () => {
+      const result = generateCredentialsErrorMessage();
+
+      expect(result).toContain("GOOGLE_CLIENT_ID");
+      expect(result).toContain("GOOGLE_CLIENT_SECRET");
+    });
+
+    it("includes file-based instructions", () => {
       const result = generateCredentialsErrorMessage();
 
       expect(result).toContain("GOOGLE_DRIVE_OAUTH_CREDENTIALS");
@@ -326,6 +334,12 @@ describe("auth/utils", () => {
       expect(result).toContain("console.cloud.google.com");
     });
 
+    it("includes batch API enablement URL", () => {
+      const result = generateCredentialsErrorMessage();
+
+      expect(result).toContain("flows/enableapi");
+    });
+
     it("includes custom token path instructions", () => {
       const result = generateCredentialsErrorMessage();
 
@@ -338,6 +352,77 @@ describe("auth/utils", () => {
 
       expect(result).toContain('Active profile: "work"');
       expect(result).toContain("profiles");
+    });
+  });
+
+  describe("getEnvVarCredentials", () => {
+    it("returns null when GOOGLE_CLIENT_ID not set", () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      expect(getEnvVarCredentials()).toBeNull();
+    });
+
+    it("returns null when GOOGLE_CLIENT_ID is empty", () => {
+      process.env.GOOGLE_CLIENT_ID = "";
+
+      expect(getEnvVarCredentials()).toBeNull();
+    });
+
+    it("returns null when GOOGLE_CLIENT_ID is whitespace", () => {
+      process.env.GOOGLE_CLIENT_ID = "   ";
+
+      expect(getEnvVarCredentials()).toBeNull();
+    });
+
+    it("returns credentials when GOOGLE_CLIENT_ID is set", () => {
+      process.env.GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_id).toBe("test.apps.googleusercontent.com");
+      expect(result!.client_secret).toBeUndefined();
+      expect(result!.redirect_uris).toEqual(["http://127.0.0.1/oauth2callback"]);
+    });
+
+    it("includes client_secret when GOOGLE_CLIENT_SECRET is set", () => {
+      process.env.GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "my-secret";
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_secret).toBe("my-secret");
+    });
+
+    it("trims whitespace from both values", () => {
+      process.env.GOOGLE_CLIENT_ID = "  test.apps.googleusercontent.com  ";
+      process.env.GOOGLE_CLIENT_SECRET = "  my-secret  ";
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_id).toBe("test.apps.googleusercontent.com");
+      expect(result!.client_secret).toBe("my-secret");
+    });
+
+    it("returns undefined client_secret when GOOGLE_CLIENT_SECRET is empty", () => {
+      process.env.GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "";
+
+      const result = getEnvVarCredentials();
+
+      expect(result).not.toBeNull();
+      expect(result!.client_secret).toBeUndefined();
+    });
+
+    it("ignores GOOGLE_CLIENT_SECRET when GOOGLE_CLIENT_ID not set", () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      process.env.GOOGLE_CLIENT_SECRET = "orphan-secret";
+
+      expect(getEnvVarCredentials()).toBeNull();
     });
   });
 });

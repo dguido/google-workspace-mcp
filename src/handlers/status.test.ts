@@ -16,6 +16,7 @@ vi.mock("../auth/utils.js", () => ({
     Promise.resolve({ path: "/mock/gcp-oauth.keys.json", isLegacy: false, exists: true }),
   ),
   getActiveProfile: vi.fn(() => null),
+  getEnvVarCredentials: vi.fn(() => null),
 }));
 
 vi.mock("../auth/tokenManager.js", () => ({

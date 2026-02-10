@@ -10,6 +10,7 @@ import {
   getSecureTokenPath,
   extractCredentials,
   resolveCredentialsPath,
+  getEnvVarCredentials,
 } from "../auth/utils.js";
 import { GoogleAuthError } from "./google-auth-error.js";
 import type { CredentialsFile } from "../types/credentials.js";
@@ -25,6 +26,64 @@ export interface ValidationResult {
   resolvedCredentialsPath?: string;
 }
 
+/** Ensure token directory exists and is writable. */
+async function ensureTokenDirWritable(warnings: string[]): Promise<void> {
+  const tokenPath = getSecureTokenPath();
+  const tokenDir = path.dirname(tokenPath);
+  try {
+    await fs.access(tokenDir, fs.constants.W_OK);
+  } catch {
+    try {
+      await fs.mkdir(tokenDir, { recursive: true });
+    } catch {
+      warnings.push(`Token directory may not be writable: ${tokenPath}`);
+    }
+  }
+}
+
+/** Validate client_id/secret values and push errors/warnings. */
+function validateCredentialValues(
+  clientId: string,
+  clientSecret: string | undefined,
+  errors: GoogleAuthError[],
+  warnings: string[],
+): void {
+  if (!clientId.endsWith(".apps.googleusercontent.com")) {
+    errors.push(
+      new GoogleAuthError({
+        code: "INVALID_CLIENT",
+        reason: "Invalid client_id format. " + "Expected to end with .apps.googleusercontent.com",
+        fix: [
+          "Verify you downloaded OAuth 2.0 Client credentials " +
+            "(not Service Account or API Key)",
+          "The client_id should look like: " + "123456789.apps.googleusercontent.com",
+          "Download fresh credentials from Google Cloud Console",
+        ],
+        links: [
+          {
+            label: "OAuth Credentials",
+            url: `${CONSOLE_URL}/apis/credentials`,
+          },
+        ],
+      }),
+    );
+  }
+
+  if (clientId !== clientId.trim()) {
+    warnings.push("client_id contains leading or trailing whitespace");
+  }
+
+  if (clientId.length < 50) {
+    warnings.push("client_id appears unusually short - may be truncated");
+  }
+
+  if (!clientSecret) {
+    warnings.push("No client_secret found - some auth flows may not work");
+  } else if (clientSecret !== clientSecret.trim()) {
+    warnings.push("client_secret contains leading or trailing whitespace");
+  }
+}
+
 /**
  * Validate OAuth configuration before attempting auth flow.
  */
@@ -32,10 +91,17 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   const errors: GoogleAuthError[] = [];
   const warnings: string[] = [];
 
-  const keysPath = getKeysFilePath();
-  const tokenPath = getSecureTokenPath();
+  // Highest priority: env var credentials (GOOGLE_CLIENT_ID)
+  const envCreds = getEnvVarCredentials();
+  if (envCreds) {
+    validateCredentialValues(envCreds.client_id, envCreds.client_secret, errors, warnings);
+    await ensureTokenDirWritable(warnings);
+    return { valid: errors.length === 0, errors, warnings };
+  }
 
-  // Check if credentials file exists (try new location first, then legacy)
+  const keysPath = getKeysFilePath();
+
+  // Check if credentials file exists (try new then legacy)
   const resolved = await resolveCredentialsPath();
   const resolvedCredentialsPath = resolved.path;
 
@@ -45,18 +111,19 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
         code: "OAUTH_NOT_CONFIGURED",
         reason: `OAuth credentials file not found at: ${keysPath}`,
         fix: [
-          "Go to Google Cloud Console > APIs & Services > Credentials",
+          "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars " +
+            "in your MCP config (simplest)",
+          "Or go to Google Cloud Console > APIs & Services " + "> Credentials",
           'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
           "Download the credentials JSON file",
           `Save it as: ${keysPath}`,
-          "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var to point to your credentials file",
         ],
         links: [
-          { label: "Create OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` },
           {
-            label: "Setup Guide",
-            url: GITHUB_SETUP_GUIDE,
+            label: "Create OAuth Credentials",
+            url: `${CONSOLE_URL}/apis/credentials`,
           },
+          { label: "Setup Guide", url: GITHUB_SETUP_GUIDE },
         ],
       }),
     );
@@ -65,7 +132,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
 
   if (resolved.isLegacy) {
     warnings.push(
-      `Using legacy credentials location: ${resolved.path}. Please move to: ${keysPath}`,
+      `Using legacy credentials location: ${resolved.path}. ` + `Please move to: ${keysPath}`,
     );
   }
 
@@ -84,7 +151,12 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
           "Download a fresh credentials file from Google Cloud Console",
           "Make sure the file is not corrupted or truncated",
         ],
-        links: [{ label: "Download Credentials", url: `${CONSOLE_URL}/apis/credentials` }],
+        links: [
+          {
+            label: "Download Credentials",
+            url: `${CONSOLE_URL}/apis/credentials`,
+          },
+        ],
       }),
     );
     return { valid: false, errors, warnings, resolvedCredentialsPath };
@@ -93,9 +165,7 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
   // Extract credentials using shared helper
   const extracted = extractCredentials(credentials);
   const clientId = extracted?.client_id;
-  const clientSecret = extracted?.client_secret;
 
-  // Validate client_id exists
   if (!clientId) {
     errors.push(
       new GoogleAuthError({
@@ -103,59 +173,22 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
         reason: "Missing client_id in credentials file",
         fix: [
           "Download fresh credentials from Google Cloud Console",
-          "Ensure you're downloading OAuth 2.0 Client ID credentials (not API Key)",
+          "Ensure you're downloading OAuth 2.0 Client ID " + "credentials (not API Key)",
           "The file should contain 'client_id' field",
         ],
-        links: [{ label: "OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` }],
+        links: [
+          {
+            label: "OAuth Credentials",
+            url: `${CONSOLE_URL}/apis/credentials`,
+          },
+        ],
       }),
     );
   } else {
-    // Validate client_id format
-    if (!clientId.endsWith(".apps.googleusercontent.com")) {
-      errors.push(
-        new GoogleAuthError({
-          code: "INVALID_CLIENT",
-          reason: `Invalid client_id format. Expected to end with .apps.googleusercontent.com`,
-          fix: [
-            "Verify you downloaded OAuth 2.0 Client credentials (not Service Account or API Key)",
-            "The client_id should look like: 123456789.apps.googleusercontent.com",
-            "Download fresh credentials from Google Cloud Console",
-          ],
-          links: [{ label: "OAuth Credentials", url: `${CONSOLE_URL}/apis/credentials` }],
-        }),
-      );
-    }
-
-    // Check for whitespace issues
-    if (clientId !== clientId.trim()) {
-      warnings.push("client_id contains leading or trailing whitespace");
-    }
-
-    // Check for obviously truncated client_id
-    if (clientId.length < 50) {
-      warnings.push("client_id appears unusually short - may be truncated");
-    }
+    validateCredentialValues(clientId, extracted?.client_secret, errors, warnings);
   }
 
-  // Validate client_secret exists (optional for some flows but recommended)
-  if (!clientSecret) {
-    warnings.push("No client_secret found - some auth flows may not work");
-  } else if (clientSecret !== clientSecret.trim()) {
-    warnings.push("client_secret contains leading or trailing whitespace");
-  }
-
-  // Check token path is writable
-  const tokenDir = path.dirname(tokenPath);
-  try {
-    await fs.access(tokenDir, fs.constants.W_OK);
-  } catch {
-    // Directory might not exist yet - try to create it
-    try {
-      await fs.mkdir(tokenDir, { recursive: true });
-    } catch {
-      warnings.push(`Token directory may not be writable: ${tokenPath}`);
-    }
-  }
+  await ensureTokenDirWritable(warnings);
 
   return {
     valid: errors.length === 0,
@@ -166,10 +199,10 @@ export async function validateOAuthConfig(): Promise<ValidationResult> {
 }
 
 /**
- * Check if OAuth is configured (credentials file exists).
- * Checks both new default location and legacy location.
+ * Check if OAuth is configured (env vars or credentials file).
  */
 export async function isOAuthConfigured(): Promise<boolean> {
+  if (getEnvVarCredentials()) return true;
   const resolved = await resolveCredentialsPath();
   return resolved.exists;
 }

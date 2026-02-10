@@ -4,12 +4,14 @@
 
 ### User-Configured Variables
 
-**Credentials** (required - use one of these methods):
+**Credentials** (required — use one of these methods):
 
-| Variable                         | Description                                             | Example                         |
-| -------------------------------- | ------------------------------------------------------- | ------------------------------- |
-| `GOOGLE_DRIVE_OAUTH_CREDENTIALS` | Path to your OAuth credentials JSON file                | `/home/user/secrets/oauth.json` |
-| _(or place file at)_             | Default location: `gcp-oauth.keys.json` in project root | `./gcp-oauth.keys.json`         |
+| Variable                         | Description                                                         | Example                            |
+| -------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
+| `GOOGLE_CLIENT_ID`               | OAuth Client ID — simplest setup, no file needed                    | `12345.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET`           | OAuth Client Secret (used with `GOOGLE_CLIENT_ID`)                  | `GOCSPX-...`                       |
+| `GOOGLE_DRIVE_OAUTH_CREDENTIALS` | Path to your OAuth credentials JSON file                            | `/home/user/secrets/oauth.json`    |
+| _(or place file at)_             | Default location: `~/.config/google-workspace-mcp/credentials.json` |                                    |
 
 **Optional** (for customization):
 

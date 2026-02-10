@@ -26,11 +26,14 @@ vi.mock("../errors/index.js", () => ({
 }));
 
 describe("auth/client", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
+    process.env = { ...originalEnv };
     vi.restoreAllMocks();
   });
 
@@ -178,6 +181,66 @@ describe("auth/client", () => {
 
         await expect(loadCredentials()).rejects.toThrow("Error loading credentials");
       });
+    });
+  });
+
+  describe("env var credentials", () => {
+    it("loadCredentials returns env var creds when GOOGLE_CLIENT_ID set", async () => {
+      process.env.GOOGLE_CLIENT_ID = "env-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "env-secret";
+
+      const result = await loadCredentials();
+
+      expect(result.client_id).toBe("env-id.apps.googleusercontent.com");
+      expect(result.client_secret).toBe("env-secret");
+      expect(fs.readFile).not.toHaveBeenCalled();
+    });
+
+    it("env vars take priority over file credentials", async () => {
+      process.env.GOOGLE_CLIENT_ID = "env-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "env-secret";
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          installed: {
+            client_id: "file-id",
+            client_secret: "file-secret",
+          },
+        }),
+      );
+
+      const result = await loadCredentials();
+
+      expect(result.client_id).toBe("env-id.apps.googleusercontent.com");
+      expect(result.client_secret).toBe("env-secret");
+    });
+
+    it("initializeOAuth2Client works with env var credentials", async () => {
+      process.env.GOOGLE_CLIENT_ID = "env-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "env-secret";
+
+      const client = await initializeOAuth2Client();
+
+      expect(client).toBeDefined();
+      expect(client._clientId).toBe("env-id.apps.googleusercontent.com");
+    });
+
+    it("falls back to file when GOOGLE_CLIENT_ID not set", async () => {
+      delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.GOOGLE_CLIENT_SECRET;
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          installed: {
+            client_id: "file-id",
+            client_secret: "file-secret",
+          },
+        }),
+      );
+
+      const result = await loadCredentials();
+
+      expect(result.client_id).toBe("file-id");
     });
   });
 

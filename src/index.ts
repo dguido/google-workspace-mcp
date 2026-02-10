@@ -40,6 +40,7 @@ import {
   getKeysFilePath,
   getConfigDirectory,
   getActiveProfile,
+  getEnvVarCredentials,
 } from "./auth/utils.js";
 
 // Import all tool definitions
@@ -733,6 +734,8 @@ Examples:
   npx @dguido/google-workspace-mcp
 
 Environment Variables:
+  GOOGLE_CLIENT_ID                 OAuth Client ID (simplest setup)
+  GOOGLE_CLIENT_SECRET             OAuth Client Secret (used with GOOGLE_CLIENT_ID)
   GOOGLE_WORKSPACE_MCP_PROFILE     Named profile for credential isolation
   GOOGLE_DRIVE_OAUTH_CREDENTIALS   Path to OAuth credentials file (overrides profile)
   GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides profile)
@@ -867,14 +870,18 @@ async function main() {
         });
 
         // Log OAuth config status (warning if missing)
-        const credentialsPath = getKeysFilePath();
-        try {
-          await import("fs").then((fs) => fs.promises.access(credentialsPath));
-        } catch {
-          log("Warning: OAuth credentials not configured", {
-            hint: `Save credentials to ${credentialsPath}`,
-            credentials_path: credentialsPath,
-          });
+        if (getEnvVarCredentials()) {
+          log("Using credentials from GOOGLE_CLIENT_ID env var");
+        } else {
+          const credPath = getKeysFilePath();
+          try {
+            await import("fs").then((m) => m.promises.access(credPath));
+          } catch {
+            log("Warning: OAuth credentials not configured", {
+              hint: "Set GOOGLE_CLIENT_ID env var or save " + `credentials to ${credPath}`,
+              credentials_path: credPath,
+            });
+          }
         }
 
         // Set up graceful shutdown

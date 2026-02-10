@@ -5,6 +5,7 @@ import {
   getLegacyKeysFilePath,
   generateCredentialsErrorMessage,
   extractCredentials,
+  getEnvVarCredentials,
   type OAuthCredentials,
 } from "./utils.js";
 import { validateOAuthConfig, GoogleAuthError } from "../errors/index.js";
@@ -18,6 +19,13 @@ interface CredentialsSource {
 }
 
 async function loadCredentialsWithFallback(): Promise<OAuthCredentials> {
+  // Highest priority: env var credentials (GOOGLE_CLIENT_ID)
+  const envCredentials = getEnvVarCredentials();
+  if (envCredentials) {
+    log("Using credentials from GOOGLE_CLIENT_ID env var");
+    return envCredentials;
+  }
+
   const sources: CredentialsSource[] = [
     { path: getKeysFilePath(), isLegacy: false, name: "default" },
     { path: getLegacyKeysFilePath(), isLegacy: true, name: "gcp-oauth.keys.json" },

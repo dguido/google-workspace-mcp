@@ -11,6 +11,7 @@ import {
   getKeysFilePath,
   resolveCredentialsPath,
   getActiveProfile,
+  getEnvVarCredentials,
 } from "../auth/utils.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
@@ -91,10 +92,10 @@ export interface StatusData extends Record<string, unknown> {
 }
 
 /**
- * Check if OAuth credentials file exists.
- * Checks both new default location and legacy location.
+ * Check if OAuth credentials are available (env vars or file).
  */
 async function credentialsFileExists(): Promise<boolean> {
+  if (getEnvVarCredentials()) return true;
   const resolved = await resolveCredentialsPath();
   return resolved.exists;
 }
@@ -181,10 +182,31 @@ async function getTokenInfo(): Promise<{
 }
 
 /**
- * Check if credentials file exists and is valid (for diagnostic mode).
- * Checks both new default location and legacy location.
+ * Check if credentials are available and valid (for diagnostic mode).
+ * Checks env vars first, then file locations.
  */
 async function checkCredentialsFile(): Promise<ConfigCheck> {
+  // Check env var credentials first
+  const envCreds = getEnvVarCredentials();
+  if (envCreds) {
+    if (!envCreds.client_id.endsWith(".apps.googleusercontent.com")) {
+      return {
+        name: "credentials_file",
+        status: "error",
+        message: "Invalid GOOGLE_CLIENT_ID format",
+        fix: [
+          "client_id should end with " + ".apps.googleusercontent.com",
+          "Verify you copied the OAuth 2.0 Client ID " + "(not API Key)",
+        ],
+      };
+    }
+    return {
+      name: "credentials_file",
+      status: "ok",
+      message: "Using credentials from GOOGLE_CLIENT_ID env var",
+    };
+  }
+
   const keysPath = getKeysFilePath();
   const resolved = await resolveCredentialsPath();
 
@@ -192,12 +214,11 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
     return {
       name: "credentials_file",
       status: "error",
-      message: `Credentials file not found at: ${keysPath}`,
+      message: `Credentials not found at: ${keysPath}`,
       fix: [
-        "Go to Google Cloud Console > APIs & Services > Credentials",
-        'Create OAuth 2.0 Client ID (choose "Desktop app" type)',
-        `Download and save as: ${keysPath}`,
-        "Or set GOOGLE_DRIVE_OAUTH_CREDENTIALS env var",
+        "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET " + "env vars (simplest)",
+        "Or download credentials from Google Cloud Console",
+        `Save as: ${keysPath}`,
       ],
     };
   }
@@ -223,20 +244,19 @@ async function checkCredentialsFile(): Promise<ConfigCheck> {
         message: "Invalid client_id format",
         fix: [
           "Ensure you downloaded OAuth 2.0 Client credentials",
-          "client_id should end with .apps.googleusercontent.com",
+          "client_id should end with " + ".apps.googleusercontent.com",
         ],
       };
     }
 
-    // Valid credentials found
     if (resolved.isLegacy) {
       return {
         name: "credentials_file",
         status: "warning",
-        message: `Using legacy credentials location: ${resolved.path}`,
+        message: `Using legacy credentials location: ` + resolved.path,
         fix: [
           `Move credentials to: ${keysPath}`,
-          "This silences this warning and follows the new default",
+          "This silences this warning and follows " + "the new default",
         ],
       };
     }

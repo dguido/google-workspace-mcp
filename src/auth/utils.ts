@@ -107,6 +107,20 @@ export interface OAuthCredentials {
   redirect_uris?: string[];
 }
 
+/**
+ * Get OAuth credentials from environment variables.
+ * Returns null if GOOGLE_CLIENT_ID is not set or empty.
+ */
+export function getEnvVarCredentials(): OAuthCredentials | null {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (!clientId) return null;
+  return {
+    client_id: clientId,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET?.trim() || undefined,
+    redirect_uris: ["http://127.0.0.1/oauth2callback"],
+  };
+}
+
 // Credentials file format (supports installed, web, and flat formats)
 export interface CredentialsFileInput {
   installed?: { client_id?: string; client_secret?: string; redirect_uris?: string[] };
@@ -162,14 +176,24 @@ export function generateCredentialsErrorMessage(): string {
       `Profile directory: ` +
       `${getProfileDirectory(profile)}\n`
     : "";
+  const batchApiUrl =
+    "https://console.cloud.google.com/flows/enableapi" +
+    "?apiid=drive.googleapis.com,docs.googleapis.com," +
+    "sheets.googleapis.com,slides.googleapis.com," +
+    "calendar-json.googleapis.com,gmail.googleapis.com," +
+    "people.googleapis.com";
 
   return `
 OAuth credentials not found. Please provide credentials using one of these methods:
 
-1. Default location (recommended):
+1. Environment variables (simplest):
+   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your MCP config:
+   { "env": { "GOOGLE_CLIENT_ID": "YOUR_ID", "GOOGLE_CLIENT_SECRET": "YOUR_SECRET" } }
+
+2. Credentials file (default location):
    Save your credentials file to: ${defaultPath}
 ${profileNote}
-2. Environment variable (for custom paths):
+3. Environment variable (for custom file paths):
    Set GOOGLE_DRIVE_OAUTH_CREDENTIALS to the path of your credentials file:
    export GOOGLE_DRIVE_OAUTH_CREDENTIALS="/path/to/credentials.json"
 
@@ -180,9 +204,9 @@ Token storage:
 To get OAuth credentials:
 1. Go to the Google Cloud Console (https://console.cloud.google.com/)
 2. Create or select a project
-3. Enable the Google Drive, Docs, Sheets, and Slides APIs
+3. Enable APIs: ${batchApiUrl}
 4. Create OAuth 2.0 credentials (Desktop app type)
-5. Download the credentials file and save to: ${defaultPath}
+5. Copy the Client ID and Client Secret into your MCP config env vars
 `.trim();
 }
 
