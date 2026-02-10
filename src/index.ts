@@ -34,7 +34,12 @@ import {
 } from "./utils/index.js";
 
 // Import service configuration
-import { isServiceEnabled, areUnifiedToolsEnabled, getEnabledServices } from "./config/index.js";
+import {
+  isServiceEnabled,
+  areUnifiedToolsEnabled,
+  getEnabledServices,
+  isReadOnlyMode,
+} from "./config/index.js";
 
 // Import auth utilities for startup logging
 import {
@@ -646,6 +651,16 @@ function createToolRegistry(): Record<string, ToolHandler> {
     } satisfies Record<string, ToolHandler>);
   }
 
+  // In read-only mode, remove write tools from the registry
+  if (isReadOnlyMode()) {
+    const readOnlyTools = new Set(getAllTools().map((t) => t.name));
+    for (const name of Object.keys(registry)) {
+      if (!readOnlyTools.has(name)) {
+        delete registry[name];
+      }
+    }
+  }
+
   return registry;
 }
 
@@ -753,6 +768,7 @@ Environment Variables:
   GOOGLE_CLIENT_SECRET             OAuth Client Secret (used with GOOGLE_CLIENT_ID)
   GOOGLE_WORKSPACE_MCP_PROFILE     Named profile for credential isolation
   GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides profile)
+  GOOGLE_WORKSPACE_READ_ONLY       Restrict to read-only operations (true/false)
 
 Multi-Account Setup:
   Use named profiles to isolate credentials per project:
@@ -868,6 +884,7 @@ async function main() {
           node: process.version,
           profile: getActiveProfile(),
           services: enabledServices,
+          read_only: isReadOnlyMode(),
           config_dir: configDir,
           token_path: getSecureTokenPath(),
         });

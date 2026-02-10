@@ -5,6 +5,7 @@ export {
   isServiceEnabled,
   areUnifiedToolsEnabled,
   resetServiceConfig,
+  isReadOnlyMode,
 } from "./services.js";
 
 export { getScopesForEnabledServices } from "./scopes.js";

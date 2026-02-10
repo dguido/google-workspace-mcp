@@ -5,7 +5,12 @@
 import * as fs from "fs/promises";
 import { structuredResponse, type ToolResponse } from "../utils/responses.js";
 import { validateArgs, isNodeError } from "../utils/index.js";
-import { getEnabledServices, SERVICE_NAMES, type ServiceName } from "../config/services.js";
+import {
+  getEnabledServices,
+  SERVICE_NAMES,
+  isReadOnlyMode,
+  type ServiceName,
+} from "../config/services.js";
 import {
   getSecureTokenPath,
   getKeysFilePath,
@@ -78,6 +83,7 @@ export interface StatusData extends Record<string, unknown> {
     scopes: string[];
   };
   enabled_services: string[];
+  read_only_mode: boolean;
   config_checks: ConfigCheck[];
   token_check: TokenCheck | null;
   last_error: {
@@ -469,6 +475,20 @@ function generateRecommendations(
     recommendations.push(`API validation failed: ${apiValidation.error}`);
   }
 
+  // Check for scope mismatch in read-only mode
+  if (
+    isReadOnlyMode() &&
+    tokenCheck &&
+    tokenCheck.scopes.length > 0 &&
+    tokenCheck.scopes.some((s) => !s.includes("readonly"))
+  ) {
+    recommendations.push(
+      "Read-only mode is active but token has write scopes. " +
+        "Re-authenticate for restricted scopes: " +
+        "npx @dguido/google-workspace-mcp auth",
+    );
+  }
+
   // Check for missing scopes
   if (tokenCheck && tokenCheck.scopes.length === 0) {
     recommendations.push("No scopes found - re-authenticate to grant required permissions");
@@ -596,6 +616,7 @@ export async function handleGetStatus(
       scopes: tokenInfo.scopes,
     },
     enabled_services: enabledServices,
+    read_only_mode: isReadOnlyMode(),
     config_checks: configChecks,
     token_check: tokenCheckData,
     last_error: lastError

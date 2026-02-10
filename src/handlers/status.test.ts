@@ -37,6 +37,7 @@ vi.mock("../config/services.js", () => ({
   getEnabledServices: vi.fn(() => new Set(["drive", "docs", "sheets"])),
   SERVICE_NAMES: ["drive", "docs", "sheets", "slides", "calendar", "gmail"],
   isToonEnabled: vi.fn(() => false),
+  isReadOnlyMode: vi.fn(() => false),
 }));
 
 vi.mock("../utils/index.js", async (importOriginal) => {
@@ -1125,6 +1126,104 @@ describe("handleGetStatus", () => {
       const data = result.structuredContent as StatusData;
       expect(data.recommendations).toBeDefined();
       expect(data.recommendations?.some((r) => r.includes("No scopes found"))).toBe(true);
+    });
+  });
+
+  describe("read_only_mode", () => {
+    it("reports read_only_mode as false by default", async () => {
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("credentials")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        });
+      });
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      expect(data.read_only_mode).toBe(false);
+    });
+
+    it("reports read_only_mode as true when enabled", async () => {
+      const { isReadOnlyMode } = await import("../config/services.js");
+      vi.mocked(isReadOnlyMode).mockReturnValue(true);
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("credentials")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope: "https://www.googleapis.com/auth/drive",
+          created_at: new Date().toISOString(),
+        });
+      });
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      expect(data.read_only_mode).toBe(true);
+
+      vi.mocked(isReadOnlyMode).mockReturnValue(false);
+    });
+
+    it("recommends re-auth when read-only but token has write scopes", async () => {
+      const { isReadOnlyMode } = await import("../config/services.js");
+      vi.mocked(isReadOnlyMode).mockReturnValue(true);
+
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockImplementation(async (path) => {
+        if (String(path).includes("credentials")) {
+          return JSON.stringify({
+            installed: {
+              client_id: "test.apps.googleusercontent.com",
+              client_secret: "secret",
+            },
+          });
+        }
+        return JSON.stringify({
+          access_token: "test-token",
+          refresh_token: "test-refresh",
+          expiry_date: Date.now() + 3600000,
+          scope:
+            "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify",
+          created_at: new Date().toISOString(),
+        });
+      });
+
+      const result = await handleGetStatus(mockAuthClient, mockDrive, "2.0.0", {});
+
+      expect(result.isError).toBe(false);
+      const data = result.structuredContent as StatusData;
+      expect(
+        data.recommendations?.some((r) =>
+          r.includes("Read-only mode is active but token has write scopes"),
+        ),
+      ).toBe(true);
+
+      vi.mocked(isReadOnlyMode).mockReturnValue(false);
     });
   });
 });

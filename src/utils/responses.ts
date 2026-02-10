@@ -5,7 +5,7 @@ import type { GoogleAuthError } from "../errors/google-auth-error.js";
 export const DIAGNOSTIC_HINT = "\n\nCall get_status for full diagnostics.";
 
 const CONFIG_ERROR_PATTERN =
-  /credentials|authenticat|Invalid token|token.*expired|token.*refresh|scope|API.*not.*enabled|Client ID missing/i;
+  /credentials|authenticat|Invalid token|\btoken\b.*expired|\btoken\b.*refresh|\bscopes?\b|API.*not.*enabled|Client ID missing/i;
 
 export function isConfigurationError(message: string): boolean {
   return CONFIG_ERROR_PATTERN.test(message);

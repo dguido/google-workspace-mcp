@@ -110,3 +110,12 @@ export function resetServiceConfig(): void {
 export function isToonEnabled(): boolean {
   return process.env.GOOGLE_WORKSPACE_TOON_FORMAT === "true";
 }
+
+/**
+ * Check if read-only mode is enabled.
+ * Set GOOGLE_WORKSPACE_READ_ONLY=true to restrict to non-destructive operations.
+ * This filters out write tools and requests read-only OAuth scopes.
+ */
+export function isReadOnlyMode(): boolean {
+  return process.env.GOOGLE_WORKSPACE_READ_ONLY === "true";
+}

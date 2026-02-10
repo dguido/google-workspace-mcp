@@ -8,7 +8,12 @@ import {
   discoveryTools,
   type ToolDefinition,
 } from "../tools/definitions.js";
-import { isServiceEnabled, areUnifiedToolsEnabled, type ServiceName } from "../config/index.js";
+import {
+  isServiceEnabled,
+  areUnifiedToolsEnabled,
+  isReadOnlyMode,
+  type ServiceName,
+} from "../config/index.js";
 import { successResponse, structuredResponse, type ToolResponse } from "../utils/responses.js";
 
 interface ListToolsInput {
@@ -38,6 +43,9 @@ export async function handleListTools(args: unknown): Promise<ToolResponse> {
   // Helper to add tools from a service
   const addToolsFromService = (serviceName: string, tools: ToolDefinition[]) => {
     for (const tool of tools) {
+      // Filter out write tools in read-only mode
+      if (isReadOnlyMode() && tool.readOnly !== true) continue;
+
       // Filter by keyword if provided
       if (keyword) {
         const lowerKeyword = keyword.toLowerCase();

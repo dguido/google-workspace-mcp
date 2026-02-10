@@ -463,7 +463,11 @@ export async function handleDeleteEmail(
       userId: "me",
       requestBody: { ids: messageIds },
     });
-  } catch {
+  } catch (batchError) {
+    // Re-throw auth errors so the top-level handler can add diagnostics
+    const status = (batchError as { response?: { status?: number } })?.response?.status;
+    if (status === 401 || status === 403) throw batchError;
+
     // Batch API may not be available, fall back to individual deletes
     const results = await Promise.allSettled(
       messageIds.map((id) =>

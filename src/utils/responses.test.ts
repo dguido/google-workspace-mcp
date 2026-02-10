@@ -84,6 +84,10 @@ describe("isConfigurationError", () => {
     ["author name is required", false],
     ["tokenize the input", false],
     ["Upload successful", false],
+    ["pageToken is invalid", false],
+    ["pageToken expired, request a new one", false],
+    ["microscope analysis failed", false],
+    ["horoscope data not found", false],
   ])("classifies %j as %s", (msg, expected) => {
     expect(isConfigurationError(msg)).toBe(expected);
   });
