@@ -400,7 +400,12 @@ export async function handleMoveItem(drive: drive_v3.Drive, args: unknown): Prom
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  const itemId = await resolveFileIdFromPath(drive, data.itemId, data.itemPath);
+  let itemId: string;
+  try {
+    itemId = await resolveFileIdFromPath(drive, data.itemId, data.itemPath);
+  } catch (error) {
+    return errorResponse(`Failed to resolve item: ${(error as Error).message}`);
+  }
 
   const destinationFolderId = await resolveOptionalFolderPath(
     drive,
@@ -1435,9 +1440,18 @@ export async function handleBatchMove(
   const data = validation.data;
 
   // Resolve file IDs from paths if provided
-  const fileIds =
-    data.fileIds ??
-    (await Promise.all(data.filePaths!.map((p) => resolveFileIdFromPath(drive, undefined, p))));
+  let fileIds: string[];
+  if (data.fileIds) {
+    fileIds = data.fileIds;
+  } else {
+    try {
+      fileIds = await Promise.all(
+        data.filePaths!.map((p) => resolveFileIdFromPath(drive, undefined, p)),
+      );
+    } catch (error) {
+      return errorResponse(`Failed to resolve file paths: ${(error as Error).message}`);
+    }
+  }
 
   // Resolve destination folder (supports both ID and path)
   const destinationFolderId = await resolveOptionalFolderPath(

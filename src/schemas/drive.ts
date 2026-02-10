@@ -182,8 +182,16 @@ export const BatchRestoreSchema = z.object({
 
 export const BatchMoveSchema = z
   .object({
-    fileIds: z.array(z.string()).max(100, "Maximum 100 files per batch").optional(),
-    filePaths: z.array(z.string()).max(100, "Maximum 100 files per batch").optional(),
+    fileIds: z
+      .array(z.string())
+      .min(1, "At least one file ID required")
+      .max(100, "Maximum 100 files per batch")
+      .optional(),
+    filePaths: z
+      .array(z.string())
+      .min(1, "At least one file path required")
+      .max(100, "Maximum 100 files per batch")
+      .optional(),
     destinationFolderId: z.string().optional(),
     destinationPath: z.string().optional(),
   })

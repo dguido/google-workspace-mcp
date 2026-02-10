@@ -260,6 +260,22 @@ describe("BatchMoveSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects empty fileIds array", () => {
+    const result = BatchMoveSchema.safeParse({
+      fileIds: [],
+      destinationFolderId: "dest123",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects empty filePaths array", () => {
+    const result = BatchMoveSchema.safeParse({
+      filePaths: [],
+      destinationFolderId: "dest123",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects missing destination", () => {
     const result = BatchMoveSchema.safeParse({
       fileIds: ["id1"],

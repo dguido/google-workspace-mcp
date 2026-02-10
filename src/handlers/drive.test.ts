@@ -1375,6 +1375,19 @@ describe("handleMoveItem with itemPath", () => {
     expect(result.content[0].text).toContain("moved");
     expect(result.content[0].text).toContain("report.txt");
   });
+
+  it("returns error when itemPath cannot be resolved", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValueOnce({
+      data: { files: [] },
+    } as never);
+
+    const result = await handleMoveItem(mockDrive, {
+      itemPath: "/nonexistent.txt",
+      destinationFolderId: "archive-id",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Failed to resolve item");
+  });
 });
 
 describe("handleBatchMove with filePaths", () => {
@@ -1417,5 +1430,18 @@ describe("handleBatchMove with filePaths", () => {
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("2 succeeded");
+  });
+
+  it("returns error when a filePath cannot be resolved", async () => {
+    vi.mocked(mockDrive.files.list).mockResolvedValueOnce({
+      data: { files: [] },
+    } as never);
+
+    const result = await handleBatchMove(mockDrive, {
+      filePaths: ["/nonexistent.txt"],
+      destinationFolderId: "archive-id",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Failed to resolve file paths");
   });
 });
