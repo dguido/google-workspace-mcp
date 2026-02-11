@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { drive_v3, docs_v1, sheets_v4, slides_v1 } from "googleapis";
 import { handleCreateFile, handleUpdateFile, handleGetFileContent } from "./unified.js";
+import { zipSync, strToU8 } from "fflate";
+import { EXPORT_MIME_TYPES } from "../utils/mimeTypes.js";
 
 vi.mock("../utils/index.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../utils/index.js")>();
@@ -466,5 +468,184 @@ describe("handleGetFileContent", () => {
       range: "A1:B2",
     });
     expect(result.isError).toBe(false);
+  });
+
+  function makeZip(entries: Record<string, string>): Uint8Array {
+    const data: Record<string, Uint8Array> = {};
+    for (const [name, content] of Object.entries(entries)) {
+      data[name] = strToU8(content);
+    }
+    return zipSync(data);
+  }
+
+  function mockMetadataAndMedia(
+    drive: drive_v3.Drive,
+    name: string,
+    mimeType: string,
+    zipData: Uint8Array,
+  ) {
+    vi.mocked(drive.files.get)
+      .mockResolvedValueOnce({
+        data: {
+          name,
+          mimeType,
+          modifiedTime: "2024-01-01T00:00:00.000Z",
+          size: "1000",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: zipData.buffer,
+      } as never);
+  }
+
+  it("reads .docx file content", async () => {
+    const xml = [
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+      "<w:body>",
+      "<w:p><w:r><w:t>Hello from Word</w:t></w:r></w:p>",
+      "</w:body>",
+      "</w:document>",
+    ].join("");
+    const zip = makeZip({ "word/document.xml": xml });
+    mockMetadataAndMedia(mockDrive, "report.docx", EXPORT_MIME_TYPES.DOCX, zip);
+
+    const result = await handleGetFileContent(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "docx123",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("Hello from Word");
+    expect(result.structuredContent).toBeDefined();
+    const sc = result.structuredContent!;
+    expect(sc.type).toBe("docx");
+    expect(sc.content).toContain("Hello from Word");
+  });
+
+  it("reads .xlsx file content", async () => {
+    const ss = [
+      '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      "<si><t>Val</t></si>",
+      "</sst>",
+    ].join("");
+    const wb = [
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      '<sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets>',
+      "</workbook>",
+    ].join("");
+    const sheet = [
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      "<sheetData>",
+      '<row><c r="A1" t="s"><v>0</v></c></row>',
+      "</sheetData>",
+      "</worksheet>",
+    ].join("");
+    const zip = makeZip({
+      "xl/sharedStrings.xml": ss,
+      "xl/workbook.xml": wb,
+      "xl/worksheets/sheet1.xml": sheet,
+    });
+    mockMetadataAndMedia(mockDrive, "data.xlsx", EXPORT_MIME_TYPES.XLSX, zip);
+
+    const result = await handleGetFileContent(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "xlsx123",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("Val");
+    expect(result.structuredContent!.type).toBe("xlsx");
+  });
+
+  it("reads .pptx file content", async () => {
+    const slide = [
+      '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"',
+      ' xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">',
+      "<p:cSld><p:spTree><p:sp><p:txBody>",
+      "<a:p><a:r><a:t>Presentation text</a:t></a:r></a:p>",
+      "</p:txBody></p:sp></p:spTree></p:cSld>",
+      "</p:sld>",
+    ].join("");
+    const zip = makeZip({ "ppt/slides/slide1.xml": slide });
+    mockMetadataAndMedia(mockDrive, "deck.pptx", EXPORT_MIME_TYPES.PPTX, zip);
+
+    const result = await handleGetFileContent(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "pptx123",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("Presentation text");
+    expect(result.structuredContent!.type).toBe("pptx");
+  });
+
+  it("returns error for corrupt Office file", async () => {
+    vi.mocked(mockDrive.files.get)
+      .mockResolvedValueOnce({
+        data: {
+          name: "bad.docx",
+          mimeType: EXPORT_MIME_TYPES.DOCX,
+          modifiedTime: "2024-01-01T00:00:00.000Z",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: new Uint8Array([0, 1, 2, 3]).buffer,
+      } as never);
+
+    const result = await handleGetFileContent(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "bad123",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Failed to extract text");
+  });
+});
+
+describe("handleUpdateFile - Office files", () => {
+  let mockDrive: drive_v3.Drive;
+  let mockDocs: docs_v1.Docs;
+  let mockSheets: sheets_v4.Sheets;
+  let mockSlides: slides_v1.Slides;
+
+  beforeEach(() => {
+    mockDrive = createMockDrive();
+    mockDocs = createMockDocs();
+    mockSheets = createMockSheets();
+    mockSlides = createMockSlides();
+    vi.mocked(mockDrive.files.list).mockResolvedValue({
+      data: { files: [] },
+    } as never);
+  });
+
+  it("returns error for .docx update", async () => {
+    vi.mocked(mockDrive.files.get).mockResolvedValue({
+      data: { name: "doc.docx", mimeType: EXPORT_MIME_TYPES.DOCX },
+    } as never);
+
+    const result = await handleUpdateFile(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "docx123",
+      content: "new content",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Cannot update Office file");
+  });
+
+  it("returns error for .xlsx update", async () => {
+    vi.mocked(mockDrive.files.get).mockResolvedValue({
+      data: { name: "data.xlsx", mimeType: EXPORT_MIME_TYPES.XLSX },
+    } as never);
+
+    const result = await handleUpdateFile(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "xlsx123",
+      content: "new content",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Cannot update Office file");
+  });
+
+  it("returns error for .pptx update", async () => {
+    vi.mocked(mockDrive.files.get).mockResolvedValue({
+      data: { name: "deck.pptx", mimeType: EXPORT_MIME_TYPES.PPTX },
+    } as never);
+
+    const result = await handleUpdateFile(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "pptx123",
+      content: "new content",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Cannot update Office file");
   });
 });

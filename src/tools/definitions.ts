@@ -2347,7 +2347,9 @@ export const unifiedTools: ToolDefinition[] = [
   {
     name: "get_file_content",
     readOnly: true,
-    description: "Get file content (auto-detects type)",
+    description:
+      "Get file content (auto-detects type). Supports Google Docs/Sheets/Slides, " +
+      "plain text, and Office files (.docx, .xlsx, .pptx)",
     inputSchema: {
       type: "object",
       properties: {
@@ -2373,12 +2375,14 @@ export const unifiedTools: ToolDefinition[] = [
         name: { type: "string", description: "File name" },
         type: {
           type: "string",
-          description: "File type (doc, sheet, slides, text, or binary)",
+          description: "File type: doc, sheet, slides, text, docx, xlsx, pptx, or binary",
         },
         mimeType: { type: "string", description: "MIME type" },
         content: {
           description:
-            "File content: string for docs/text, 2D array for sheets, slides array for presentations",
+            "File content: string for docs/text/docx/pptx, " +
+            "tab-separated string for xlsx, " +
+            "2D array for Google Sheets, slides array for Google Slides",
         },
         metadata: {
           type: "object",
@@ -2390,6 +2394,10 @@ export const unifiedTools: ToolDefinition[] = [
             rowCount: { type: "number" },
             columnCount: { type: "number" },
             slideCount: { type: "number" },
+            truncated: {
+              type: "boolean",
+              description: "Whether content was truncated (Office files only)",
+            },
           },
         },
       },

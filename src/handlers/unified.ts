@@ -1,28 +1,47 @@
 import type { drive_v3, docs_v1, sheets_v4, slides_v1 } from "googleapis";
-import { structuredResponse, errorResponse, validateArgs } from "../utils/index.js";
+import {
+  structuredResponse,
+  errorResponse,
+  validateArgs,
+  truncateResponse,
+} from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import { CreateFileSchema, UpdateFileSchema, GetFileContentSchema } from "../schemas/unified.js";
 import { resolveOptionalFolderPath, resolveFileIdFromPath } from "./helpers.js";
 import {
   GOOGLE_MIME_TYPES,
   TEXT_MIME_TYPES,
+  OFFICE_MIME_TYPES,
   EXTENSION_TO_TYPE,
   type FileType,
   getExtension,
 } from "../utils/mimeTypes.js";
+import { extractDocxText, extractXlsxText, extractPptxText } from "../utils/office.js";
 
 /**
  * Infer file type from name extension or content structure
  */
-function inferFileType(name: string, content: unknown, explicitType?: FileType): FileType {
-  // Explicit type takes precedence
-  if (explicitType) return explicitType;
+type CreatableFileType = "doc" | "sheet" | "slides" | "text";
 
-  // Check extension
-  const ext = getExtension(name);
-  if (EXTENSION_TO_TYPE[ext]) {
-    return EXTENSION_TO_TYPE[ext];
+function inferFileType(name: string, content: unknown, explicitType?: FileType): CreatableFileType {
+  // Explicit type takes precedence (map Office types to Google equivalents)
+  if (explicitType) {
+    switch (explicitType) {
+      case "docx":
+        return "doc";
+      case "xlsx":
+        return "sheet";
+      case "pptx":
+        return "slides";
+      default:
+        return explicitType;
+    }
   }
+
+  // Check extension (EXTENSION_TO_TYPE only contains creatable types)
+  const ext = getExtension(name);
+  const extType = EXTENSION_TO_TYPE[ext] as CreatableFileType | undefined;
+  if (extType) return extType;
 
   // Infer from content structure
   if (Array.isArray(content)) {
@@ -56,6 +75,12 @@ function getTypeFromMime(mimeType: string): FileType | "binary" {
       return "sheet";
     case GOOGLE_MIME_TYPES.PRESENTATION:
       return "slides";
+    case OFFICE_MIME_TYPES.DOCX:
+      return "docx";
+    case OFFICE_MIME_TYPES.XLSX:
+      return "xlsx";
+    case OFFICE_MIME_TYPES.PPTX:
+      return "pptx";
     case TEXT_MIME_TYPES.PLAIN:
     case TEXT_MIME_TYPES.MARKDOWN:
       return "text";
@@ -397,6 +422,14 @@ export async function handleUpdateFile(
       });
     }
 
+    case "docx":
+    case "xlsx":
+    case "pptx":
+      return errorResponse(
+        `Cannot update Office file "${file.data.name}" (${file.data.mimeType}) in place. ` +
+          "Use uploadFile to replace the file, or convert it to Google format first.",
+      );
+
     case "binary":
       return errorResponse(
         `Cannot update binary file "${file.data.name}" (${file.data.mimeType}). ` +
@@ -555,6 +588,46 @@ export async function handleGetFileContent(
           size: file.data.size,
         },
       });
+    }
+
+    case "docx":
+    case "xlsx":
+    case "pptx": {
+      try {
+        const mediaResponse = await drive.files.get(
+          { fileId, alt: "media", supportsAllDrives: true },
+          { responseType: "arraybuffer" },
+        );
+        const buf = mediaResponse.data as ArrayBuffer;
+        const bytes = new Uint8Array(buf);
+
+        let rawContent: string;
+        if (fileType === "docx") {
+          rawContent = extractDocxText(bytes);
+        } else if (fileType === "xlsx") {
+          rawContent = extractXlsxText(bytes);
+        } else {
+          rawContent = extractPptxText(bytes);
+        }
+
+        const { content: truncatedContent, truncated } = truncateResponse(rawContent);
+
+        return structuredResponse(truncatedContent, {
+          fileId,
+          name: file.data.name,
+          type: fileType,
+          mimeType: file.data.mimeType,
+          content: truncatedContent,
+          metadata: {
+            modifiedTime: file.data.modifiedTime,
+            size: file.data.size,
+            truncated,
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return errorResponse(`Failed to extract text from "${file.data.name}": ${msg}`);
+      }
     }
 
     case "binary":

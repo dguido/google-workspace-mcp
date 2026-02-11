@@ -38,8 +38,15 @@ export const EXPORT_MIME_TYPES = {
   EPUB: "application/epub+zip",
 } as const;
 
+/** Office document MIME types (non-Google, OOXML) */
+export const OFFICE_MIME_TYPES = {
+  DOCX: EXPORT_MIME_TYPES.DOCX,
+  XLSX: EXPORT_MIME_TYPES.XLSX,
+  PPTX: EXPORT_MIME_TYPES.PPTX,
+} as const;
+
 /** File type categories */
-export type FileType = "doc" | "sheet" | "slides" | "text";
+export type FileType = "doc" | "sheet" | "slides" | "text" | "docx" | "xlsx" | "pptx";
 
 /** Map file extensions to their type category */
 export const EXTENSION_TO_TYPE: Record<string, FileType> = {
