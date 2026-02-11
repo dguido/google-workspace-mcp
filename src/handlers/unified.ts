@@ -4,6 +4,7 @@ import {
   errorResponse,
   validateArgs,
   truncateResponse,
+  CHARACTER_LIMIT,
 } from "../utils/index.js";
 import type { ToolResponse } from "../utils/index.js";
 import { CreateFileSchema, UpdateFileSchema, GetFileContentSchema } from "../schemas/unified.js";
@@ -11,7 +12,7 @@ import { resolveOptionalFolderPath, resolveFileIdFromPath } from "./helpers.js";
 import {
   GOOGLE_MIME_TYPES,
   TEXT_MIME_TYPES,
-  OFFICE_MIME_TYPES,
+  EXPORT_MIME_TYPES,
   EXTENSION_TO_TYPE,
   type FileType,
   getExtension,
@@ -38,10 +39,12 @@ function inferFileType(name: string, content: unknown, explicitType?: FileType):
     }
   }
 
-  // Check extension (EXTENSION_TO_TYPE only contains creatable types)
+  // Check extension
   const ext = getExtension(name);
-  const extType = EXTENSION_TO_TYPE[ext] as CreatableFileType | undefined;
-  if (extType) return extType;
+  const extType = EXTENSION_TO_TYPE[ext];
+  if (extType === "doc" || extType === "sheet" || extType === "slides" || extType === "text") {
+    return extType;
+  }
 
   // Infer from content structure
   if (Array.isArray(content)) {
@@ -75,11 +78,11 @@ function getTypeFromMime(mimeType: string): FileType | "binary" {
       return "sheet";
     case GOOGLE_MIME_TYPES.PRESENTATION:
       return "slides";
-    case OFFICE_MIME_TYPES.DOCX:
+    case EXPORT_MIME_TYPES.DOCX:
       return "docx";
-    case OFFICE_MIME_TYPES.XLSX:
+    case EXPORT_MIME_TYPES.XLSX:
       return "xlsx";
-    case OFFICE_MIME_TYPES.PPTX:
+    case EXPORT_MIME_TYPES.PPTX:
       return "pptx";
     case TEXT_MIME_TYPES.PLAIN:
     case TEXT_MIME_TYPES.MARKDOWN:
@@ -593,6 +596,19 @@ export async function handleGetFileContent(
     case "docx":
     case "xlsx":
     case "pptx": {
+      const MAX_OFFICE_FILE_SIZE = 50 * 1024 * 1024;
+      const fileSize = parseInt(file.data.size || "0", 10);
+      if (fileSize > MAX_OFFICE_FILE_SIZE) {
+        return errorResponse(
+          `Office file "${file.data.name}" is too large ` +
+            "for text extraction " +
+            `(${(fileSize / 1024 / 1024).toFixed(1)} MB, ` +
+            `limit ` +
+            `${MAX_OFFICE_FILE_SIZE / 1024 / 1024} MB). ` +
+            "Use downloadFile for large binary files.",
+        );
+      }
+
       try {
         const mediaResponse = await drive.files.get(
           { fileId, alt: "media", supportsAllDrives: true },
@@ -603,11 +619,11 @@ export async function handleGetFileContent(
 
         let rawContent: string;
         if (fileType === "docx") {
-          rawContent = extractDocxText(bytes);
+          rawContent = extractDocxText(bytes, CHARACTER_LIMIT);
         } else if (fileType === "xlsx") {
-          rawContent = extractXlsxText(bytes);
+          rawContent = extractXlsxText(bytes, CHARACTER_LIMIT);
         } else {
-          rawContent = extractPptxText(bytes);
+          rawContent = extractPptxText(bytes, CHARACTER_LIMIT);
         }
 
         const { content: truncatedContent, truncated } = truncateResponse(rawContent);

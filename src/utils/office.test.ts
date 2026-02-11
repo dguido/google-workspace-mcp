@@ -50,6 +50,20 @@ describe("extractDocxText", () => {
     expect(extractDocxText(zip)).toBe("A & B < C > D 'E' \"F\"");
   });
 
+  it("decodes numeric XML entities", () => {
+    const xml = [
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+      "<w:body>",
+      "<w:p><w:r><w:t>A&#160;B &#x3C;tag&#x3E;</w:t></w:r></w:p>",
+      "</w:body>",
+      "</w:document>",
+    ].join("");
+    const zip = makeZip({ "word/document.xml": xml });
+    const result = extractDocxText(zip);
+    expect(result).toContain("A\u00A0B");
+    expect(result).toContain("<tag>");
+  });
+
   it("handles empty document", () => {
     const xml = [
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
@@ -264,6 +278,26 @@ describe("extractXlsxText", () => {
     });
     expect(extractXlsxText(zip)).toContain("Bold Normal");
   });
+
+  it("skips cells with extreme column references", () => {
+    const sheet = [
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      "<sheetData>",
+      "<row>",
+      '<c r="A1"><v>keep</v></c>',
+      '<c r="ZZZZZ1"><v>bomb</v></c>',
+      "</row>",
+      "</sheetData>",
+      "</worksheet>",
+    ].join("");
+    const zip = makeZip({
+      "xl/workbook.xml": workbook,
+      "xl/worksheets/sheet1.xml": sheet,
+    });
+    const result = extractXlsxText(zip);
+    expect(result).toContain("keep");
+    expect(result).not.toContain("bomb");
+  });
 });
 
 describe("extractPptxText", () => {
@@ -349,5 +383,126 @@ describe("extractPptxText", () => {
     const result = extractPptxText(zip);
     expect(result).toContain("Title");
     expect(result).toContain("Body text");
+  });
+
+  it("handles a:t with xml:space attribute", () => {
+    const slide = [
+      '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"',
+      ' xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">',
+      "<p:cSld><p:spTree><p:sp><p:txBody>",
+      '<a:p><a:r><a:t xml:space="preserve"> spaced </a:t></a:r></a:p>',
+      "</p:txBody></p:sp></p:spTree></p:cSld>",
+      "</p:sld>",
+    ].join("");
+    const zip = makeZip({ "ppt/slides/slide1.xml": slide });
+    expect(extractPptxText(zip)).toContain(" spaced ");
+  });
+});
+
+describe("early termination with maxChars", () => {
+  it("extractDocxText stops after exceeding budget", () => {
+    const paragraphs: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      paragraphs.push(`<w:p><w:r><w:t>Paragraph ${i} ${"x".repeat(20)}</w:t></w:r></w:p>`);
+    }
+    const xml = [
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+      "<w:body>",
+      ...paragraphs,
+      "</w:body>",
+      "</w:document>",
+    ].join("");
+    const zip = makeZip({ "word/document.xml": xml });
+
+    const fullResult = extractDocxText(zip);
+    const limited = extractDocxText(zip, 100);
+
+    expect(fullResult.length).toBeGreaterThan(500);
+    expect(limited.length).toBeLessThan(fullResult.length);
+    expect(limited.length).toBeLessThan(250);
+    expect(limited).toContain("Paragraph 0");
+  });
+
+  it("extractXlsxText stops after exceeding budget", () => {
+    const rows: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      rows.push(
+        `<row><c r="A${i + 1}"><v>${i}</v></c>` +
+          `<c r="B${i + 1}"><v>${"y".repeat(20)}</v></c></row>`,
+      );
+    }
+    const sheet = [
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      "<sheetData>",
+      ...rows,
+      "</sheetData>",
+      "</worksheet>",
+    ].join("");
+    const wb = [
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+      "<sheets>",
+      '<sheet name="Data" sheetId="1" r:id="rId1"/>',
+      "</sheets>",
+      "</workbook>",
+    ].join("");
+    const zip = makeZip({
+      "xl/workbook.xml": wb,
+      "xl/worksheets/sheet1.xml": sheet,
+    });
+
+    const fullResult = extractXlsxText(zip);
+    const limited = extractXlsxText(zip, 100);
+
+    expect(fullResult.length).toBeGreaterThan(500);
+    expect(limited.length).toBeLessThan(fullResult.length);
+    expect(limited.length).toBeLessThan(250);
+    expect(limited).toContain("--- Sheet: Data ---");
+  });
+
+  it("extractPptxText stops after exceeding budget", () => {
+    const makeSlide = (text: string) =>
+      [
+        '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"',
+        ' xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">',
+        "<p:cSld><p:spTree><p:sp><p:txBody>",
+        `<a:p><a:r><a:t>${text}</a:t></a:r></a:p>`,
+        "</p:txBody></p:sp></p:spTree></p:cSld>",
+        "</p:sld>",
+      ].join("");
+
+    const entries: Record<string, string> = {};
+    for (let i = 1; i <= 20; i++) {
+      entries[`ppt/slides/slide${i}.xml`] = makeSlide(`Slide ${i} content ${"z".repeat(30)}`);
+    }
+    const zip = makeZip(entries);
+
+    const fullResult = extractPptxText(zip);
+    const limited = extractPptxText(zip, 100);
+
+    expect(fullResult.length).toBeGreaterThan(500);
+    expect(limited.length).toBeLessThan(fullResult.length);
+    expect(limited.length).toBeLessThan(250);
+    expect(limited).toContain("--- Slide 1 ---");
+  });
+
+  it("extractors return full content when maxChars is undefined", () => {
+    const paragraphs: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      paragraphs.push(`<w:p><w:r><w:t>Line ${i}</w:t></w:r></w:p>`);
+    }
+    const xml = [
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+      "<w:body>",
+      ...paragraphs,
+      "</w:body>",
+      "</w:document>",
+    ].join("");
+    const zip = makeZip({ "word/document.xml": xml });
+
+    const withoutBudget = extractDocxText(zip);
+    const withLargeBudget = extractDocxText(zip, 1_000_000);
+
+    expect(withoutBudget).toBe(withLargeBudget);
+    expect(withoutBudget).toContain("Line 9");
   });
 });

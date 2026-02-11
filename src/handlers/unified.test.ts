@@ -592,6 +592,29 @@ describe("handleGetFileContent", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Failed to extract text");
   });
+
+  it("rejects Office file exceeding 50 MB size limit", async () => {
+    const oversizeMB = 60;
+    const oversizeBytes = String(oversizeMB * 1024 * 1024);
+
+    vi.mocked(mockDrive.files.get).mockResolvedValueOnce({
+      data: {
+        name: "huge.docx",
+        mimeType: EXPORT_MIME_TYPES.DOCX,
+        modifiedTime: "2024-01-01T00:00:00.000Z",
+        size: oversizeBytes,
+      },
+    } as never);
+
+    const result = await handleGetFileContent(mockDrive, mockDocs, mockSheets, mockSlides, {
+      fileId: "huge123",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("too large");
+    expect(result.content[0].text).toContain("60.0 MB");
+    expect(result.content[0].text).toContain("downloadFile");
+    expect(mockDrive.files.get).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("handleUpdateFile - Office files", () => {

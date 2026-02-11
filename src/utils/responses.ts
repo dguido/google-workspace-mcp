@@ -15,7 +15,7 @@ export function isConfigurationError(message: string): boolean {
  * Maximum character limit for response content.
  * Large responses can overwhelm agent context windows.
  */
-const CHARACTER_LIMIT = 25000;
+export const CHARACTER_LIMIT = 25000;
 
 export interface TruncationResult {
   content: string;
