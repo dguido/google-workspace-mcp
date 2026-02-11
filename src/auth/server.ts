@@ -326,7 +326,10 @@ export class AuthServer {
       // Generate state for CSRF protection (RFC 8252 §8.9)
       this.expectedState = crypto.randomBytes(32).toString("base64url");
     } catch (error) {
-      log("Failed to load credentials for auth flow:", error);
+      log(
+        "Failed to load credentials for auth flow:",
+        error instanceof Error ? error.message : "unknown error",
+      );
       this.authCompletedSuccessfully = false;
       await this.stop();
       return false;

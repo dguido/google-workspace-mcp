@@ -30,7 +30,7 @@ export function log(message: string, data?: unknown): void {
   try {
     serialized = JSON.stringify(data, redactSensitive);
   } catch {
-    serialized = String(data);
+    serialized = "[unserializable data]";
   }
   const logMessage = data
     ? `[${timestamp}] ${message}: ${serialized}`

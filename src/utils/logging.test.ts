@@ -88,7 +88,7 @@ describe("log", () => {
     obj.self = obj;
     log("circular", obj);
     expect(errorSpy).toHaveBeenCalledOnce();
-    expect(errorSpy.mock.calls[0][0]).toContain("[object Object]");
+    expect(errorSpy.mock.calls[0][0]).toContain("[unserializable data]");
   });
 
   it("handles string data parameter", () => {
