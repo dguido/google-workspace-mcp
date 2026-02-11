@@ -9,7 +9,7 @@ import { URL } from "url";
 import open from "open";
 import { loadCredentials } from "./client.js";
 import { log } from "../utils/logging.js";
-import { mapGoogleError } from "../errors/index.js";
+import { GoogleAuthError, mapGoogleError } from "../errors/index.js";
 import { getScopesForEnabledServices } from "../config/scopes.js";
 import { getActiveProfile } from "./utils.js";
 import {
@@ -79,7 +79,7 @@ export class AuthServer {
   private codeChallenge: string | null = null;
   private expectedState: string | null = null;
   private rl: readline.Interface | null = null;
-  private resolved = false;
+  private authFlowCompleted = false;
   public authCompletedSuccessfully = false;
 
   constructor(oauth2Client: OAuth2Client) {
@@ -120,10 +120,12 @@ export class AuthServer {
   /**
    * Exchange an authorization code for tokens and persist them.
    * Shared by both the HTTP callback and the stdin prompt paths.
-   * Returns true on success, false on failure.
+   * Returns true on success, or a GoogleAuthError on failure.
    */
-  private async exchangeCodeForTokens(code: string): Promise<boolean> {
-    if (!this.flowOAuth2Client) return false;
+  private async exchangeCodeForTokens(code: string): Promise<true | GoogleAuthError> {
+    if (!this.flowOAuth2Client) {
+      return mapGoogleError(new Error("OAuth client not initialized"));
+    }
     try {
       const { tokens } = await this.flowOAuth2Client.getToken({
         code,
@@ -135,10 +137,10 @@ export class AuthServer {
       return true;
     } catch (error: unknown) {
       this.authCompletedSuccessfully = false;
-      this.clearPkceState();
+      // Preserve PKCE state so stdin retries can work
       const authError = mapGoogleError(error);
       log("Token exchange error:", authError.toToolResponse());
-      return false;
+      return authError;
     }
   }
 
@@ -170,15 +172,16 @@ export class AuthServer {
     }
 
     // If stdin already completed the flow, just return success
-    if (this.resolved) {
+    if (this.authFlowCompleted) {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(renderSuccessPage(this.tokenManager.getTokenPath(), "", getActiveProfile()));
       return;
     }
 
-    const success = await this.exchangeCodeForTokens(code);
-    if (success) {
-      this.resolved = true;
+    // Claim the race before awaiting the network call
+    this.authFlowCompleted = true;
+    const result = await this.exchangeCodeForTokens(code);
+    if (result === true) {
       this.closeReadline();
 
       // Schedule server shutdown after response completes
@@ -195,8 +198,9 @@ export class AuthServer {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(renderSuccessPage(tokenPath, gitignoreWarning, getActiveProfile()));
     } else {
+      this.authFlowCompleted = false; // Release so other path can retry
       res.writeHead(500, { "Content-Type": "text/html" });
-      res.end(renderErrorPage(mapGoogleError(new Error("Token exchange failed"))));
+      res.end(renderErrorPage(result));
     }
   }
 
@@ -243,9 +247,9 @@ export class AuthServer {
     });
 
     const promptUser = (): void => {
-      if (this.resolved || !this.rl) return;
+      if (this.authFlowCompleted || !this.rl) return;
       this.rl.question("\nPaste redirect URL or auth code: ", async (answer) => {
-        if (this.resolved) return;
+        if (this.authFlowCompleted) return;
 
         const parsed = extractCodeFromInput(answer);
         if (!parsed) {
@@ -258,7 +262,12 @@ export class AuthServer {
         }
 
         // Validate state when present in pasted URL
-        if (parsed.state && this.expectedState) {
+        if (parsed.state) {
+          if (!this.expectedState) {
+            console.error("Auth state expired. Please restart the auth flow.");
+            promptUser();
+            return;
+          }
           if (!timingSafeEqual(parsed.state, this.expectedState)) {
             console.error("State parameter mismatch — possible CSRF." + " Please try again.");
             promptUser();
@@ -266,12 +275,16 @@ export class AuthServer {
           }
         }
 
-        const success = await this.exchangeCodeForTokens(parsed.code);
-        if (success) {
-          this.resolved = true;
+        // Claim the race before awaiting the network call
+        this.authFlowCompleted = true;
+        const result = await this.exchangeCodeForTokens(parsed.code);
+        if (result === true) {
           this.closeReadline();
           console.error("\nAuthentication successful! Tokens saved.");
+          // Stop the HTTP server (no response to flush)
+          this.stop().catch((err) => log("Auth server shutdown error:", err));
         } else {
+          this.authFlowCompleted = false; // Release so other path can retry
           console.error("Token exchange failed." + " Please check the code and try again.");
           promptUser();
         }
@@ -320,53 +333,60 @@ export class AuthServer {
     }
 
     if (openBrowser) {
-      // Check if the last auth error indicates a deleted/invalid client
-      if (this.isClientInvalidError()) {
-        const lastError = getLastTokenAuthError();
-        console.error("\n❌ AUTHENTICATION BLOCKED");
-        console.error("══════════════════════════════════════════");
-        console.error(`\nError: ${lastError?.reason}`);
-        console.error("\nHow to fix:");
-        lastError?.fix.forEach((step, i) => console.error(`  ${i + 1}. ${step}`));
-        if (lastError?.links && lastError.links.length > 0) {
-          console.error("\nHelpful links:");
-          lastError.links.forEach((link) => console.error(`  - ${link.label}: ${link.url}`));
-        }
-        console.error("");
-        this.authCompletedSuccessfully = false;
-        await this.stop();
-        return false;
-      }
-
-      if (!this.codeChallenge || !this.expectedState) {
-        throw new Error("PKCE not initialized - internal error");
-      }
-
-      const authorizeUrl = this.flowOAuth2Client.generateAuthUrl({
-        access_type: "offline",
-        scope: getScopesForEnabledServices(),
-        prompt: "consent",
-        code_challenge_method: CodeChallengeMethod.S256,
-        code_challenge: this.codeChallenge,
-        state: this.expectedState,
-      });
-
-      console.error("\n🔐 AUTHENTICATION REQUIRED");
-      console.error("══════════════════════════════════════════");
-      console.error("\nOpening your browser to authenticate...");
-      console.error(`\nAuth URL (copy if browser doesn't open):\n  ${authorizeUrl}`);
-      console.error(
-        "\nIf running remotely: open the URL in your local" +
-          " browser.\nThe redirect page won't load — copy the" +
-          " URL from your address bar\nand paste it below.",
-      );
-
-      await open(authorizeUrl);
-
-      // Start stdin prompt for headless/remote environments
-      this.startStdinPrompt();
+      return this.presentAuthUrlAndPrompt();
     }
 
+    return true;
+  }
+
+  /**
+   * Present the auth URL to the user, open the browser,
+   * and start the stdin prompt for headless environments.
+   */
+  private async presentAuthUrlAndPrompt(): Promise<boolean> {
+    if (this.isClientInvalidError()) {
+      const lastError = getLastTokenAuthError();
+      console.error("\n❌ AUTHENTICATION BLOCKED");
+      console.error("══════════════════════════════════════════");
+      console.error(`\nError: ${lastError?.reason}`);
+      console.error("\nHow to fix:");
+      lastError?.fix.forEach((step, i) => console.error(`  ${i + 1}. ${step}`));
+      if (lastError?.links && lastError.links.length > 0) {
+        console.error("\nHelpful links:");
+        lastError.links.forEach((link) => console.error(`  - ${link.label}: ${link.url}`));
+      }
+      console.error("");
+      this.authCompletedSuccessfully = false;
+      await this.stop();
+      return false;
+    }
+
+    if (!this.codeChallenge || !this.expectedState) {
+      throw new Error("PKCE not initialized - internal error");
+    }
+
+    const authorizeUrl = this.flowOAuth2Client!.generateAuthUrl({
+      access_type: "offline",
+      scope: getScopesForEnabledServices(),
+      prompt: "consent",
+      code_challenge_method: CodeChallengeMethod.S256,
+      code_challenge: this.codeChallenge,
+      state: this.expectedState,
+    });
+
+    console.error("\n🔐 AUTHENTICATION REQUIRED");
+    console.error("══════════════════════════════════════════");
+    console.error("\nOpening your browser to authenticate...");
+    console.error(`\nAuth URL (copy if browser doesn't open):\n  ${authorizeUrl}`);
+    console.error("\nIf running remotely: open the URL in your local browser.");
+    console.error(
+      "The redirect page won't load — copy the URL from your" + " address bar\nand paste it below.",
+    );
+
+    await open(authorizeUrl);
+
+    // Start stdin prompt for headless/remote environments
+    this.startStdinPrompt();
     return true;
   }
 
