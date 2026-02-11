@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { OAuth2Client } from "google-auth-library";
-import { AuthServer } from "./server.js";
+import { AuthServer, extractCodeFromInput } from "./server.js";
 import * as fs from "fs/promises";
 import http from "http";
 
@@ -33,6 +33,80 @@ vi.mock("../utils/logging.js", () => ({
 vi.mock("open", () => ({
   default: vi.fn().mockResolvedValue(undefined),
 }));
+
+describe("extractCodeFromInput", () => {
+  it("extracts code and state from full redirect URL", () => {
+    const input =
+      "http://127.0.0.1:54321/oauth2callback" + "?code=4/0AQSTthis_is_the_code&state=abc123";
+    const result = extractCodeFromInput(input);
+    expect(result).toEqual({
+      code: "4/0AQSTthis_is_the_code",
+      state: "abc123",
+    });
+  });
+
+  it("extracts code from URL without state", () => {
+    const input = "http://127.0.0.1:54321/oauth2callback" + "?code=4/0AQSTthis_is_the_code";
+    const result = extractCodeFromInput(input);
+    expect(result).toEqual({
+      code: "4/0AQSTthis_is_the_code",
+      state: undefined,
+    });
+  });
+
+  it("extracts code from query string format", () => {
+    const input = "?code=4/0AQSTthis_is_the_code&state=xyz789";
+    const result = extractCodeFromInput(input);
+    expect(result).toEqual({
+      code: "4/0AQSTthis_is_the_code",
+      state: "xyz789",
+    });
+  });
+
+  it("accepts bare authorization code", () => {
+    const input = "4/0AQSTthis_is_a_bare_code";
+    const result = extractCodeFromInput(input);
+    expect(result).toEqual({
+      code: "4/0AQSTthis_is_a_bare_code",
+    });
+  });
+
+  it("trims whitespace from input", () => {
+    const input = "  4/0AQSTthis_is_the_code  \n";
+    const result = extractCodeFromInput(input);
+    expect(result).toEqual({
+      code: "4/0AQSTthis_is_the_code",
+    });
+  });
+
+  it("returns null for empty input", () => {
+    expect(extractCodeFromInput("")).toBeNull();
+    expect(extractCodeFromInput("   ")).toBeNull();
+  });
+
+  it("returns null for short input (<=10 chars)", () => {
+    expect(extractCodeFromInput("short")).toBeNull();
+    expect(extractCodeFromInput("1234567890")).toBeNull();
+  });
+
+  it("returns null for input with spaces (not a URL or code)", () => {
+    expect(extractCodeFromInput("this is not a valid code")).toBeNull();
+  });
+
+  it("returns null for URL without code param", () => {
+    const input = "http://127.0.0.1:54321/oauth2callback?error=access_denied";
+    expect(extractCodeFromInput(input)).toBeNull();
+  });
+
+  it("handles HTTPS URLs from Google", () => {
+    const input = "https://accounts.google.com/o/oauth2/auth" + "?code=4/0AQSTthe_code&state=s123";
+    const result = extractCodeFromInput(input);
+    expect(result).toEqual({
+      code: "4/0AQSTthe_code",
+      state: "s123",
+    });
+  });
+});
 
 describe("auth/server", () => {
   let oauth2Client: OAuth2Client;
