@@ -27,6 +27,35 @@ The authentication server uses an ephemeral port assigned by the OS, so no speci
 npx @dguido/google-workspace-mcp auth
 ```
 
+### Running on remote/SSH/container environments
+
+When running on a machine without a browser (SSH sessions, containers, WSL without browser integration), the auth flow provides a stdin fallback:
+
+1. Run the auth command — it prints the auth URL and a paste prompt
+2. Copy the auth URL and open it in your **local** browser
+3. Authenticate with Google — the browser redirects to `http://127.0.0.1:<port>/...`
+4. The redirect page won't load (the port is on the remote machine) — **this is expected**
+5. Copy the full URL from your browser's address bar (it contains `?code=...&state=...`)
+6. Paste it at the prompt on the remote machine
+
+```
+🔐 AUTHENTICATION REQUIRED
+══════════════════════════════════════════
+
+Opening your browser to authenticate...
+
+Auth URL (copy if browser doesn't open):
+  https://accounts.google.com/o/oauth2/v2/auth?client_id=...
+
+If running remotely: open the URL in your local browser.
+The redirect page won't load — copy the URL from your address bar
+and paste it below.
+
+Paste redirect URL or auth code: <paste here>
+```
+
+The stdin prompt only appears when a TTY is detected (interactive terminal). In non-interactive environments (piped input, MCP server mode), only the HTTP callback path is available.
+
 ### "Tokens expired" or "Invalid grant"
 
 **For Google OAuth apps in "Testing" status:**
