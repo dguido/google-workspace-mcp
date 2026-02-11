@@ -59,17 +59,17 @@
     "async-mutex": "0.5.0",
     "fflate": "0.8.2",
     "google-auth-library": "10.5.0",
-    "googleapis": "170.1.0",
+    "googleapis": "171.2.0",
     "open": "11.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "25.0.10",
+    "@types/node": "25.2.0",
     "@vitest/coverage-v8": "4.0.18",
     "esbuild": "0.27.2",
-    "oxfmt": "^0.27.0",
-    "oxlint": "1.42.0",
-    "oxlint-tsgolint": "0.11.3",
+    "oxfmt": "^0.28.0",
+    "oxlint": "1.43.0",
+    "oxlint-tsgolint": "0.11.4",
     "typescript": "5.9.3",
     "vitest": "4.0.18"
   },
