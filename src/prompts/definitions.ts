@@ -100,7 +100,7 @@ export const PROMPTS: PromptDefinition[] = [
   {
     name: "migrate-format",
     description:
-      "Convert legacy Microsoft Office files (.doc, .xls, .ppt) to Google Workspace formats.",
+      "Convert Office files to Google Workspace formats for editing, or convert legacy binary formats (.doc, .xls, .ppt) for reading.",
     arguments: [
       {
         name: "folderId",
@@ -292,9 +292,13 @@ function generateMigrateFormatPrompt(args: Record<string, string>): PromptMessag
       role: "user",
       content: {
         type: "text",
-        text: `Please find and convert legacy Office files to Google Workspace formats in folder "${folderId}":
+        text: `Please find and convert Office files to Google Workspace formats in folder "${folderId}":
 
 Target file types: ${typeFilter}
+
+Note: Modern OOXML files (.docx, .xlsx, .pptx) can already be read directly via get_file_content without conversion. Conversion is useful when you need to:
+- Make files editable through Google Docs, Sheets, or Slides
+- Convert legacy binary formats (.doc, .xls, .ppt) which cannot be read directly
 
 Steps:
 1. Use search to find files matching the target types in the specified folder

@@ -6,6 +6,7 @@ export {
   errorResponse,
   authErrorResponse,
   truncateResponse,
+  CHARACTER_LIMIT,
   isConfigurationError,
   DIAGNOSTIC_HINT,
 } from "./responses.js";

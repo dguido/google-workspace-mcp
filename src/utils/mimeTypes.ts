@@ -39,7 +39,7 @@ export const EXPORT_MIME_TYPES = {
 } as const;
 
 /** File type categories */
-export type FileType = "doc" | "sheet" | "slides" | "text";
+export type FileType = "doc" | "sheet" | "slides" | "text" | "docx" | "xlsx" | "pptx";
 
 /** Map file extensions to their type category */
 export const EXTENSION_TO_TYPE: Record<string, FileType> = {
