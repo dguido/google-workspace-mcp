@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { gmail_v1 } from "googleapis";
 import {
+  handleDeleteEmail,
   handleModifyEmail,
   handleSearchEmails,
   buildSearchQuery,
@@ -25,6 +26,8 @@ function createMockGmail(): gmail_v1.Gmail {
       messages: {
         list: vi.fn(),
         get: vi.fn(),
+        delete: vi.fn(),
+        batchDelete: vi.fn(),
       },
     },
   } as unknown as gmail_v1.Gmail;
@@ -426,6 +429,137 @@ describe("handleSearchEmails", () => {
   it("returns validation error when no params provided", async () => {
     const result = await handleSearchEmails(mockGmail, {});
 
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleDeleteEmail", () => {
+  let mockGmail: gmail_v1.Gmail;
+
+  beforeEach(() => {
+    mockGmail = createMockGmail();
+  });
+
+  it("deletes a single email by id", async () => {
+    vi.mocked(mockGmail.users.messages.delete).mockResolvedValue({} as never);
+
+    const result = await handleDeleteEmail(mockGmail, { id: "msg123" });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("msg123");
+    expect(result.content[0].text).toContain("permanently deleted");
+    expect(mockGmail.users.messages.delete).toHaveBeenCalledWith({
+      userId: "me",
+      id: "msg123",
+    });
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(1);
+    expect(data.ids).toEqual(["msg123"]);
+  });
+
+  it("batch deletes multiple emails", async () => {
+    vi.mocked(mockGmail.users.messages.batchDelete).mockResolvedValue({} as never);
+
+    const ids = ["msg1", "msg2", "msg3"];
+    const result = await handleDeleteEmail(mockGmail, { id: ids });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("3 email(s)");
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(3);
+    expect(data.ids).toEqual(ids);
+  });
+
+  it("falls back to individual deletes when batch fails", async () => {
+    vi.mocked(mockGmail.users.messages.batchDelete).mockRejectedValue(
+      new Error("Batch API unavailable"),
+    );
+    vi.mocked(mockGmail.users.messages.delete).mockResolvedValue({} as never);
+
+    const ids = ["msg1", "msg2"];
+    const result = await handleDeleteEmail(mockGmail, { id: ids });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("2 email(s)");
+    expect(mockGmail.users.messages.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-throws auth errors from batch delete", async () => {
+    const authError = new Error("Unauthorized") as Error & {
+      response: { status: number };
+    };
+    authError.response = { status: 401 };
+    vi.mocked(mockGmail.users.messages.batchDelete).mockRejectedValue(authError);
+
+    await expect(handleDeleteEmail(mockGmail, { id: ["msg1", "msg2"] })).rejects.toThrow(
+      "Unauthorized",
+    );
+    expect(mockGmail.users.messages.delete).not.toHaveBeenCalled();
+  });
+
+  it("reports partial failures with categorized errors", async () => {
+    vi.mocked(mockGmail.users.messages.batchDelete).mockRejectedValue(
+      new Error("Batch unavailable"),
+    );
+    vi.mocked(mockGmail.users.messages.delete)
+      .mockResolvedValueOnce({} as never)
+      .mockRejectedValueOnce(new Error("Requested entity was not found"))
+      .mockRejectedValueOnce(new Error("Permission denied"));
+
+    const result = await handleDeleteEmail(mockGmail, {
+      id: ["msg1", "msg2", "msg3"],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("1 deleted");
+    expect(result.content[0].text).toContain("2 failed");
+    expect(result.content[0].text).toContain("NOT_FOUND");
+    expect(result.content[0].text).toContain("PERMISSION_DENIED");
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(1);
+    expect(data.ids).toEqual(["msg1"]);
+  });
+
+  it("returns schema-compliant response on full fallback failure", async () => {
+    vi.mocked(mockGmail.users.messages.batchDelete).mockRejectedValue(
+      new Error("Batch unavailable"),
+    );
+    vi.mocked(mockGmail.users.messages.delete)
+      .mockRejectedValueOnce(new Error("not found"))
+      .mockRejectedValueOnce(new Error("not found"));
+
+    const result = await handleDeleteEmail(mockGmail, {
+      id: ["msg1", "msg2"],
+    });
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(0);
+    expect(data.ids).toEqual([]);
+    expect(result.content[0].text).toContain("NOT_FOUND (2)");
+  });
+
+  it("returns validation error for empty id", async () => {
+    const result = await handleDeleteEmail(mockGmail, { id: "" });
+    expect(result.isError).toBe(true);
+  });
+
+  it("returns validation error for empty array", async () => {
+    const result = await handleDeleteEmail(mockGmail, { id: [] });
     expect(result.isError).toBe(true);
   });
 });

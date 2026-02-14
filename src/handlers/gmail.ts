@@ -230,8 +230,8 @@ export async function handleDraftEmail(
   return structuredResponse(
     `Draft created successfully.\nDraft ID: ${response.data.id}\nMessage ID: ${response.data.message?.id}`,
     {
-      id: response.data.id,
-      messageId: response.data.message?.id,
+      draftId: response.data.id,
+      id: response.data.message?.id,
       threadId: response.data.message?.threadId,
     },
   );
@@ -240,11 +240,11 @@ export async function handleDraftEmail(
 export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Promise<ToolResponse> {
   const validation = validateArgs(ReadEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { messageId, format, contentFormat } = validation.data;
+  const { id, format, contentFormat } = validation.data;
 
   const response = await gmail.users.messages.get({
     userId: "me",
-    id: messageId,
+    id,
     format,
   });
 
@@ -282,7 +282,7 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
   const textOutput = textOutputParts.filter(Boolean).join("\n");
   const { content: truncatedContent, truncated } = truncateResponse(textOutput);
 
-  log("Read email", { messageId, contentFormat, truncated });
+  log("Read email", { id, contentFormat, truncated });
 
   // Build response body based on contentFormat
   const responseBody =
@@ -439,21 +439,21 @@ export async function handleDeleteEmail(
 ): Promise<ToolResponse> {
   const validation = validateArgs(DeleteEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { messageId } = validation.data;
+  const { id } = validation.data;
 
   // Normalize to array for uniform handling
-  const messageIds = Array.isArray(messageId) ? messageId : [messageId];
+  const ids = Array.isArray(id) ? id : [id];
 
-  if (messageIds.length === 1) {
+  if (ids.length === 1) {
     // Single delete
     await gmail.users.messages.delete({
       userId: "me",
-      id: messageIds[0],
+      id: ids[0],
     });
-    log("Deleted email", { messageId: messageIds[0] });
-    return structuredResponse(`Email ${messageIds[0]} permanently deleted.`, {
+    log("Deleted email", { id: ids[0] });
+    return structuredResponse(`Email ${ids[0]} permanently deleted.`, {
       deleted: 1,
-      messageIds: [messageIds[0]],
+      ids: [ids[0]],
     });
   }
 
@@ -461,39 +461,95 @@ export async function handleDeleteEmail(
   try {
     await gmail.users.messages.batchDelete({
       userId: "me",
-      requestBody: { ids: messageIds },
+      requestBody: { ids },
     });
   } catch (batchError) {
     // Re-throw auth errors so the top-level handler can add diagnostics
     const status = (batchError as { response?: { status?: number } })?.response?.status;
     if (status === 401 || status === 403) throw batchError;
 
+    const batchMsg = batchError instanceof Error ? batchError.message : String(batchError);
+    log("Batch delete failed, falling back to individual deletes", {
+      error: batchMsg,
+      status,
+      count: ids.length,
+    });
+
     // Batch API may not be available, fall back to individual deletes
     const results = await Promise.allSettled(
-      messageIds.map((id) =>
+      ids.map((msgId) =>
         gmail.users.messages.delete({
           userId: "me",
-          id,
+          id: msgId,
         }),
       ),
     );
 
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.filter((r) => r.status === "rejected").length;
-
-    if (failed > 0) {
-      return structuredResponse(`Partially completed: ${succeeded} deleted, ${failed} failed.`, {
-        succeeded,
-        failed,
-        total: messageIds.length,
+    const succeededIds = results
+      .map((r, i) => ({ id: ids[i], result: r }))
+      .filter((item) => item.result.status === "fulfilled")
+      .map((item) => item.id);
+    const failures = results
+      .map((r, i) => ({ id: ids[i], result: r }))
+      .filter(
+        (
+          item,
+        ): item is {
+          id: string;
+          result: PromiseRejectedResult;
+        } => item.result.status === "rejected",
+      )
+      .map((item) => {
+        const errMsg = item.result.reason?.message || String(item.result.reason) || "Unknown error";
+        return {
+          id: item.id,
+          category: categorizeError(errMsg),
+          error: errMsg,
+        };
       });
+
+    if (failures.length > 0) {
+      const failuresByCategory = failures.reduce(
+        (acc, f) => {
+          if (!acc[f.category]) acc[f.category] = [];
+          acc[f.category].push(f.id);
+          return acc;
+        },
+        {} as Record<string, string[]>,
+      );
+
+      const categoryLines = Object.entries(failuresByCategory)
+        .map(([category, failedIds]) => {
+          const suggestion =
+            CATEGORY_SUGGESTIONS[category as FailureCategory] ||
+            "Check the message IDs and try again";
+          const idList = failedIds.slice(0, 5).join(", ");
+          const more = failedIds.length > 5 ? ` (+${failedIds.length - 5} more)` : "";
+          return `- ${category} (${failedIds.length}): ` + `${suggestion}\n  ${idList}${more}`;
+        })
+        .join("\n");
+
+      log("Batch delete partial failure", {
+        succeeded: succeededIds.length,
+        failed: failures.length,
+      });
+
+      return structuredResponse(
+        `Partially completed: ${succeededIds.length} deleted, ` +
+          `${failures.length} failed.\n\n` +
+          `Failures:\n${categoryLines}`,
+        {
+          deleted: succeededIds.length,
+          ids: succeededIds,
+        },
+      );
     }
   }
 
-  log("Deleted emails (batch)", { count: messageIds.length });
-  return structuredResponse(`Successfully deleted ${messageIds.length} email(s).`, {
-    deleted: messageIds.length,
-    messageIds,
+  log("Deleted emails (batch)", { count: ids.length });
+  return structuredResponse(`Successfully deleted ${ids.length} email(s).`, {
+    deleted: ids.length,
+    ids,
   });
 }
 
@@ -632,12 +688,12 @@ export async function handleDownloadAttachment(
 ): Promise<ToolResponse> {
   const validation = validateArgs(DownloadAttachmentSchema, args);
   if (!validation.success) return validation.response;
-  const { messageId, attachmentId, filename, outputPath } = validation.data;
+  const { id, attachmentId, filename, outputPath } = validation.data;
 
   // Get the attachment
   const response = await gmail.users.messages.attachments.get({
     userId: "me",
-    messageId,
+    messageId: id,
     id: attachmentId,
   });
 
@@ -656,14 +712,14 @@ export async function handleDownloadAttachment(
   // Write to file
   await fs.writeFile(fullPath, data);
 
-  log("Downloaded attachment", { messageId, attachmentId, path: fullPath });
+  log("Downloaded attachment", { id, attachmentId, path: fullPath });
 
   return structuredResponse(
     `Attachment downloaded successfully.\nSaved to: ${fullPath}\nSize: ${data.length} bytes`,
     {
       path: fullPath,
       size: data.length,
-      messageId,
+      id,
       attachmentId,
     },
   );

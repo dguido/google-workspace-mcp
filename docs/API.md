@@ -763,7 +763,7 @@ Read email content and metadata.
 
 | Parameter       | Type   | Required | Description                                                                              |
 | --------------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
-| `messageId`     | string | Yes      | Email message ID                                                                         |
+| `id`            | string | Yes      | Email message ID (from search_emails results)                                            |
 | `format`        | string | No       | Response format: full (default), metadata, minimal, raw                                  |
 | `contentFormat` | string | No       | Content format: full (default, includes HTML), text (plain text only), headers (no body) |
 
@@ -790,9 +790,9 @@ Search emails using structured parameters or Gmail query syntax (max 500 per req
 
 Delete emails permanently (max 1000 IDs per request).
 
-| Parameter   | Type            | Required | Description                           |
-| ----------- | --------------- | -------- | ------------------------------------- |
-| `messageId` | string or array | Yes      | Message ID or array of IDs (max 1000) |
+| Parameter | Type            | Required | Description                           |
+| --------- | --------------- | -------- | ------------------------------------- |
+| `id`      | string or array | Yes      | Message ID or array of IDs (max 1000) |
 
 ### modify_email
 
@@ -810,7 +810,7 @@ Download an email attachment to disk.
 
 | Parameter      | Type   | Required | Description                   |
 | -------------- | ------ | -------- | ----------------------------- |
-| `messageId`    | string | Yes      | Email message ID              |
+| `id`           | string | Yes      | Email message ID              |
 | `attachmentId` | string | Yes      | Attachment ID from read_email |
 | `filename`     | string | No       | Save filename                 |
 | `outputPath`   | string | No       | Output directory              |
