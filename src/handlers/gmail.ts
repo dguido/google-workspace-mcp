@@ -468,6 +468,13 @@ export async function handleDeleteEmail(
     const status = (batchError as { response?: { status?: number } })?.response?.status;
     if (status === 401 || status === 403) throw batchError;
 
+    const batchMsg = batchError instanceof Error ? batchError.message : String(batchError);
+    log("Batch delete failed, falling back to individual deletes", {
+      error: batchMsg,
+      status,
+      count: ids.length,
+    });
+
     // Batch API may not be available, fall back to individual deletes
     const results = await Promise.allSettled(
       ids.map((msgId) =>
@@ -478,15 +485,64 @@ export async function handleDeleteEmail(
       ),
     );
 
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.filter((r) => r.status === "rejected").length;
-
-    if (failed > 0) {
-      return structuredResponse(`Partially completed: ${succeeded} deleted, ${failed} failed.`, {
-        succeeded,
-        failed,
-        total: ids.length,
+    const succeededIds = results
+      .map((r, i) => ({ id: ids[i], result: r }))
+      .filter((item) => item.result.status === "fulfilled")
+      .map((item) => item.id);
+    const failures = results
+      .map((r, i) => ({ id: ids[i], result: r }))
+      .filter(
+        (
+          item,
+        ): item is {
+          id: string;
+          result: PromiseRejectedResult;
+        } => item.result.status === "rejected",
+      )
+      .map((item) => {
+        const errMsg = item.result.reason?.message || String(item.result.reason) || "Unknown error";
+        return {
+          id: item.id,
+          category: categorizeError(errMsg),
+          error: errMsg,
+        };
       });
+
+    if (failures.length > 0) {
+      const failuresByCategory = failures.reduce(
+        (acc, f) => {
+          if (!acc[f.category]) acc[f.category] = [];
+          acc[f.category].push(f.id);
+          return acc;
+        },
+        {} as Record<string, string[]>,
+      );
+
+      const categoryLines = Object.entries(failuresByCategory)
+        .map(([category, failedIds]) => {
+          const suggestion =
+            CATEGORY_SUGGESTIONS[category as FailureCategory] ||
+            "Check the message IDs and try again";
+          const idList = failedIds.slice(0, 5).join(", ");
+          const more = failedIds.length > 5 ? ` (+${failedIds.length - 5} more)` : "";
+          return `- ${category} (${failedIds.length}): ` + `${suggestion}\n  ${idList}${more}`;
+        })
+        .join("\n");
+
+      log("Batch delete partial failure", {
+        succeeded: succeededIds.length,
+        failed: failures.length,
+      });
+
+      return structuredResponse(
+        `Partially completed: ${succeededIds.length} deleted, ` +
+          `${failures.length} failed.\n\n` +
+          `Failures:\n${categoryLines}`,
+        {
+          deleted: succeededIds.length,
+          ids: succeededIds,
+        },
+      );
     }
   }
 

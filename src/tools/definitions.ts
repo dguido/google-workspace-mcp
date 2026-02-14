@@ -3200,6 +3200,11 @@ export const gmailTools: ToolDefinition[] = [
       properties: {
         path: { type: "string", description: "Saved file path" },
         size: { type: "number", description: "File size in bytes" },
+        id: { type: "string", description: "Message ID" },
+        attachmentId: {
+          type: "string",
+          description: "Attachment ID",
+        },
       },
     },
   },
