@@ -2970,8 +2970,8 @@ export const gmailTools: ToolDefinition[] = [
     outputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Draft ID" },
-        messageId: { type: "string", description: "Message ID" },
+        draftId: { type: "string", description: "Draft ID" },
+        id: { type: "string", description: "Message ID" },
         threadId: { type: "string" },
       },
     },
@@ -2983,7 +2983,10 @@ export const gmailTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        messageId: { type: "string", description: "Email message ID" },
+        id: {
+          type: "string",
+          description: "Email message ID (from search_emails results)",
+        },
         format: {
           type: "string",
           enum: ["full", "metadata", "minimal", "raw"],
@@ -2996,7 +2999,7 @@ export const gmailTools: ToolDefinition[] = [
             "Content format: 'full' (default, includes HTML), 'text' (plain text only, smaller), 'headers' (metadata only, no body)",
         },
       },
-      required: ["messageId"],
+      required: ["id"],
     },
     outputSchema: {
       type: "object",
@@ -3120,18 +3123,18 @@ export const gmailTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        messageId: {
+        id: {
           oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 1000 }],
           description: "Message ID or array of IDs (max 1000)",
         },
       },
-      required: ["messageId"],
+      required: ["id"],
     },
     outputSchema: {
       type: "object",
       properties: {
         deleted: { type: "number", description: "Number of messages deleted" },
-        messageIds: {
+        ids: {
           type: "array",
           items: { type: "string" },
           description: "IDs of deleted messages",
@@ -3182,12 +3185,15 @@ export const gmailTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        messageId: { type: "string", description: "Email message ID" },
-        attachmentId: { type: "string", description: "Attachment ID from readEmail" },
+        id: {
+          type: "string",
+          description: "Email message ID (from search_emails or read_email results)",
+        },
+        attachmentId: { type: "string", description: "Attachment ID from read_email" },
         filename: { type: "string", description: "Save filename (optional)" },
         outputPath: { type: "string", description: "Output directory (optional)" },
       },
-      required: ["messageId", "attachmentId"],
+      required: ["id", "attachmentId"],
     },
     outputSchema: {
       type: "object",

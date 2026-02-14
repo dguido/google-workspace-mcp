@@ -138,7 +138,7 @@ export const DraftEmailSchema = z.object({
 export type DraftEmailInput = z.infer<typeof DraftEmailSchema>;
 
 export const ReadEmailSchema = z.object({
-  messageId: z.string().min(1, "Message ID required"),
+  id: z.string().min(1, "Message ID required"),
   format: z
     .enum(["full", "metadata", "minimal", "raw"])
     .optional()
@@ -190,7 +190,7 @@ export type SearchEmailsInput = z.infer<typeof SearchEmailsSchema>;
  * Schema for deleting emails - supports single ID or array for batch operations
  */
 export const DeleteEmailSchema = z.object({
-  messageId: z
+  id: z
     .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(1000)])
     .describe("Message ID or array of IDs (max 1000 for batch)"),
 });
@@ -211,7 +211,7 @@ export const ModifyEmailSchema = z.object({
 export type ModifyEmailInput = z.infer<typeof ModifyEmailSchema>;
 
 export const DownloadAttachmentSchema = z.object({
-  messageId: z.string().min(1, "Message ID required"),
+  id: z.string().min(1, "Message ID required"),
   attachmentId: z.string().min(1, "Attachment ID required"),
   filename: z.string().optional().describe("Save filename (uses original if not specified)"),
   outputPath: z.string().optional().describe("Output directory path"),
