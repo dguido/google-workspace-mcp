@@ -2895,7 +2895,7 @@ export const gmailTools: ToolDefinition[] = [
         to: {
           type: "array",
           items: { type: "string" },
-          description: "Recipient email addresses",
+          description: 'Recipient email addresses as an array, e.g. ["user@example.com"]',
         },
         subject: { type: "string", description: "Email subject" },
         body: { type: "string", description: "Plain text email body" },
@@ -2903,12 +2903,12 @@ export const gmailTools: ToolDefinition[] = [
         cc: {
           type: "array",
           items: { type: "string" },
-          description: "CC recipients",
+          description: 'CC recipients as an array, e.g. ["user@example.com"]',
         },
         bcc: {
           type: "array",
           items: { type: "string" },
-          description: "BCC recipients",
+          description: 'BCC recipients as an array, e.g. ["user@example.com"]',
         },
         replyTo: { type: "string", description: "Reply-to address" },
         attachments: {
@@ -2944,12 +2944,24 @@ export const gmailTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        to: { type: "array", items: { type: "string" }, description: "Recipients" },
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description: 'Recipient email addresses as an array, e.g. ["user@example.com"]',
+        },
         subject: { type: "string", description: "Subject" },
         body: { type: "string", description: "Plain text body" },
         html: { type: "string", description: "HTML body" },
-        cc: { type: "array", items: { type: "string" } },
-        bcc: { type: "array", items: { type: "string" } },
+        cc: {
+          type: "array",
+          items: { type: "string" },
+          description: 'CC recipients as an array, e.g. ["user@example.com"]',
+        },
+        bcc: {
+          type: "array",
+          items: { type: "string" },
+          description: 'BCC recipients as an array, e.g. ["user@example.com"]',
+        },
         replyTo: { type: "string" },
         attachments: { type: "array" },
         threadId: { type: "string" },
