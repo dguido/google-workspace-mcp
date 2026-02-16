@@ -1,6 +1,7 @@
 /**
  * Keys that must never appear in log output.
  * Values are replaced with "[REDACTED]" during serialization.
+ * Matching is case-insensitive.
  */
 const SENSITIVE_KEYS = new Set([
   "access_token",
@@ -10,11 +11,44 @@ const SENSITIVE_KEYS = new Set([
   "id_token",
   "private_key",
   "private_key_id",
+  "authorization",
 ]);
 
+const SENSITIVE_PATTERNS = [
+  /ya29\.[A-Za-z0-9_-]{10,}/,
+  /1\/\/[A-Za-z0-9_-]{20,}/,
+  /eyJ[A-Za-z0-9_-]{10,}\.eyJ/,
+  /GOCSPX-[A-Za-z0-9_-]+/,
+  /-----BEGIN[A-Z ]*KEY-----/,
+];
+
 function redactSensitive(key: string, value: unknown): unknown {
-  if (SENSITIVE_KEYS.has(key)) {
+  if (value instanceof Error) {
+    const sanitized: Record<string, unknown> = {
+      message: value.message,
+      name: value.name,
+      stack: value.stack,
+    };
+    if ("code" in value) {
+      sanitized.code = (value as { code: unknown }).code;
+    }
+    if ("status" in value) {
+      sanitized.status = (value as { status: unknown }).status;
+    }
+    if ("reason" in value) {
+      sanitized.reason = (value as { reason: unknown }).reason;
+    }
+    return sanitized;
+  }
+  if (SENSITIVE_KEYS.has(key.toLowerCase())) {
     return "[REDACTED]";
+  }
+  if (typeof value === "string") {
+    for (const pattern of SENSITIVE_PATTERNS) {
+      if (pattern.test(value)) {
+        return "[REDACTED]";
+      }
+    }
   }
   return value;
 }
