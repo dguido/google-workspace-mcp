@@ -14,6 +14,8 @@ import type { ToolResponse } from "../utils/index.js";
 import {
   SendEmailSchema,
   DraftEmailSchema,
+  DeleteDraftSchema,
+  ListDraftsSchema,
   ReadEmailSchema,
   SearchEmailsSchema,
   DeleteEmailSchema,
@@ -202,7 +204,8 @@ export async function handleDraftEmail(
 ): Promise<ToolResponse> {
   const validation = validateArgs(DraftEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { to, subject, body, html, cc, bcc, replyTo, attachments, threadId } = validation.data;
+  const { draftId, to, subject, body, html, cc, bcc, replyTo, attachments, threadId } =
+    validation.data;
 
   const raw = buildMimeMessage({
     to: to || [],
@@ -215,26 +218,161 @@ export async function handleDraftEmail(
     attachments,
   });
 
-  const response = await gmail.users.drafts.create({
-    userId: "me",
-    requestBody: {
-      message: {
-        raw,
-        threadId,
-      },
-    },
-  });
+  const messagePayload = { raw, threadId };
 
-  log("Created draft", { draftId: response.data.id });
+  const response = draftId
+    ? await gmail.users.drafts.update({
+        userId: "me",
+        id: draftId,
+        requestBody: { message: messagePayload },
+      })
+    : await gmail.users.drafts.create({
+        userId: "me",
+        requestBody: { message: messagePayload },
+      });
+
+  const action = draftId ? "updated" : "created";
+  log(`Draft ${action}`, { draftId: response.data.id });
 
   return structuredResponse(
-    `Draft created successfully.\nDraft ID: ${response.data.id}\nMessage ID: ${response.data.message?.id}`,
+    `Draft ${action} successfully.\nDraft ID: ${response.data.id}\nMessage ID: ${response.data.message?.id}`,
     {
       draftId: response.data.id,
       id: response.data.message?.id,
       threadId: response.data.message?.threadId,
     },
   );
+}
+
+export async function handleDeleteDraft(
+  gmail: gmail_v1.Gmail,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(DeleteDraftSchema, args);
+  if (!validation.success) return validation.response;
+  const { id } = validation.data;
+
+  const ids = Array.isArray(id) ? id : [id];
+
+  if (ids.length === 1) {
+    await gmail.users.drafts.delete({ userId: "me", id: ids[0] });
+    log("Deleted draft", { id: ids[0] });
+    return structuredResponse(`Draft ${ids[0]} deleted.`, { deleted: 1, ids: [ids[0]] });
+  }
+
+  const results = await Promise.allSettled(
+    ids.map((draftId) => gmail.users.drafts.delete({ userId: "me", id: draftId })),
+  );
+
+  const succeededIds = results
+    .map((r, i) => ({ id: ids[i], result: r }))
+    .filter((item) => item.result.status === "fulfilled")
+    .map((item) => item.id);
+  const failures = results
+    .map((r, i) => ({ id: ids[i], result: r }))
+    .filter(
+      (item): item is { id: string; result: PromiseRejectedResult } =>
+        item.result.status === "rejected",
+    )
+    .map((item) => ({
+      id: item.id,
+      error:
+        item.result.reason instanceof Error
+          ? item.result.reason.message
+          : String(item.result.reason),
+    }));
+
+  log("Batch deleted drafts", {
+    succeeded: succeededIds.length,
+    failed: failures.length,
+  });
+
+  if (failures.length > 0) {
+    const failList = failures
+      .slice(0, 10)
+      .map((f) => `  ${f.id}: ${f.error}`)
+      .join("\n");
+    return structuredResponse(
+      `Partially completed: ${succeededIds.length} deleted, ` +
+        `${failures.length} failed.\n\nFailures:\n${failList}`,
+      { deleted: succeededIds.length, ids: succeededIds },
+    );
+  }
+
+  return structuredResponse(`Successfully deleted ${ids.length} draft(s).`, {
+    deleted: ids.length,
+    ids,
+  });
+}
+
+export async function handleListDrafts(
+  gmail: gmail_v1.Gmail,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(ListDraftsSchema, args);
+  if (!validation.success) return validation.response;
+  const { query, maxResults, pageToken } = validation.data;
+
+  const response = await gmail.users.drafts.list({
+    userId: "me",
+    q: query,
+    maxResults,
+    pageToken,
+  });
+
+  const drafts = response.data.drafts || [];
+
+  if (drafts.length === 0) {
+    return structuredResponse("No drafts found.", {
+      drafts: [],
+      resultSizeEstimate: response.data.resultSizeEstimate,
+    });
+  }
+
+  const draftDetails = await Promise.all(
+    drafts.slice(0, 50).map(async (draft) => {
+      const detail = await gmail.users.messages.get({
+        userId: "me",
+        id: draft.message!.id!,
+        format: "metadata",
+        metadataHeaders: ["From", "To", "Subject", "Date"],
+      });
+      const headers = parseEmailHeaders(detail.data.payload?.headers || []);
+      return {
+        draftId: draft.id,
+        id: detail.data.id,
+        threadId: detail.data.threadId,
+        from: headers.from,
+        to: headers.to,
+        subject: headers.subject,
+        date: headers.date,
+        snippet: detail.data.snippet,
+      };
+    }),
+  );
+
+  let textResponse =
+    `Found ${response.data.resultSizeEstimate} draft(s):\n\n` + toToon({ drafts: draftDetails });
+  if (response.data.nextPageToken) {
+    textResponse += `\n\nMore results available. Use pageToken: ` + response.data.nextPageToken;
+  }
+
+  log("Listed drafts", { count: drafts.length });
+
+  const responseData: {
+    drafts: typeof draftDetails;
+    nextPageToken?: string;
+    resultSizeEstimate?: number;
+  } = { drafts: draftDetails };
+
+  if (response.data.nextPageToken) {
+    responseData.nextPageToken = response.data.nextPageToken;
+  }
+  if (response.data.resultSizeEstimate !== undefined && response.data.resultSizeEstimate !== null) {
+    responseData.resultSizeEstimate = response.data.resultSizeEstimate;
+  }
+
+  return structuredResponse(textResponse, responseData);
 }
 
 export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Promise<ToolResponse> {

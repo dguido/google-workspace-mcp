@@ -80,7 +80,7 @@ describe("getAllTools", () => {
       process.env.GOOGLE_WORKSPACE_READ_ONLY = "true";
       delete process.env.GOOGLE_WORKSPACE_SERVICES;
       const tools = getAllTools();
-      expect(tools.length).toBe(30);
+      expect(tools.length).toBe(31);
     });
   });
 });

@@ -134,6 +134,8 @@ import {
   // Gmail handlers
   handleSendEmail,
   handleDraftEmail,
+  handleDeleteDraft,
+  handleListDrafts,
   handleReadEmail,
   handleSearchEmails,
   handleDeleteEmail,
@@ -626,6 +628,8 @@ function createToolRegistry(): Record<string, ToolHandler> {
     Object.assign(registry, {
       send_email: ({ gmail }, args) => handleSendEmail(gmail, args),
       draft_email: ({ gmail }, args) => handleDraftEmail(gmail, args),
+      delete_draft: ({ gmail }, args) => handleDeleteDraft(gmail, args),
+      list_drafts: ({ gmail }, args) => handleListDrafts(gmail, args),
       read_email: ({ gmail }, args) => handleReadEmail(gmail, args),
       search_emails: ({ gmail }, args) => handleSearchEmails(gmail, args),
       delete_email: ({ gmail }, args) => handleDeleteEmail(gmail, args),

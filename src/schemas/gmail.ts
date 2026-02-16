@@ -124,6 +124,7 @@ export const SendEmailSchema = z.object({
 export type SendEmailInput = z.infer<typeof SendEmailSchema>;
 
 export const DraftEmailSchema = z.object({
+  draftId: z.string().optional().describe("Draft ID to update (omit to create new)"),
   to: z.array(z.string().email()).optional().describe("Recipients (can be empty for drafts)"),
   subject: z.string().optional().describe("Subject (can be empty for drafts)"),
   body: z.string().optional().describe("Plain text email body"),
@@ -136,6 +137,22 @@ export const DraftEmailSchema = z.object({
 });
 
 export type DraftEmailInput = z.infer<typeof DraftEmailSchema>;
+
+export const DeleteDraftSchema = z.object({
+  id: z
+    .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(100)])
+    .describe("Draft ID or array of IDs (max 100)"),
+});
+
+export type DeleteDraftInput = z.infer<typeof DeleteDraftSchema>;
+
+export const ListDraftsSchema = z.object({
+  query: z.string().max(500).optional().describe("Gmail search query"),
+  maxResults: z.number().int().min(1).max(500).optional().default(50).describe("Maximum results"),
+  pageToken: z.string().optional().describe("Token for pagination"),
+});
+
+export type ListDraftsInput = z.infer<typeof ListDraftsSchema>;
 
 export const ReadEmailSchema = z.object({
   id: z.string().min(1, "Message ID required"),
