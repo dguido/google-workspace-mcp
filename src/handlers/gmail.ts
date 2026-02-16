@@ -274,13 +274,17 @@ export async function handleDeleteDraft(
       (item): item is { id: string; result: PromiseRejectedResult } =>
         item.result.status === "rejected",
     )
-    .map((item) => ({
-      id: item.id,
-      error:
+    .map((item) => {
+      const errMsg =
         item.result.reason instanceof Error
           ? item.result.reason.message
-          : String(item.result.reason),
-    }));
+          : String(item.result.reason);
+      return {
+        id: item.id,
+        category: categorizeError(errMsg),
+        error: errMsg,
+      };
+    });
 
   log("Batch deleted drafts", {
     succeeded: succeededIds.length,
@@ -288,13 +292,19 @@ export async function handleDeleteDraft(
   });
 
   if (failures.length > 0) {
-    const failList = failures
-      .slice(0, 10)
-      .map((f) => `  ${f.id}: ${f.error}`)
-      .join("\n");
+    const displayed = failures.slice(0, 10);
+    const failList = displayed.map((f) => `  ${f.id}: ${f.error}`).join("\n");
+    const more = failures.length > 10 ? `\n  (+${failures.length - 10} more)` : "";
+
+    if (succeededIds.length === 0) {
+      return errorResponse(
+        `All ${failures.length} draft deletes failed.\n\n` + `Failures:\n${failList}${more}`,
+      );
+    }
+
     return structuredResponse(
       `Partially completed: ${succeededIds.length} deleted, ` +
-        `${failures.length} failed.\n\nFailures:\n${failList}`,
+        `${failures.length} failed.\n\nFailures:\n${failList}${more}`,
       { deleted: succeededIds.length, ids: succeededIds },
     );
   }
@@ -329,8 +339,10 @@ export async function handleListDrafts(
     });
   }
 
-  const draftDetails = await Promise.all(
-    drafts.slice(0, 50).map(async (draft) => {
+  const validDrafts = drafts.filter((d) => d.id && d.message?.id);
+
+  const metadataResults = await Promise.allSettled(
+    validDrafts.map(async (draft) => {
       const detail = await gmail.users.messages.get({
         userId: "me",
         id: draft.message!.id!,
@@ -350,6 +362,19 @@ export async function handleListDrafts(
       };
     }),
   );
+
+  const draftDetails = metadataResults
+    .filter((r) => r.status === "fulfilled")
+    .map((r) => (r as PromiseFulfilledResult<unknown>).value) as Array<{
+    draftId: string | null | undefined;
+    id: string | null | undefined;
+    threadId: string | null | undefined;
+    from: string | undefined;
+    to: string | undefined;
+    subject: string | undefined;
+    date: string | undefined;
+    snippet: string | null | undefined;
+  }>;
 
   let textResponse =
     `Found ${response.data.resultSizeEstimate} draft(s):\n\n` + toToon({ drafts: draftDetails });

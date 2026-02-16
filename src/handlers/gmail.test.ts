@@ -105,6 +105,15 @@ describe("handleDraftEmail", () => {
       },
     });
     expect(mockGmail.users.drafts.create).not.toHaveBeenCalled();
+
+    const data = result.structuredContent as {
+      draftId: string;
+      id: string;
+      threadId: string;
+    };
+    expect(data.draftId).toBe("draft123");
+    expect(data.id).toBe("msg789");
+    expect(data.threadId).toBe("thread111");
   });
 });
 
@@ -174,6 +183,19 @@ describe("handleDeleteDraft", () => {
     };
     expect(data.deleted).toBe(2);
     expect(data.ids).toEqual(["d1", "d3"]);
+  });
+
+  it("returns error when all batch deletes fail", async () => {
+    vi.mocked(mockGmail.users.drafts.delete)
+      .mockRejectedValueOnce(new Error("Not found"))
+      .mockRejectedValueOnce(new Error("Permission denied"));
+
+    const result = await handleDeleteDraft(mockGmail, {
+      id: ["d1", "d2"],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("2 draft deletes failed");
   });
 
   it("returns validation error for empty id", async () => {
@@ -283,6 +305,76 @@ describe("handleListDrafts", () => {
       maxResults: 10,
       pageToken: "token123",
     });
+  });
+
+  it("handles undefined drafts field from API", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: { resultSizeEstimate: 0 },
+    } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("No drafts found");
+  });
+
+  it("skips drafts with failed metadata fetches", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: {
+        drafts: [
+          { id: "d1", message: { id: "msg1" } },
+          { id: "d2", message: { id: "msg2" } },
+        ],
+        resultSizeEstimate: 2,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get)
+      .mockResolvedValueOnce({
+        data: {
+          id: "msg1",
+          threadId: "t1",
+          snippet: "OK",
+          payload: {
+            headers: [{ name: "Subject", value: "Good draft" }],
+          },
+        },
+      } as never)
+      .mockRejectedValueOnce(new Error("Not found"));
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    const data = result.structuredContent as {
+      drafts: Array<{ draftId: string }>;
+    };
+    expect(data.drafts).toHaveLength(1);
+    expect(data.drafts[0].draftId).toBe("d1");
+  });
+
+  it("filters out drafts with missing message IDs", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: {
+        drafts: [{ id: "d1", message: { id: "msg1" } }, { id: "d2", message: {} }, { id: "d3" }],
+        resultSizeEstimate: 3,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get).mockResolvedValue({
+      data: {
+        id: "msg1",
+        threadId: "t1",
+        snippet: "OK",
+        payload: { headers: [] },
+      },
+    } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    expect(mockGmail.users.messages.get).toHaveBeenCalledTimes(1);
+    const data = result.structuredContent as {
+      drafts: Array<{ draftId: string }>;
+    };
+    expect(data.drafts).toHaveLength(1);
   });
 
   it("includes nextPageToken when available", async () => {

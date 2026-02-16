@@ -124,7 +124,7 @@ export const SendEmailSchema = z.object({
 export type SendEmailInput = z.infer<typeof SendEmailSchema>;
 
 export const DraftEmailSchema = z.object({
-  draftId: z.string().optional().describe("Draft ID to update (omit to create new)"),
+  draftId: z.string().min(1).optional().describe("Draft ID to update (omit to create new)"),
   to: z.array(z.string().email()).optional().describe("Recipients (can be empty for drafts)"),
   subject: z.string().optional().describe("Subject (can be empty for drafts)"),
   body: z.string().optional().describe("Plain text email body"),
