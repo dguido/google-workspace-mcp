@@ -104,6 +104,7 @@ describe("log", () => {
     const output = errorSpy.mock.calls[0][0];
     expect(output).toContain('"message":"something failed"');
     expect(output).toContain('"name":"GoogleApiError"');
+    expect(output).toContain('"stack":');
   });
 
   it("preserves code and status on Error objects", () => {
@@ -170,6 +171,58 @@ describe("log", () => {
     log("debug", { key: "-----BEGIN PRIVATE KEY-----\nMIIE..." });
     const output = errorSpy.mock.calls[0][0];
     expect(output).not.toContain("BEGIN PRIVATE KEY");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("preserves reason field on Error objects", () => {
+    const error = new Error("Token expired") as Error & {
+      code: string;
+      reason: string;
+    };
+    error.code = "INVALID_GRANT";
+    error.reason = "Token has been expired or revoked";
+    log("auth error", error);
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).toContain('"reason":"Token has been expired or revoked"');
+    expect(output).toContain('"code":"INVALID_GRANT"');
+  });
+
+  it("sanitizes nested Error objects within plain objects", () => {
+    const error = new Error("inner fail") as Error & {
+      response: { config: { headers: { Authorization: string } } };
+    };
+    error.response = {
+      config: { headers: { Authorization: "Bearer ya29.nested_secret_tok" } },
+    };
+    log("wrapper", { request_id: 123, error });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).toContain('"request_id":123');
+    expect(output).toContain('"message":"inner fail"');
+    expect(output).not.toContain("ya29.nested_secret_tok");
+    expect(output).not.toContain("config");
+  });
+
+  it("redacts Authorization header by key name", () => {
+    log("api error", {
+      config: {
+        headers: {
+          Authorization: "Bearer ya29.A0ARrdaM_abcdefghij",
+          "Content-Type": "application/json",
+        },
+      },
+    });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("ya29.A0ARrdaM_abcdefghij");
+    expect(output).toContain("[REDACTED]");
+    expect(output).toContain('"Content-Type":"application/json"');
+  });
+
+  it("redacts entire string when token appears as substring", () => {
+    log("debug", {
+      detail: "Auth failed for ya29.A0ARrdaM_abcdefghij at /api",
+    });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("ya29.A0ARrdaM_abcdefghij");
     expect(output).toContain("[REDACTED]");
   });
 });

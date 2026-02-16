@@ -1,6 +1,7 @@
 /**
  * Keys that must never appear in log output.
  * Values are replaced with "[REDACTED]" during serialization.
+ * Matching is case-insensitive.
  */
 const SENSITIVE_KEYS = new Set([
   "access_token",
@@ -10,6 +11,7 @@ const SENSITIVE_KEYS = new Set([
   "id_token",
   "private_key",
   "private_key_id",
+  "authorization",
 ]);
 
 const SENSITIVE_PATTERNS = [
@@ -21,7 +23,24 @@ const SENSITIVE_PATTERNS = [
 ];
 
 function redactSensitive(key: string, value: unknown): unknown {
-  if (SENSITIVE_KEYS.has(key)) {
+  if (value instanceof Error) {
+    const sanitized: Record<string, unknown> = {
+      message: value.message,
+      name: value.name,
+      stack: value.stack,
+    };
+    if ("code" in value) {
+      sanitized.code = (value as { code: unknown }).code;
+    }
+    if ("status" in value) {
+      sanitized.status = (value as { status: unknown }).status;
+    }
+    if ("reason" in value) {
+      sanitized.reason = (value as { reason: unknown }).reason;
+    }
+    return sanitized;
+  }
+  if (SENSITIVE_KEYS.has(key.toLowerCase())) {
     return "[REDACTED]";
   }
   if (typeof value === "string") {
@@ -34,22 +53,6 @@ function redactSensitive(key: string, value: unknown): unknown {
   return value;
 }
 
-function sanitizeForLog(data: unknown): unknown {
-  if (data instanceof Error) {
-    return {
-      message: data.message,
-      name: data.name,
-      ...("code" in data && {
-        code: (data as { code: unknown }).code,
-      }),
-      ...("status" in data && {
-        status: (data as { status: unknown }).status,
-      }),
-    };
-  }
-  return data;
-}
-
 /**
  * Logging utility for the Google Workspace MCP server.
  * Outputs timestamped messages to stderr to avoid interfering
@@ -59,7 +62,7 @@ export function log(message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
   let serialized: string;
   try {
-    serialized = JSON.stringify(sanitizeForLog(data), redactSensitive);
+    serialized = JSON.stringify(data, redactSensitive);
   } catch {
     serialized = "[unserializable data]";
   }
