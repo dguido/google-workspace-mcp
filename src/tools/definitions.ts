@@ -2940,10 +2940,16 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "draft_email",
-    description: "Create a draft email (can be completed later)",
+    description:
+      "Create or update a draft email. Omit draftId to create new;" +
+      " provide draftId to update an existing draft.",
     inputSchema: {
       type: "object",
       properties: {
+        draftId: {
+          type: "string",
+          description: "Draft ID to update (omit to create new)",
+        },
         to: {
           type: "array",
           items: { type: "string" },
@@ -3205,6 +3211,88 @@ export const gmailTools: ToolDefinition[] = [
           type: "string",
           description: "Attachment ID",
         },
+      },
+    },
+  },
+  // Draft Management
+  {
+    name: "delete_draft",
+    description: "Permanently delete one or more drafts by ID (max 100).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          oneOf: [
+            { type: "string", description: "Single draft ID" },
+            {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of draft IDs (max 100)",
+            },
+          ],
+          description: "Draft ID or array of IDs",
+        },
+      },
+      required: ["id"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        deleted: {
+          type: "number",
+          description: "Number of drafts deleted",
+        },
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "IDs of deleted drafts",
+        },
+      },
+    },
+  },
+  {
+    name: "list_drafts",
+    readOnly: true,
+    description:
+      "List drafts with metadata (subject, recipients, date)." + " Returns up to 500 per request.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Gmail search query to filter drafts",
+        },
+        maxResults: {
+          type: "number",
+          description: "(optional, default: 50) Maximum drafts to return (max 500)",
+        },
+        pageToken: {
+          type: "string",
+          description: "Token for pagination",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        drafts: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              draftId: { type: "string", description: "Draft ID" },
+              id: { type: "string", description: "Message ID" },
+              threadId: { type: "string" },
+              from: { type: "string" },
+              to: { type: "string" },
+              subject: { type: "string" },
+              date: { type: "string" },
+              snippet: { type: "string" },
+            },
+          },
+        },
+        nextPageToken: { type: "string" },
+        resultSizeEstimate: { type: "number" },
       },
     },
   },

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { gmail_v1 } from "googleapis";
 import {
+  handleDraftEmail,
+  handleDeleteDraft,
+  handleListDrafts,
   handleDeleteEmail,
   handleModifyEmail,
   handleSearchEmails,
@@ -29,9 +32,377 @@ function createMockGmail(): gmail_v1.Gmail {
         delete: vi.fn(),
         batchDelete: vi.fn(),
       },
+      drafts: {
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        list: vi.fn(),
+      },
     },
   } as unknown as gmail_v1.Gmail;
 }
+
+describe("handleDraftEmail", () => {
+  let mockGmail: gmail_v1.Gmail;
+
+  beforeEach(() => {
+    mockGmail = createMockGmail();
+  });
+
+  it("creates a new draft when no draftId provided", async () => {
+    vi.mocked(mockGmail.users.drafts.create).mockResolvedValue({
+      data: {
+        id: "draft123",
+        message: { id: "msg456", threadId: "thread789" },
+      },
+    } as never);
+
+    const result = await handleDraftEmail(mockGmail, {
+      to: ["alice@example.com"],
+      subject: "Hello",
+      body: "World",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("created");
+    expect(result.content[0].text).toContain("draft123");
+    expect(mockGmail.users.drafts.create).toHaveBeenCalledTimes(1);
+    expect(mockGmail.users.drafts.update).not.toHaveBeenCalled();
+
+    const data = result.structuredContent as {
+      draftId: string;
+      id: string;
+      threadId: string;
+    };
+    expect(data.draftId).toBe("draft123");
+    expect(data.id).toBe("msg456");
+    expect(data.threadId).toBe("thread789");
+  });
+
+  it("updates an existing draft when draftId provided", async () => {
+    vi.mocked(mockGmail.users.drafts.update).mockResolvedValue({
+      data: {
+        id: "draft123",
+        message: { id: "msg789", threadId: "thread111" },
+      },
+    } as never);
+
+    const result = await handleDraftEmail(mockGmail, {
+      draftId: "draft123",
+      to: ["bob@example.com"],
+      subject: "Updated",
+      body: "New body",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("updated");
+    expect(result.content[0].text).toContain("draft123");
+    expect(mockGmail.users.drafts.update).toHaveBeenCalledWith({
+      userId: "me",
+      id: "draft123",
+      requestBody: {
+        message: expect.objectContaining({ raw: expect.any(String) }),
+      },
+    });
+    expect(mockGmail.users.drafts.create).not.toHaveBeenCalled();
+
+    const data = result.structuredContent as {
+      draftId: string;
+      id: string;
+      threadId: string;
+    };
+    expect(data.draftId).toBe("draft123");
+    expect(data.id).toBe("msg789");
+    expect(data.threadId).toBe("thread111");
+  });
+});
+
+describe("handleDeleteDraft", () => {
+  let mockGmail: gmail_v1.Gmail;
+
+  beforeEach(() => {
+    mockGmail = createMockGmail();
+  });
+
+  it("deletes a single draft", async () => {
+    vi.mocked(mockGmail.users.drafts.delete).mockResolvedValue({} as never);
+
+    const result = await handleDeleteDraft(mockGmail, { id: "draft1" });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("draft1");
+    expect(mockGmail.users.drafts.delete).toHaveBeenCalledWith({
+      userId: "me",
+      id: "draft1",
+    });
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(1);
+    expect(data.ids).toEqual(["draft1"]);
+  });
+
+  it("batch deletes multiple drafts", async () => {
+    vi.mocked(mockGmail.users.drafts.delete).mockResolvedValue({} as never);
+
+    const result = await handleDeleteDraft(mockGmail, {
+      id: ["d1", "d2", "d3"],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("3 draft(s)");
+    expect(mockGmail.users.drafts.delete).toHaveBeenCalledTimes(3);
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(3);
+    expect(data.ids).toEqual(["d1", "d2", "d3"]);
+  });
+
+  it("reports partial failures in batch delete", async () => {
+    vi.mocked(mockGmail.users.drafts.delete)
+      .mockResolvedValueOnce({} as never)
+      .mockRejectedValueOnce(new Error("Not found"))
+      .mockResolvedValueOnce({} as never);
+
+    const result = await handleDeleteDraft(mockGmail, {
+      id: ["d1", "d2", "d3"],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("2 deleted");
+    expect(result.content[0].text).toContain("1 failed");
+
+    const data = result.structuredContent as {
+      deleted: number;
+      ids: string[];
+    };
+    expect(data.deleted).toBe(2);
+    expect(data.ids).toEqual(["d1", "d3"]);
+  });
+
+  it("returns error when all batch deletes fail", async () => {
+    vi.mocked(mockGmail.users.drafts.delete)
+      .mockRejectedValueOnce(new Error("Not found"))
+      .mockRejectedValueOnce(new Error("Permission denied"));
+
+    const result = await handleDeleteDraft(mockGmail, {
+      id: ["d1", "d2"],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("2 draft deletes failed");
+  });
+
+  it("returns validation error for empty id", async () => {
+    const result = await handleDeleteDraft(mockGmail, { id: "" });
+    expect(result.isError).toBe(true);
+  });
+
+  it("returns validation error for empty array", async () => {
+    const result = await handleDeleteDraft(mockGmail, { id: [] });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleListDrafts", () => {
+  let mockGmail: gmail_v1.Gmail;
+
+  beforeEach(() => {
+    mockGmail = createMockGmail();
+  });
+
+  it("lists drafts with metadata", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: {
+        drafts: [
+          { id: "d1", message: { id: "msg1" } },
+          { id: "d2", message: { id: "msg2" } },
+        ],
+        resultSizeEstimate: 2,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get)
+      .mockResolvedValueOnce({
+        data: {
+          id: "msg1",
+          threadId: "t1",
+          snippet: "Hello",
+          payload: {
+            headers: [
+              { name: "From", value: "alice@example.com" },
+              { name: "To", value: "bob@example.com" },
+              { name: "Subject", value: "Draft 1" },
+              { name: "Date", value: "2024-01-01" },
+            ],
+          },
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          id: "msg2",
+          threadId: "t2",
+          snippet: "World",
+          payload: {
+            headers: [
+              { name: "From", value: "alice@example.com" },
+              { name: "Subject", value: "Draft 2" },
+            ],
+          },
+        },
+      } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("2 draft(s)");
+
+    const data = result.structuredContent as {
+      drafts: Array<{ draftId: string; subject: string }>;
+      resultSizeEstimate: number;
+    };
+    expect(data.drafts).toHaveLength(2);
+    expect(data.drafts[0].draftId).toBe("d1");
+    expect(data.drafts[0].subject).toBe("Draft 1");
+    expect(data.drafts[1].draftId).toBe("d2");
+    expect(data.resultSizeEstimate).toBe(2);
+  });
+
+  it("returns empty result when no drafts", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: { drafts: [], resultSizeEstimate: 0 },
+    } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("No drafts found");
+
+    const data = result.structuredContent as {
+      drafts: unknown[];
+    };
+    expect(data.drafts).toEqual([]);
+  });
+
+  it("passes query and pagination params", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: { drafts: [], resultSizeEstimate: 0 },
+    } as never);
+
+    await handleListDrafts(mockGmail, {
+      query: "subject:report",
+      maxResults: 10,
+      pageToken: "token123",
+    });
+
+    expect(mockGmail.users.drafts.list).toHaveBeenCalledWith({
+      userId: "me",
+      q: "subject:report",
+      maxResults: 10,
+      pageToken: "token123",
+    });
+  });
+
+  it("handles undefined drafts field from API", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: { resultSizeEstimate: 0 },
+    } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("No drafts found");
+  });
+
+  it("skips drafts with failed metadata fetches", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: {
+        drafts: [
+          { id: "d1", message: { id: "msg1" } },
+          { id: "d2", message: { id: "msg2" } },
+        ],
+        resultSizeEstimate: 2,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get)
+      .mockResolvedValueOnce({
+        data: {
+          id: "msg1",
+          threadId: "t1",
+          snippet: "OK",
+          payload: {
+            headers: [{ name: "Subject", value: "Good draft" }],
+          },
+        },
+      } as never)
+      .mockRejectedValueOnce(new Error("Not found"));
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    const data = result.structuredContent as {
+      drafts: Array<{ draftId: string }>;
+    };
+    expect(data.drafts).toHaveLength(1);
+    expect(data.drafts[0].draftId).toBe("d1");
+  });
+
+  it("filters out drafts with missing message IDs", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: {
+        drafts: [{ id: "d1", message: { id: "msg1" } }, { id: "d2", message: {} }, { id: "d3" }],
+        resultSizeEstimate: 3,
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get).mockResolvedValue({
+      data: {
+        id: "msg1",
+        threadId: "t1",
+        snippet: "OK",
+        payload: { headers: [] },
+      },
+    } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    expect(result.isError).toBe(false);
+    expect(mockGmail.users.messages.get).toHaveBeenCalledTimes(1);
+    const data = result.structuredContent as {
+      drafts: Array<{ draftId: string }>;
+    };
+    expect(data.drafts).toHaveLength(1);
+  });
+
+  it("includes nextPageToken when available", async () => {
+    vi.mocked(mockGmail.users.drafts.list).mockResolvedValue({
+      data: {
+        drafts: [{ id: "d1", message: { id: "msg1" } }],
+        resultSizeEstimate: 100,
+        nextPageToken: "nextToken",
+      },
+    } as never);
+    vi.mocked(mockGmail.users.messages.get).mockResolvedValue({
+      data: {
+        id: "msg1",
+        threadId: "t1",
+        snippet: "Test",
+        payload: { headers: [] },
+      },
+    } as never);
+
+    const result = await handleListDrafts(mockGmail, {});
+
+    const data = result.structuredContent as {
+      nextPageToken?: string;
+    };
+    expect(data.nextPageToken).toBe("nextToken");
+    expect(result.content[0].text).toContain("nextToken");
+  });
+});
 
 describe("handleModifyEmail", () => {
   let mockGmail: gmail_v1.Gmail;
