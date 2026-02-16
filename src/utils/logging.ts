@@ -12,11 +12,42 @@ const SENSITIVE_KEYS = new Set([
   "private_key_id",
 ]);
 
+const SENSITIVE_PATTERNS = [
+  /ya29\.[A-Za-z0-9_-]{10,}/,
+  /1\/\/[A-Za-z0-9_-]{20,}/,
+  /eyJ[A-Za-z0-9_-]{10,}\.eyJ/,
+  /GOCSPX-[A-Za-z0-9_-]+/,
+  /-----BEGIN[A-Z ]*KEY-----/,
+];
+
 function redactSensitive(key: string, value: unknown): unknown {
   if (SENSITIVE_KEYS.has(key)) {
     return "[REDACTED]";
   }
+  if (typeof value === "string") {
+    for (const pattern of SENSITIVE_PATTERNS) {
+      if (pattern.test(value)) {
+        return "[REDACTED]";
+      }
+    }
+  }
   return value;
+}
+
+function sanitizeForLog(data: unknown): unknown {
+  if (data instanceof Error) {
+    return {
+      message: data.message,
+      name: data.name,
+      ...("code" in data && {
+        code: (data as { code: unknown }).code,
+      }),
+      ...("status" in data && {
+        status: (data as { status: unknown }).status,
+      }),
+    };
+  }
+  return data;
 }
 
 /**
@@ -28,7 +59,7 @@ export function log(message: string, data?: unknown): void {
   const timestamp = new Date().toISOString();
   let serialized: string;
   try {
-    serialized = JSON.stringify(data, redactSensitive);
+    serialized = JSON.stringify(sanitizeForLog(data), redactSensitive);
   } catch {
     serialized = "[unserializable data]";
   }

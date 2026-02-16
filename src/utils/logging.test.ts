@@ -96,4 +96,80 @@ describe("log", () => {
     const output = errorSpy.mock.calls[0][0];
     expect(output).toContain('"plain string value"');
   });
+
+  it("sanitizes Error objects to safe fields only", () => {
+    const error = new Error("something failed");
+    error.name = "GoogleApiError";
+    log("api error", error);
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).toContain('"message":"something failed"');
+    expect(output).toContain('"name":"GoogleApiError"');
+  });
+
+  it("preserves code and status on Error objects", () => {
+    const error = new Error("not found") as Error & {
+      code: number;
+      status: number;
+    };
+    error.code = 404;
+    error.status = 404;
+    log("api error", error);
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).toContain('"code":404');
+    expect(output).toContain('"status":404');
+  });
+
+  it("strips nested credential data from Error objects", () => {
+    const error = new Error("auth failed") as Error & {
+      response: { config: { data: string } };
+    };
+    error.response = {
+      config: { data: "access_token=ya29.secret-token-here" },
+    };
+    log("oauth error", error);
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("ya29.secret-token-here");
+    expect(output).not.toContain("response");
+  });
+
+  it("redacts Google access tokens by value pattern", () => {
+    log("debug", {
+      url: "https://api.google.com?token=ya29.A0ARrdaM_abcdefghij",
+    });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("ya29.A0ARrdaM_abcdefghij");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts Google refresh tokens by value pattern", () => {
+    log("debug", {
+      data: "1//0abcdefghijklmnopqrstuvwx",
+    });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("1//0abcdefghijklmnopqrstuvwx");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts JWT tokens by value pattern", () => {
+    log("debug", {
+      header: "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig",
+    });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("eyJhbGciOiJSUzI1NiJ9.eyJ");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts GOCSPX client secrets by value pattern", () => {
+    log("debug", { config: "GOCSPX-abcdef123456" });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("GOCSPX-abcdef123456");
+    expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts PEM private keys by value pattern", () => {
+    log("debug", { key: "-----BEGIN PRIVATE KEY-----\nMIIE..." });
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("BEGIN PRIVATE KEY");
+    expect(output).toContain("[REDACTED]");
+  });
 });
