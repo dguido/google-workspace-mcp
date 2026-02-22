@@ -433,7 +433,7 @@ export async function handleReadEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
     `Date: ${headers.date || "Unknown"}`,
     `Labels: ${message.labelIds?.join(", ") || "None"}`,
     attachments.length > 0
-      ? `Attachments: ${attachments.map((a) => `${a.filename} (${a.size} bytes)`).join(", ")}`
+      ? `Attachments: ${attachments.map((a) => `${a.filename} (${a.size} bytes) [attachmentId: ${a.id}]`).join(", ")}`
       : null,
   ];
 
