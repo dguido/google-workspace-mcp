@@ -6,6 +6,7 @@ import {
   handleListDrafts,
   handleDeleteEmail,
   handleModifyEmail,
+  handleReadEmail,
   handleSearchEmails,
   buildSearchQuery,
   buildSearchHints,
@@ -932,5 +933,133 @@ describe("handleDeleteEmail", () => {
   it("returns validation error for empty array", async () => {
     const result = await handleDeleteEmail(mockGmail, { id: [] });
     expect(result.isError).toBe(true);
+  });
+});
+
+describe("handleReadEmail", () => {
+  let mockGmail: gmail_v1.Gmail;
+
+  beforeEach(() => {
+    mockGmail = createMockGmail();
+  });
+
+  function mockMessage(
+    overrides: Partial<{
+      id: string;
+      threadId: string;
+      labelIds: string[];
+      snippet: string;
+      parts: gmail_v1.Schema$MessagePart[];
+      headers: Array<{ name: string; value: string }>;
+    }> = {},
+  ) {
+    const {
+      id = "msg1",
+      threadId = "t1",
+      labelIds = ["INBOX"],
+      snippet = "Preview text",
+      parts = [],
+      headers = [
+        { name: "From", value: "alice@example.com" },
+        { name: "To", value: "bob@example.com" },
+        { name: "Subject", value: "Test email" },
+        { name: "Date", value: "2024-06-15" },
+      ],
+    } = overrides;
+
+    vi.mocked(mockGmail.users.messages.get).mockResolvedValue({
+      data: {
+        id,
+        threadId,
+        labelIds,
+        snippet,
+        payload: { headers, parts },
+      },
+    } as never);
+  }
+
+  it("includes attachmentId in text output", async () => {
+    mockMessage({
+      parts: [
+        {
+          filename: "report.pdf",
+          mimeType: "application/pdf",
+          body: { attachmentId: "ATT_abc123", size: 52400 },
+        },
+      ],
+    });
+
+    const result = await handleReadEmail(mockGmail, {
+      id: "msg1",
+    });
+
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text;
+    expect(text).toContain("report.pdf");
+    expect(text).toContain("[attachmentId: ATT_abc123]");
+  });
+
+  it("includes attachmentId for multiple attachments", async () => {
+    mockMessage({
+      parts: [
+        {
+          filename: "doc.pdf",
+          mimeType: "application/pdf",
+          body: { attachmentId: "ATT_1", size: 1000 },
+        },
+        {
+          filename: "image.png",
+          mimeType: "image/png",
+          body: { attachmentId: "ATT_2", size: 2000 },
+        },
+      ],
+    });
+
+    const result = await handleReadEmail(mockGmail, {
+      id: "msg1",
+    });
+
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text;
+    expect(text).toContain("[attachmentId: ATT_1]");
+    expect(text).toContain("[attachmentId: ATT_2]");
+  });
+
+  it("omits attachments line when no attachments", async () => {
+    mockMessage({ parts: [] });
+
+    const result = await handleReadEmail(mockGmail, {
+      id: "msg1",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).not.toContain("Attachments:");
+  });
+
+  it("returns attachment data in structured response", async () => {
+    mockMessage({
+      parts: [
+        {
+          filename: "file.zip",
+          mimeType: "application/zip",
+          body: { attachmentId: "ATT_zip", size: 9999 },
+        },
+      ],
+    });
+
+    const result = await handleReadEmail(mockGmail, {
+      id: "msg1",
+    });
+
+    const data = result.structuredContent as {
+      attachments: Array<{
+        id: string;
+        filename: string;
+        size: number;
+      }>;
+    };
+    expect(data.attachments).toHaveLength(1);
+    expect(data.attachments[0].id).toBe("ATT_zip");
+    expect(data.attachments[0].filename).toBe("file.zip");
   });
 });
