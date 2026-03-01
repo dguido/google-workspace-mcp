@@ -2920,8 +2920,13 @@ export const gmailTools: ToolDefinition[] = [
               filename: { type: "string" },
               content: { type: "string", description: "Base64-encoded content" },
               mimeType: { type: "string" },
+              sourcePath: {
+                type: "string",
+                description:
+                  "Absolute path to a local file; server reads and encodes it automatically (mutually exclusive with content)",
+              },
             },
-            required: ["filename", "content"],
+            required: ["filename"],
           },
         },
         threadId: { type: "string", description: "Thread ID to reply to" },
@@ -2969,7 +2974,23 @@ export const gmailTools: ToolDefinition[] = [
           description: 'BCC recipients as an array, e.g. ["user@example.com"]',
         },
         replyTo: { type: "string" },
-        attachments: { type: "array" },
+        attachments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              filename: { type: "string" },
+              content: { type: "string", description: "Base64-encoded content" },
+              mimeType: { type: "string" },
+              sourcePath: {
+                type: "string",
+                description:
+                  "Absolute path to a local file; server reads and encodes it automatically (mutually exclusive with content)",
+              },
+            },
+            required: ["filename"],
+          },
+        },
         threadId: { type: "string" },
       },
     },

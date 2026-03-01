@@ -96,13 +96,26 @@ export const EmailAddressSchema = z.object({
 export type EmailAddressInput = z.infer<typeof EmailAddressSchema>;
 
 /**
- * Attachment for sending emails
+ * Attachment for sending emails.
+ * Provide either `content` (base64-encoded string) or `sourcePath` (absolute path
+ * to a local file that the server will read and encode automatically).
  */
-export const AttachmentSchema = z.object({
-  filename: z.string().min(1, "Filename required"),
-  content: z.string().describe("Base64-encoded content"),
-  mimeType: z.string().optional().describe("MIME type (auto-detected if not provided)"),
-});
+export const AttachmentSchema = z
+  .object({
+    filename: z.string().min(1, "Filename required"),
+    content: z.string().optional().describe("Base64-encoded content"),
+    mimeType: z.string().optional().describe("MIME type (auto-detected if not provided)"),
+    sourcePath: z
+      .string()
+      .optional()
+      .describe("Absolute path to a local file; server reads and encodes it automatically"),
+  })
+  .refine((data) => !!(data.content || data.sourcePath), {
+    message: "Provide either content (base64) or sourcePath",
+  })
+  .refine((data) => !(data.content && data.sourcePath), {
+    message: "Provide either content (base64) or sourcePath, not both",
+  });
 
 export type AttachmentInput = z.infer<typeof AttachmentSchema>;
 

@@ -3,6 +3,8 @@
  * Gmail requires raw email content to be base64url encoded.
  */
 
+import { readFileSync } from "fs";
+
 export interface EmailOptions {
   to: string[];
   subject: string;
@@ -13,7 +15,8 @@ export interface EmailOptions {
   replyTo?: string;
   attachments?: Array<{
     filename: string;
-    content: string; // Base64 encoded
+    content?: string; // Base64 encoded (mutually exclusive with sourcePath)
+    sourcePath?: string; // Absolute local path (server reads and encodes automatically)
     mimeType?: string;
   }>;
   inReplyTo?: string;
@@ -143,12 +146,15 @@ export function buildMimeMessage(options: EmailOptions): string {
     // Attachments
     for (const attachment of attachments!) {
       const mimeType = attachment.mimeType || detectMimeType(attachment.filename);
+      const content = attachment.sourcePath
+        ? readFileSync(attachment.sourcePath).toString("base64")
+        : (attachment.content as string);
       parts.push(`--${mixedBoundary}`);
       parts.push(`Content-Type: ${mimeType}; name="${attachment.filename}"`);
       parts.push("Content-Transfer-Encoding: base64");
       parts.push(`Content-Disposition: attachment; filename="${attachment.filename}"`);
       parts.push("");
-      parts.push(attachment.content);
+      parts.push(content);
     }
 
     parts.push(`--${mixedBoundary}--`);
