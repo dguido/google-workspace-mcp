@@ -722,9 +722,15 @@ export async function handleShareFile(drive: drive_v3.Drive, args: unknown): Pro
     targetDesc = data.emailAddress || "";
   }
 
-  return successResponse(
+  return structuredResponse(
     `Shared "${file.data.name}" with ${targetDesc} as ${data.role}\n` +
       `Permission ID: ${permission.data.id}`,
+    {
+      fileName: file.data.name!,
+      permissionId: permission.data.id!,
+      role: data.role,
+      target: targetDesc,
+    },
   );
 }
 
@@ -965,10 +971,16 @@ export async function handleDownloadFile(
       fileId: data.fileId,
       outputPath: fullPath,
     });
-    return successResponse(
+    return structuredResponse(
       `Downloaded "${fileName}" to: ${fullPath}\n` +
         `Size: ${buffer.length} bytes\n` +
         `Type: ${mimeType}`,
+      {
+        fileName,
+        mimeType,
+        size: buffer.length,
+        outputPath: fullPath,
+      },
     );
   }
 
@@ -979,11 +991,17 @@ export async function handleDownloadFile(
     fileId: data.fileId,
     size: buffer.length,
   });
-  return successResponse(
+  return structuredResponse(
     `Downloaded "${fileName}"\n` +
       `Size: ${buffer.length} bytes\n` +
       `Type: ${mimeType}\n\n` +
       `Base64 content:\n${base64Content}`,
+    {
+      fileName,
+      mimeType,
+      size: buffer.length,
+      base64Content,
+    },
   );
 }
 
@@ -1048,10 +1066,15 @@ export async function handleUploadFile(
     fileId: file.data.id,
     name: file.data.name,
   });
-  return successResponse(
+  return structuredResponse(
     `Uploaded file: ${file.data.name}\n` +
       `ID: ${file.data.id}\n` +
       `Link: ${file.data.webViewLink}`,
+    {
+      id: file.data.id!,
+      name: file.data.name!,
+      webViewLink: file.data.webViewLink!,
+    },
   );
 }
 
