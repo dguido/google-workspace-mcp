@@ -575,6 +575,16 @@ describe("handleShareFile", () => {
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("Shared");
     expect(result.content[0].text).toContain("test@example.com");
+    const structured = result.structuredContent as {
+      fileName: string;
+      permissionId: string;
+      role: string;
+      target: string;
+    };
+    expect(structured.fileName).toBe("test.txt");
+    expect(structured.permissionId).toBe("perm123");
+    expect(structured.role).toBe("reader");
+    expect(structured.target).toBe("test@example.com");
   });
 
   it("shares file with anyone successfully", async () => {
@@ -592,6 +602,16 @@ describe("handleShareFile", () => {
     });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("anyone with the link");
+    const structured = result.structuredContent as {
+      fileName: string;
+      permissionId: string;
+      role: string;
+      target: string;
+    };
+    expect(structured.fileName).toBe("test.txt");
+    expect(structured.permissionId).toBe("perm123");
+    expect(structured.role).toBe("reader");
+    expect(structured.target).toBe("anyone with the link");
   });
 
   it("returns error when email missing for user type", async () => {
@@ -802,6 +822,16 @@ describe("handleDownloadFile", () => {
     expect(result.content[0].text).toContain("Downloaded");
     expect(result.content[0].text).toContain("image.png");
     expect(result.content[0].text).toContain("Base64 content");
+    const structured = result.structuredContent as {
+      fileName: string;
+      mimeType: string;
+      size: number;
+      base64Content: string;
+    };
+    expect(structured.fileName).toBe("image.png");
+    expect(structured.mimeType).toBe("image/png");
+    expect(structured.size).toBe(100);
+    expect(structured.base64Content).toBeDefined();
   });
 
   it("returns error for Google Workspace files", async () => {
@@ -844,6 +874,14 @@ describe("handleUploadFile", () => {
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("Uploaded file");
     expect(result.content[0].text).toContain("image.png");
+    const structured = result.structuredContent as {
+      id: string;
+      name: string;
+      webViewLink: string;
+    };
+    expect(structured.id).toBe("file123");
+    expect(structured.name).toBe("image.png");
+    expect(structured.webViewLink).toBe("https://...");
   });
 
   it("returns error when neither sourcePath nor base64Content provided", async () => {
